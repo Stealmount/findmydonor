@@ -22,7 +22,10 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
  * Get coordinates for a pincode and calculate distance to another pincode
  */
 export function getDistanceBetweenPincodes(pinA: string, pinB: string): number {
-  const coordA = getCoordinates(pinA);
-  const coordB = getCoordinates(pinB);
+  const normA = (pinA || '').replace(/\s+/g, '');
+  const normB = (pinB || '').replace(/\s+/g, '');
+  if (normA && normA === normB) return 0;
+  const coordA = getCoordinates(normA);
+  const coordB = getCoordinates(normB);
   return haversineKm(coordA.lat, coordA.lng, coordB.lat, coordB.lng);
 }

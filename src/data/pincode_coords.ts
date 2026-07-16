@@ -59,6 +59,7 @@ export const PINCODE_COORDS: Record<string, { lat: number; lng: number }> = {
   '110020': { lat: 28.5283, lng: 77.2717 }, // Okhla Phase 1
   '110024': { lat: 28.5683, lng: 77.2383 }, // Lajpat Nagar / Defence Colony
   '110025': { lat: 28.5600, lng: 77.2833 }, // Jamia Nagar / Zakir Nagar
+  '110029': { lat: 28.5672, lng: 77.2100 }, // Ansari Nagar / AIIMS New Delhi
   '110044': { lat: 28.4950, lng: 77.2917 }, // Badarpur / Tughlakabad
   '110065': { lat: 28.5617, lng: 77.2550 }, // East of Kailash
   '110076': { lat: 28.5317, lng: 77.2983 }, // Sarita Vihar
@@ -138,25 +139,27 @@ export function getCoordinates(pincode: string): { lat: number; lng: number } {
     return PINCODE_COORDS[code];
   }
   
-  // Dynamic offset/fallback based on first 3 digits
+  // Deterministic offset based on string hash to ensure stable distances across test runs
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = (hash << 5) - hash + code.charCodeAt(i);
+    hash |= 0;
+  }
+  const offsetLat = ((hash % 100) / 100 - 0.5) * 0.05;
+  const offsetLng = (((hash >> 3) % 100) / 100 - 0.5) * 0.05;
+
   const prefix = code.slice(0, 3);
   if (prefix === '110') {
-    // Delhi default (Connaught Place centroid)
-    return { lat: 28.6304 + (Math.random() - 0.5) * 0.05, lng: 77.2177 + (Math.random() - 0.5) * 0.05 };
+    return { lat: 28.6304 + offsetLat, lng: 77.2177 + offsetLng };
   } else if (code.startsWith('2013')) {
-    // Noida default
-    return { lat: 28.5700 + (Math.random() - 0.5) * 0.04, lng: 77.3300 + (Math.random() - 0.5) * 0.04 };
+    return { lat: 28.5700 + offsetLat, lng: 77.3300 + offsetLng };
   } else if (code.startsWith('2010')) {
-    // Ghaziabad default
-    return { lat: 28.6667 + (Math.random() - 0.5) * 0.04, lng: 77.4333 + (Math.random() - 0.5) * 0.04 };
+    return { lat: 28.6667 + offsetLat, lng: 77.4333 + offsetLng };
   } else if (prefix === '122') {
-    // Gurugram default
-    return { lat: 28.4595 + (Math.random() - 0.5) * 0.04, lng: 77.0266 + (Math.random() - 0.5) * 0.04 };
+    return { lat: 28.4595 + offsetLat, lng: 77.0266 + offsetLng };
   } else if (prefix === '121') {
-    // Faridabad default
-    return { lat: 28.4083 + (Math.random() - 0.5) * 0.04, lng: 77.3083 + (Math.random() - 0.5) * 0.04 };
+    return { lat: 28.4083 + offsetLat, lng: 77.3083 + offsetLng };
   }
   
-  // Default NCR center
-  return { lat: 28.6139, lng: 77.2090 };
+  return { lat: 28.6139 + offsetLat, lng: 77.2090 + offsetLng };
 }

@@ -115,15 +115,12 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
     if (!currentUser) return;
     try {
       const dashboard = await authenticatedApi<{
-        matches: Match[]; requests: BloodRequest[]; donationLogs: DonationLog[];
-      }>('/api/dashboard/donor', undefined, 'GET');
-      const allMatches = dashboard.matches;
-      const allRequests = dashboard.requests;
-      const allLogs = dashboard.donationLogs;
+        matches: Match[]; requests: BloodRequest[]; donationLogs?: DonationLog[];
+      }>('/api/donor/matches', undefined, 'GET');
+      const donorMatches = dashboard.matches || [];
+      const allRequests = dashboard.requests || [];
+      const donorLogs = dashboard.donationLogs || [];
 
-      // Filter matches corresponding to this donor
-      const donorMatches = allMatches.filter(m => m.donor_id === currentUser.id);
-      
       // Sort matches so pending/active ones are on top
       donorMatches.sort((a, b) => {
         if (a.donor_response === 'pending' && b.donor_response !== 'pending') return -1;
@@ -131,8 +128,7 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
 
-      // Filter donation logs for this donor and sort by date descending
-      const donorLogs = allLogs.filter(l => l.donor_id === currentUser.id);
+      // Sort donation logs by date descending
       donorLogs.sort((a, b) => {
         const dateA = new Date(a.donation_date).getTime();
         const dateB = new Date(b.donation_date).getTime();
@@ -259,6 +255,12 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
         emergency_only: editEmergency,
         updated_at: new Date().toISOString()
       };
+
+      try {
+        await authenticatedApi('/api/donor-profile/availability', { isAvailable: editAvail === 'available' }, 'PATCH');
+      } catch (apiErr) {
+        console.warn("Could not sync availability via API during migration cutover:", apiErr);
+      }
 
       await saveLocalOrFirestoreDoc('users', currentUser.id, updatedUser);
       onLoginSuccess(updatedUser); // Update local active user state

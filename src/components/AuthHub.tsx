@@ -8,18 +8,19 @@ import { useLanguage } from '../lib/LanguageContext';
 
 interface AuthHubProps {
   initialMode?: 'signin' | 'signup';
+  initialIntent?: SignupIntent;
   onLoginSuccessDonor: (donor: User) => void;
   onLoginSuccessRequester: (requester: Requester) => void;
-  onSelectDonorSignUp: () => void;
-  onSelectRequesterSignUp: () => void;
-  onGoogleSignUpRedirect: (googleData: { uid: string; email: string; full_name: string }) => void;
+  onSelectDonorSignUp?: () => void;
+  onSelectRequesterSignUp?: () => void;
+  onGoogleSignUpRedirect?: (googleData: { uid: string; email: string; full_name: string }) => void;
 }
 
-export function AuthHub({ initialMode = 'signin', onLoginSuccessDonor, onLoginSuccessRequester, onGoogleSignUpRedirect }: AuthHubProps) {
+export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLoginSuccessDonor, onLoginSuccessRequester, onGoogleSignUpRedirect }: AuthHubProps) {
   const { t } = useLanguage();
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [signupStep, setSignupStep] = useState<1 | 2 | 3 | 4>(1);
-  const [intent, setIntent] = useState<SignupIntent>('donor');
+  const [intent, setIntent] = useState<SignupIntent>(initialIntent);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -36,6 +37,7 @@ export function AuthHub({ initialMode = 'signin', onLoginSuccessDonor, onLoginSu
 
   useEffect(() => {
     setMode(initialMode);
+    setIntent(initialIntent);
     if (initialMode !== 'signup') { setHasOAuthIdentity(false); return; }
     void supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
@@ -45,7 +47,7 @@ export function AuthHub({ initialMode = 'signin', onLoginSuccessDonor, onLoginSu
       setHasOAuthIdentity(true);
       setSignupStep(1);
     });
-  }, [initialMode]);
+  }, [initialMode, initialIntent]);
 
   const normalizedWhatsApp = sameWhatsApp ? phone : whatsappPhone;
   const resolveSignedInState = async (): Promise<boolean> => {

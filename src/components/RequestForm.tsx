@@ -15,19 +15,17 @@ interface RequestFormProps {
   loggedInRequester?: Requester | null;
   loggedInDonor?: User | null;
   onLoginSuccess?: (requester: Requester) => void;
+  onNavigate?: (view: any) => void;
 }
 
-export default function RequestForm({ onSuccess, loggedInRequester, loggedInDonor, onLoginSuccess }: RequestFormProps) {
+export default function RequestForm({ onSuccess, loggedInRequester, loggedInDonor, onLoginSuccess, onNavigate }: RequestFormProps) {
   const { language } = useLanguage();
   const isHi = language === 'HI';
-  // Auth state inside RequestForm
-  const [isRegister, setIsRegister] = useState(false);
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authFullName, setAuthFullName] = useState('');
-  const [authPhone, setAuthPhone] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
+  
+  // Quick Emergency SOS verification state
+  const [sosOtp, setSosOtp] = useState('');
+  const [sosVerificationToken, setSosVerificationToken] = useState('');
+  const [sosSending, setSosSending] = useState(false);
 
   const [formData, setFormData] = useState({
     patient_name: '',
@@ -116,140 +114,93 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
     }
   }, [loggedInRequester]);
 
-  // Email/Password Login
-  const handleAuthLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: authEmail.toLowerCase().trim(),
-        password: authPassword,
-      });
-
-      if (authError) throw authError;
-      const uid = data.user?.id;
-      if (!uid) throw new Error("No user returned");
-
-      let requesterDoc = await getLocalOrFirestoreDoc<Requester>('requesters', uid);
-      if (!requesterDoc) {
-        const nowStr = new Date().toISOString();
-        requesterDoc = {
-          id: uid,
-          full_name: data.user.user_metadata?.full_name || authFullName || authEmail.split('@')[0],
-          email: data.user.email || authEmail,
-          phone: authPhone || '+91 9999999999',
-          created_at: nowStr,
-          updated_at: nowStr
-        };
-        await saveLocalOrFirestoreDoc('requesters', uid, requesterDoc);
-      }
-      if (onLoginSuccess) {
-        onLoginSuccess(requesterDoc);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setAuthError('Invalid email or password.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  // Email/Password Register
-  const handleAuthRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-    setAuthLoading(true);
-
-    if (!authFullName || !authPhone) {
-      setAuthError('Full Name and Contact Phone are required.');
-      setAuthLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error: authError } = await supabase.auth.signUp({
-        email: authEmail.toLowerCase().trim(),
-        password: authPassword,
-        options: {
-          data: { full_name: authFullName }
-        }
-      });
-
-      if (authError) throw authError;
-      const uid = data.user?.id;
-      if (!uid) throw new Error("Failed to create account");
-
-      const nowStr = new Date().toISOString();
-      const newRequester: Requester = {
-        id: uid,
-        full_name: authFullName,
-        email: authEmail,
-        phone: authPhone,
-        created_at: nowStr,
-        updated_at: nowStr
-      };
-
-      await saveLocalOrFirestoreDoc('requesters', uid, newRequester);
-      if (onLoginSuccess) {
-        onLoginSuccess(newRequester);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setAuthError(err.message || 'Registration failed.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  // Google Login
-  const handleGoogleSignIn = async () => {
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      console.error(err);
-      setAuthError('Google sign in failed. Please try again.');
-      setAuthLoading(false);
-    }
-  };
-
-  // Instantly Sign In as Demo
-  const handleDemoSignIn = async () => {
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      const demoRequester: Requester = {
-        id: 'a0000000-demo-demo-demo-000000000000', // valid UUID format for demo
-        full_name: 'Aditya Mehta',
-        email: 'requester@gmail.com',
-        phone: '+91 9876543210',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      if (onLoginSuccess) {
-        onLoginSuccess(demoRequester);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setAuthError('Demo Sign In failed.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const [loading, setLoading] = useState(false);
   const [captchaChecked, setCaptchaChecked] = useState(false);
   const [error, setError] = useState('');
-  // Two-step confirmation flow: 'form' → fill details, 'confirm' → preview before broadcast
-  const [step, setStep] = useState<'form' | 'confirm'>('form');
+  // Step progression: 'form' → fill details, 'confirm' → preview, 'sos-verify' → Quick SOS OTP verification
+  const [step, setStep] = useState<'form' | 'confirm' | 'sos-verify'>('form');
+
+  // Quick Emergency SOS handlers
+  const handleSendSosOtp = async () => {
+    setError('');
+    setSosSending(true);
+    try {
+      const normalizedPhone = formData.requester_phone.replace(/\D/g, '');
+      if (normalizedPhone.length !== 10) {
+        throw new Error('Please enter a valid 10-digit mobile number for WhatsApp verification.');
+      }
+      const res = await fetch('/api/wa/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalizedPhone, purpose: 'sos' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send WhatsApp verification code.');
+      setStep('sos-verify');
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to send WhatsApp OTP.');
+    } finally {
+      setSosSending(false);
+    }
+  };
+
+  const handleVerifySosOtpAndBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const normalizedPhone = formData.requester_phone.replace(/\D/g, '');
+      const verifyRes = await fetch('/api/wa/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalizedPhone, otp: sosOtp, purpose: 'sos' }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.verificationToken) {
+        throw new Error(verifyData.error || 'Invalid OTP code.');
+      }
+
+      const token = verifyData.verificationToken;
+      setSosVerificationToken(token);
+
+      // Broadcast anonymous request via /api/sos/requests (plural route)
+      const res = await fetch('/api/sos/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verificationToken: token,
+          requester_name: formData.requester_name || formData.patient_name,
+          requester_phone: normalizedPhone,
+          patient_name: formData.patient_name,
+          patient_age: formData.patient_age,
+          patient_gender: formData.patient_gender,
+          blood_type_needed: formData.blood_type_needed,
+          component_needed: formData.component_needed,
+          units_required: formData.units_required,
+          hospital_name: formData.hospital_name,
+          hospital_uhid: formData.hospital_uhid,
+          attending_doctor: formData.attending_doctor,
+          hospital_pincode: formData.hospital_pincode,
+          hospital_area: formData.hospital_area,
+          hospital_city: formData.hospital_city,
+          hospital_state: formData.hospital_state,
+          urgency_level: formData.urgency_level,
+          additional_notes: formData.additional_notes,
+          showcase_opt_in: formData.showcase_opt_in,
+          share_contact_immediately: formData.share_contact_immediately,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to broadcast Quick Emergency SOS.');
+      onSuccess(data.trackingCode);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to verify and broadcast SOS.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Self-match detection: Warn user if their requester email/phone matches their logged-in donor profile
   const isSelfMatch = !!(
@@ -334,150 +285,103 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
     }
   };
 
-  if (!loggedInRequester) {
+
+
+  if (step === 'sos-verify') {
     return (
-      <div id="request-auth-container" className="max-w-md mx-auto rounded-3xl bg-white/95 backdrop-blur-2xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-8">
-        <div className="bg-gradient-to-br from-ink-900 via-ink-950 to-ink-900 p-8 text-white text-center relative overflow-hidden">
-          <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-blood-600/20 blur-2xl" aria-hidden />
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl blood-drop-gradient shadow-[0_8px_20px_-4px_rgba(244,63,87,0.5)]">
-            <Heart className="w-6 h-6 text-white fill-white" />
+      <div id="request-sos-verify-container" className="max-w-md mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-8">
+        <div className="bg-gradient-to-br from-ink-900 via-ink-950 to-black p-8 text-white text-center relative">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl blood-drop-gradient">
+            <Phone className="w-6 h-6 text-white" />
           </div>
+          <span className="inline-block px-3 py-1 rounded-full bg-blood-500/20 border border-blood-500/30 text-blood-400 text-[11px] font-mono font-bold uppercase tracking-widest mb-2">
+            ⚡ Quick Emergency SOS Verification
+          </span>
           <h2 className="text-xl font-bold tracking-tight text-white font-sans">
-            {isHi ? 'आपातकालीन रिक्वेस्टर लॉगिन' : 'Emergency Requester Access'}
+            Verify WhatsApp Number
           </h2>
           <p className="text-ink-300 text-xs mt-1">
-            {isHi ? 'लाइव आपातकालीन रक्त अनुरोध भेजने और ट्रैक करने के लिए कृपया लॉगिन या पंजीकरण करें।' : 'Please sign in or register to broadcast and track live emergency blood requests.'}
+            Enter the 6-digit verification code sent to +91 {formData.requester_phone} to broadcast your emergency request immediately.
           </p>
         </div>
 
-        <div className="p-8 space-y-5">
-          {authError && (
-            <div id="request-auth-error" className="p-3.5 rounded-xl bg-blood-50 text-blood-700 border border-blood-200 text-xs font-semibold flex items-center gap-2">
-              <span>{authError}</span>
+        <form onSubmit={handleVerifySosOtpAndBroadcast} className="p-8 space-y-5">
+          {error && (
+            <div className="p-3.5 rounded-xl bg-blood-50 text-blood-700 border border-blood-200 text-xs font-semibold flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 
-          {/* Google Sign-In Button */}
-          <button
-            id="btn-request-google-auth"
-            type="button"
-            onClick={handleGoogleSignIn}
-            disabled={authLoading}
-            className="w-full h-12 rounded-xl bg-white hover:bg-ink-50/80 active:scale-[0.99] text-ink-800 border border-ink-200 font-semibold text-sm transition-all shadow-sm flex items-center justify-center gap-2.5 disabled:opacity-50 cursor-pointer"
-          >
-            <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            {isHi ? 'Google के साथ जारी रखें' : 'Continue with Google'}
-          </button>
-
-          <div className="flex items-center gap-2 my-2">
-            <hr className="flex-1 border-ink-200" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">{isHi ? 'या ईमेल क्रेडेंशियल्स के साथ' : 'OR WITH CREDENTIALS'}</span>
-            <hr className="flex-1 border-ink-200" />
-          </div>
-
-          <form onSubmit={isRegister ? handleAuthRegister : handleAuthLogin} className="space-y-4">
-            {isRegister && (
-              <>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'पूरा नाम *' : 'Full Name *'}</label>
-                  <input
-                    id="inp-request-register-fullname"
-                    type="text"
-                    required
-                    value={authFullName}
-                    onChange={e => setAuthFullName(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/90 text-ink-900 font-medium text-sm focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 outline-none transition-all"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'संपर्क फोन नंबर *' : 'Contact Phone *'}</label>
-                  <input
-                    id="inp-request-register-phone"
-                    type="tel"
-                    required
-                    maxLength={10}
-                    value={authPhone}
-                    onChange={e => setAuthPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/90 text-ink-900 font-medium text-sm focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 outline-none transition-all"
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'ईमेल पता *' : 'Email Address *'}</label>
-              <input
-                id="inp-request-auth-email"
-                type="email"
-                required
-                value={authEmail}
-                onChange={e => setAuthEmail(e.target.value)}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/90 text-ink-900 font-medium text-sm focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 outline-none transition-all"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'पासवर्ड *' : 'Password *'}</label>
-              <input
-                id="inp-request-auth-password"
-                type="password"
-                required
-                placeholder="••••••"
-                value={authPassword}
-                onChange={e => setAuthPassword(e.target.value)}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/90 text-ink-900 font-medium text-sm focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 outline-none transition-all"
-              />
-            </div>
-
-            <button
-              id="btn-request-auth-submit"
-              type="submit"
-              disabled={authLoading}
-              className="w-full h-12 rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white font-semibold text-sm shadow-lg shadow-blood-600/25 transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {authLoading ? (isHi ? 'सत्यापन हो रहा है...' : 'Verifying...') : isRegister ? (isHi ? 'प्रोफ़ाइल बनाएं और आगे बढ़ें' : 'Create Profile & Continue') : (isHi ? 'लॉगिन करें और रक्त अनुरोध फ़ॉर्म खोलें' : 'Sign In & Access Request Form')}
-            </button>
-          </form>
-
-          <div className="flex items-center gap-2 my-2">
-            <hr className="flex-1 border-ink-200" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-400">{isHi ? 'त्वरित डेमो एक्सेस' : 'INSTANT TEST ACCESS'}</span>
-            <hr className="flex-1 border-ink-200" />
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">6-Digit Verification Code *</label>
+            <input
+              id="inp-sos-otp"
+              type="text"
+              required
+              maxLength={6}
+              value={sosOtp}
+              onChange={e => setSosOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="123456"
+              className="w-full h-12 px-4 rounded-xl border border-ink-200 bg-white text-center font-mono text-xl tracking-[0.5em] font-bold text-ink-900 focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+            />
           </div>
 
           <button
-            id="btn-request-demo-signin"
-            type="button"
-            onClick={handleDemoSignIn}
-            disabled={authLoading}
-            className="w-full h-11 rounded-xl bg-ink-900 hover:bg-ink-800 text-white font-semibold text-xs transition-all shadow-sm cursor-pointer"
+            id="btn-verify-sos-broadcast"
+            type="submit"
+            disabled={loading || sosOtp.length !== 6}
+            className="w-full py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            {isHi ? 'डेमो रिक्वेस्टर के रूप में तुरंत लॉगिन करें' : 'Sign in Instantly as Demo Requester'}
+            {loading ? (
+              <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Broadcasting SOS...</span>
+            ) : (<><Megaphone className="w-4 h-4" /> Verify & Broadcast Now</>)}
           </button>
 
-          <div className="text-center pt-3 border-t border-ink-100">
+          <div className="flex items-center justify-between pt-3 border-t border-ink-100 text-xs font-semibold">
             <button
-              id="btn-request-toggle-register"
               type="button"
-              onClick={() => { setIsRegister(!isRegister); setAuthError(''); }}
-              className="text-xs font-semibold text-blood-600 hover:underline cursor-pointer"
+              onClick={() => setStep('confirm')}
+              className="text-ink-600 hover:text-ink-900"
             >
-              {isRegister ? (isHi ? 'पहले से पंजीकृत हैं? लॉगिन करें' : 'Already registered? Log In') : (isHi ? 'नया रिक्वेस्टर खाता बनाएं? साइन अप करें' : 'New Requester? Sign Up')}
+              ← Back to Review
+            </button>
+            <button
+              type="button"
+              onClick={handleSendSosOtp}
+              disabled={sosSending}
+              className="text-blood-600 hover:underline disabled:opacity-50"
+            >
+              {sosSending ? 'Resending...' : 'Resend Code'}
             </button>
           </div>
-        </div>
+        </form>
       </div>
     );
   }
 
   return (
     <div id="request-form-container" className="max-w-2xl mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-6">
+      {!loggedInRequester && !loggedInDonor && (
+        <div className="bg-ink-900 border-b border-ink-800 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-white">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-blood-500/20 text-blood-400 font-bold text-sm">⚡</span>
+            <div>
+              <p className="text-xs font-bold text-white leading-tight">Quick Emergency SOS Mode</p>
+              <p className="text-[11px] text-ink-300">Broadcasting as public contact without an account (&lt; 45s).</p>
+            </div>
+          </div>
+          {onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('auth-signin')}
+              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/15 transition-all whitespace-nowrap"
+            >
+              Sign In / Create Account →
+            </button>
+          )}
+        </div>
+      )}
       <div className="bg-gradient-to-br from-ink-900 via-ink-950 to-black p-8 text-white text-center relative">
         <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl blood-drop-gradient shadow-[0_8px_20px_-4px_rgba(244,63,87,0.5)]">
           <Heart className="w-6 h-6 text-white" />
@@ -996,13 +900,19 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
             <button
               id="btn-broadcast-now"
               type="button"
-              onClick={handleBroadcast}
-              disabled={loading}
+              onClick={() => {
+                if (loggedInRequester || loggedInDonor) {
+                  handleBroadcast();
+                } else {
+                  handleSendSosOtp();
+                }
+              }}
+              disabled={loading || sosSending}
               className="flex-1 flex items-center justify-center gap-2 px-5 py-3 btn-glow bg-gradient-to-r from-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg cursor-pointer disabled:opacity-50"
             >
-              {loading ? (
-                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Broadcasting...</span>
-              ) : (<><Megaphone className="w-4 h-4" /> Broadcast Now</>)}
+              {loading || sosSending ? (
+                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{sosSending ? 'Sending OTP...' : 'Broadcasting...'}</span>
+              ) : (<><Megaphone className="w-4 h-4" /> {loggedInRequester || loggedInDonor ? 'Broadcast Now' : 'Send OTP & Broadcast Now'}</>)}
             </button>
           </div>
         </div>

@@ -143,17 +143,21 @@ export async function runMatchingEngine(request: BloodRequest): Promise<User[]> 
     return true;
   });
 
-  // 3. Smart Donor Fatigue Prevention — Sort by rested-ness
-  // Donors who haven't donated recently (older cooldown_until or no cooldown) get priority
+  // 3. Exact Match Priority & Smart Donor Fatigue Prevention — Sort by exact match then rested-ness
   const sortedEligible = [...eligibleDonors].sort((a, b) => {
-    // Prefer donors with no cooldown history (never donated = most rested)
+    // 1. Prioritize exact blood type match over compatible fallback
+    const aExact = neededBlood === 'ANY' ? true : (a.blood_type || '').toUpperCase().trim() === neededBlood;
+    const bExact = neededBlood === 'ANY' ? true : (b.blood_type || '').toUpperCase().trim() === neededBlood;
+    if (aExact !== bExact) return aExact ? -1 : 1;
+
+    // 2. Prefer donors with no cooldown history (never donated = most rested)
     if (!a.cooldown_until && b.cooldown_until) return -1;
     if (a.cooldown_until && !b.cooldown_until) return 1;
-    // If both have cooldown history, prefer the one who recovered longest ago (older date = earlier recovery)
+    // 3. If both have cooldown history, prefer the one who recovered longest ago (older date = earlier recovery)
     if (a.cooldown_until && b.cooldown_until) {
       return a.cooldown_until.localeCompare(b.cooldown_until);
     }
-    return 0;
+    return (a.updated_at || '').localeCompare(b.updated_at || '');
   });
 
   // 4. 4-Tier Geographic Expansion Matching

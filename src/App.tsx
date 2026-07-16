@@ -20,10 +20,8 @@ import {
 } from 'lucide-react';
 import RequestForm from './components/RequestForm';
 import RequestTracking from './components/RequestTracking';
-import DonorRegistration from './components/DonorRegistration';
 import DonorDashboard from './components/DonorDashboard';
 import RequesterPortal from './components/RequesterPortal';
-import RequesterRegistration from './components/RequesterRegistration';
 import { AuthHub } from './components/AuthHub';
 import AdminPanel from './components/AdminPanel';
 import NotificationSimulator from './components/NotificationSimulator';
@@ -32,11 +30,12 @@ import { Navbar } from './components/home/Navbar';
 import { MobileBottomNav } from './components/home/MobileBottomNav';
 import { getDoc as getLocalOrFirestoreDoc } from './lib/db';
 import { supabase } from './lib/supabase';
+import { authenticatedApi } from './lib/api';
 import { HospitalRegistration } from './components/hospital/HospitalRegistration';
 import { HospitalDashboard } from './components/hospital/HospitalDashboard';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
-import { User as DonorUser, Requester, HospitalUser, AdminUser } from './types';
+import { User as DonorUser, Requester, HospitalUser, AdminUser, AuthState } from './types';
 import { LanguageProvider } from './lib/LanguageContext';
 
 type ActiveView = 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'requester-register' | 'auth-signin' | 'auth-signup' | 'admin' | 'admin-login' | 'admin-dashboard' | 'hospital-register' | 'hospital-dashboard';
@@ -72,29 +71,41 @@ export default function App() {
     async function handleAuthUser(authUser?: SupabaseAuthUser) {
       if (authUser) {
         try {
-          const userDoc = await getLocalOrFirestoreDoc<DonorUser>('users', authUser.id);
-          if (userDoc) {
-            setLoggedInUser(userDoc);
-            setLoggedInRequester(null);
-          } else {
-            const requesterDoc = await getLocalOrFirestoreDoc<Requester>('requesters', authUser.id);
-            if (requesterDoc) {
-              setLoggedInRequester(requesterDoc);
-              setLoggedInUser(null);
-            } else {
-              // Brand new Google Auth user without a profile in our database
-              setPrefilledGoogleUser({
-                uid: authUser.id,
-                email: authUser.email || '',
-                full_name: authUser.user_metadata?.full_name || ''
-              });
-              setLoggedInUser(null);
+          const authState = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET');
+          if (authState.profile) {
+            if (authState.profile.can_donate) {
+              setLoggedInUser(authState.profile as unknown as DonorUser);
               setLoggedInRequester(null);
-              setActiveView('auth-signup');
+            } else if (authState.profile.can_request) {
+              setLoggedInRequester(authState.profile as unknown as Requester);
+              setLoggedInUser(null);
+            }
+          } else {
+            // Fallback check local/firestore during migration before profile row creation
+            const userDoc = await getLocalOrFirestoreDoc<DonorUser>('users', authUser.id);
+            if (userDoc) {
+              setLoggedInUser(userDoc);
+              setLoggedInRequester(null);
+            } else {
+              const requesterDoc = await getLocalOrFirestoreDoc<Requester>('requesters', authUser.id);
+              if (requesterDoc) {
+                setLoggedInRequester(requesterDoc);
+                setLoggedInUser(null);
+              } else {
+                // Brand new Google Auth user without a profile in our database
+                setPrefilledGoogleUser({
+                  uid: authUser.id,
+                  email: authUser.email || '',
+                  full_name: authUser.user_metadata?.full_name || ''
+                });
+                setLoggedInUser(null);
+                setLoggedInRequester(null);
+                setActiveView('auth-signup');
+              }
             }
           }
         } catch (error) {
-          console.error("Error auto-fetching user document:", error);
+          console.error("Error auto-fetching user state via /api/auth/me:", error);
         }
       } else {
         setLoggedInUser(null);
@@ -276,15 +287,6 @@ export default function App() {
             />
           )}
 
-          {activeView === 'donor-register' && (
-            <DonorRegistration 
-              onSuccess={handleDonorRegisterSuccess} 
-              onNavigateLogin={() => setActiveView('auth-signin')}
-              prefilledGoogleUser={prefilledGoogleUser}
-              onClearPrefilledGoogle={() => setPrefilledGoogleUser(null)}
-            />
-          )}
-
           {activeView === 'donor-dashboard' && (
             <DonorDashboard 
               currentUser={loggedInUser}
@@ -298,23 +300,10 @@ export default function App() {
             />
           )}
 
-          {activeView === 'requester-register' && (
-            <RequesterRegistration
-              onSuccess={(requester) => {
-                setLoggedInRequester(requester);
-                setPrefilledGoogleUser(null);
-                setActiveView('requester-portal');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onNavigateLogin={() => setActiveView('auth-signin')}
-              prefilledGoogleUser={prefilledGoogleUser}
-              onClearPrefilledGoogle={() => setPrefilledGoogleUser(null)}
-            />
-          )}
-
-          {(activeView === 'auth-signin' || activeView === 'auth-signup') && (
+          {(activeView === 'auth-signin' || activeView === 'auth-signup' || activeView === 'donor-register' || activeView === 'requester-register') && (
             <AuthHub
               initialMode={activeView === 'auth-signin' ? 'signin' : 'signup'}
+              initialIntent={activeView === 'requester-register' ? 'requester' : 'donor'}
               onLoginSuccessDonor={(donor) => {
                 setLoggedInUser(donor);
                 setLoggedInRequester(null);

@@ -70,16 +70,10 @@ export default function RequesterPortal({
     try {
       const dashboard = await authenticatedApi<{
         requests: BloodRequest[]; matches: Match[]; donors: User[];
-      }>('/api/dashboard/requester', undefined, 'GET');
-      const allRequests = dashboard.requests;
-      const allMatches = dashboard.matches;
-      const allDonors = dashboard.donors;
-
-      // Filter requests submitted by this requester (via requester_id OR matching email)
-      const userRequests = allRequests.filter(req => 
-        req.requester_id === currentRequester.id || 
-        req.requester_email?.toLowerCase() === currentRequester.email.toLowerCase()
-      );
+      }>('/api/requester/requests', undefined, 'GET');
+      const userRequests = dashboard.requests || [];
+      const allMatches = dashboard.matches || [];
+      const allDonors = dashboard.donors || [];
 
       // Sort by creation date (newest first)
       userRequests.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

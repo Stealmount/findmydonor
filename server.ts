@@ -1238,6 +1238,47 @@ async function startServer() {
     return res.json({ requester, requests, matches, donors });
   });
 
+  app.get("/api/donor/matches", async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+    let donorId = authUser.id;
+    try {
+      const linked = await getLinkedProfile(authUser.id);
+      if (linked?.profile?.id) donorId = linked.profile.id;
+    } catch { /* fall through */ }
+
+    const [allMatches, allRequests, allLogs] = await Promise.all([
+      getLocalOrFirestoreCollection<Match>("matches"),
+      getLocalOrFirestoreCollection<BloodRequest>("blood_requests"),
+      getLocalOrFirestoreCollection<DonationLog>("donation_log"),
+    ]);
+    const matches = allMatches.filter((match) => match.donor_id === donorId || match.donor_id === authUser.id);
+    const requestIds = new Set(matches.map((match) => match.request_id));
+    const requests = allRequests.filter((request) => requestIds.has(request.id));
+    const donationLogs = allLogs.filter((log) => log.donor_id === donorId || log.donor_id === authUser.id);
+    return res.json({ matches, requests, donationLogs });
+  });
+
+  app.get("/api/requester/requests", async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+    let requesterId = authUser.id;
+    try {
+      const linked = await getLinkedProfile(authUser.id);
+      if (linked?.profile?.id) requesterId = linked.profile.id;
+    } catch { /* fall through */ }
+
+    const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    const requests = allRequests.filter((request) => request.requester_id === requesterId || request.requester_id === authUser.id);
+    const requestIds = new Set(requests.map((request) => request.id));
+    const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
+    const matches = allMatches.filter((match) => requestIds.has(match.request_id));
+    const approvedDonorIds = new Set(matches.filter((match) => match.donor_response === "approved").map((match) => match.donor_id));
+    const allDonors = await getLocalOrFirestoreCollection<User>("users");
+    const donors = allDonors.filter((donor) => approvedDonorIds.has(donor.id));
+    return res.json({ requests, matches, donors });
+  });
+
   app.post("/api/matches/:matchId/respond", async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
