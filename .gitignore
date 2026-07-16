@@ -1,0 +1,19 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Secrets and deployment artifacts
+key/
+*.key
+deploy.tar
+
+# managed
+**.data.json
+**.node-persist**
+**_IGNORE_**
+# end managed

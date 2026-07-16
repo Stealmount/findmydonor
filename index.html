@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RaktDaan - Live Blood Matching Network</title>
+    <script>
+      (function() {
+        try {
+          const originalFetch = window.fetch;
+          if (originalFetch) {
+            let customFetch = originalFetch;
+            const desc = {
+              get() { return customFetch; },
+              set(val) { customFetch = val; },
+              configurable: true,
+              enumerable: true
+            };
+            Object.defineProperty(window, 'fetch', desc);
+            if (typeof globalThis !== 'undefined') {
+              Object.defineProperty(globalThis, 'fetch', desc);
+            }
+          }
+        } catch (e) {
+          console.warn("Unable to patch fetch setter:", e);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
