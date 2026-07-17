@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BloodRequest, BloodType, UrgencyLevel, lookupPincode, Requester, HOSPITAL_NETWORKS, BLOOD_COMPONENTS } from '../types';
-import { supabase } from '../lib/supabase';
-import { runMatchingEngine } from '../lib/matching';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { Heart, Landmark, Send, CheckCircle, ShieldAlert, Lock, User as UserIcon, Mail, Phone, ArrowRight, Sparkles, MapPin, Search, Activity, Stethoscope, Eye, Megaphone, Save, ArrowLeft, Clock, AlertTriangle } from 'lucide-react';

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { Requester, BloodRequest, Match, User, BloodType } from '../types';
-import { getCollection as getLocalOrFirestoreCollection } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';

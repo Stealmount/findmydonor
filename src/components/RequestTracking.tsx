@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { BloodRequest, Match, User } from '../types';
-import { getCollection as getLocalOrFirestoreCollection } from '../lib/db';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { getCoordinates } from '../data/pincode_coords';
@@ -41,23 +40,18 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
     setError('');
     setRequest(null);
     try {
-      const allRequests = await getLocalOrFirestoreCollection<BloodRequest>('blood_requests');
-      const found = allRequests.find(r => r.tracking_code.toUpperCase() === codeToSearch.toUpperCase().trim());
+      const response = await fetch(`/api/requests/${encodeURIComponent(codeToSearch.trim())}`);
+      const data = await response.json().catch(() => ({}));
       
-      if (!found) {
-        setError('No active blood request found with this tracking code. Please verify the code and try again.');
+      if (!response.ok || !data.request) {
+        setError(data.error || 'No active blood request found with this tracking code. Please verify the code and try again.');
         setLoading(false);
         return;
       }
 
-      setRequest(found);
-
-      const allMatches = await getLocalOrFirestoreCollection<Match>('matches');
-      const reqMatches = allMatches.filter(m => m.request_id === found.id);
-      setMatches(reqMatches);
-
-      const allDonors = await getLocalOrFirestoreCollection<User>('users');
-      setDonors(allDonors);
+      setRequest(data.request);
+      setMatches(data.matches || []);
+      setDonors(data.donors || []);
     } catch (err) {
       console.error(err);
       setError('An error occurred while fetching tracking details.');

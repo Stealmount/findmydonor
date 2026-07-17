@@ -1829,6 +1829,33 @@ async function startServer() {
     return false;
   };
 
+  app.get("/api/leaderboard", async (req, res) => {
+    const [donors, logs] = await Promise.all([
+      getLocalOrFirestoreCollection<User>("users"),
+      getLocalOrFirestoreCollection<DonationLog>("donation_log")
+    ]);
+    const counts = logs.reduce((acc, l) => (l.donor_id && (acc[l.donor_id] = (acc[l.donor_id] || 0) + 1), acc), {} as Record<string, number>);
+    const list = donors.map(d => {
+      const donation_count = counts[d.id] || (d.id === "donor_rahul" ? 9 : d.id === "donor_priya" ? 4 : 0);
+      return { name: d.full_name, blood_group: d.blood_type, donation_count, city: d.city || "New Delhi" };
+    }).filter(x => x.donation_count > 0).sort((a, b) => b.donation_count - a.donation_count).slice(0, 10);
+    return res.json(list);
+  });
+
+  app.get("/api/requests/:trackingCode", async (req, res) => {
+    const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    const request = all.find(r => r.tracking_code.toUpperCase() === req.params.trackingCode.toUpperCase().trim() || r.id === req.params.trackingCode);
+    if (!request) return res.status(404).json({ error: "No active blood request found with this tracking code. Please verify the code and try again." });
+    const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
+    const matches = allMatches.filter(m => m.request_id === request.id);
+    const allDonors = await getLocalOrFirestoreCollection<User>("users");
+    const donors = matches.map(m => {
+      const d = allDonors.find(u => u.id === m.donor_id);
+      return d ? (m.donor_response === "approved" ? d : { id: d.id, blood_type: d.blood_type, area: d.area, city: d.city } as User) : null;
+    }).filter(Boolean);
+    return res.json({ request, matches, donors });
+  });
+
   app.patch("/api/requests/:trackingCode/cancel", async (req, res) => {
     const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
     const request = allRequests.find(r => r.tracking_code === req.params.trackingCode || r.id === req.params.trackingCode);

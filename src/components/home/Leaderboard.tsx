@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, Star, ShieldCheck, Heart } from 'lucide-react';
-import { getCollection } from '../../lib/db';
-import { User, DonationLog } from '../../types';
+
 
 interface LeaderboardEntry {
   name: string;
@@ -28,39 +27,18 @@ export function Leaderboard() {
   useEffect(() => {
     async function fetchLeaderboard() {
       try {
-        const donors = await getCollection<User>('users');
-        const logs = await getCollection<DonationLog>('donation_log');
-
-        if (donors.length > 0) {
-          // Count donations per donor
-          const donationCounts: Record<string, number> = {};
-          logs.forEach(log => {
-            if (log.donor_id) {
-              donationCounts[log.donor_id] = (donationCounts[log.donor_id] || 0) + 1;
-            }
-          });
-
-          // Build leaders list
-          const list: LeaderboardEntry[] = donors
-            .map(d => {
-              // Add a baseline of pre-seeded mock donations so that seeding results look lively
-              const counts = donationCounts[d.id] || (d.id === 'donor_rahul' ? 9 : d.id === 'donor_priya' ? 4 : 0);
-              return {
-                name: d.full_name,
-                donations: counts,
-                city: d.city || 'New Delhi',
-                bloodType: d.blood_type,
-                rank: 0,
-                isLegend: counts >= 6,
-              };
-            })
-            .filter(item => item.donations > 0)
-            .sort((a, b) => b.donations - a.donations)
-            .map((item, idx) => ({ ...item, rank: idx + 1 }));
-
-          if (list.length > 0) {
-            setLeaders(list.slice(0, 5));
-          }
+        const response = await fetch('/api/leaderboard');
+        const data = await response.json().catch(() => []);
+        if (response.ok && Array.isArray(data) && data.length > 0) {
+          const list: LeaderboardEntry[] = data.map((item: any, idx: number) => ({
+            name: item.name,
+            donations: item.donation_count,
+            city: item.city,
+            bloodType: item.blood_group,
+            rank: idx + 1,
+            isLegend: item.donation_count >= 6,
+          }));
+          setLeaders(list.slice(0, 5));
         }
       } catch (err) {
         console.error('Error fetching leaderboard:', err);
