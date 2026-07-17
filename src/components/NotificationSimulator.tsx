@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getCollection as getLocalOrFirestoreCollection } from '../lib/db';
 import { authenticatedApi } from '../lib/api';
 import { sendRealEmail } from '../lib/email';
 import { Match, BloodRequest, User } from '../types';
@@ -20,17 +19,14 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
   const [activeTab, setActiveTab] = useState<'broadcasts' | 'congrats'>('broadcasts');
 
   const loadData = async () => {
-    const allNotifs = await getLocalOrFirestoreCollection<any>('notifications');
-    const allMatches = await getLocalOrFirestoreCollection<Match>('matches');
-    const allDonors = await getLocalOrFirestoreCollection<User>('users');
-    const allReqs = await getLocalOrFirestoreCollection<BloodRequest>('blood_requests');
-
-    allNotifs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    
-    setNotifications(allNotifs);
-    setMatches(allMatches);
-    setDonors(allDonors);
-    setRequests(allReqs);
+    const response = await fetch('/api/simulator/data');
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data) {
+      setNotifications(data.notifications || []);
+      setMatches(data.matches || []);
+      setDonors(data.donors || []);
+      setRequests(data.requests || []);
+    }
   };
 
   useEffect(() => {

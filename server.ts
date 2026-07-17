@@ -1842,6 +1842,55 @@ async function startServer() {
     return res.json(list);
   });
 
+  app.get("/api/simulator/data", async (req, res) => {
+    const [allNotifs, allMatches, allDonors, allReqs] = await Promise.all([
+      getLocalOrFirestoreCollection<NotificationLog>("notifications"),
+      getLocalOrFirestoreCollection<Match>("matches"),
+      getLocalOrFirestoreCollection<User>("users"),
+      getLocalOrFirestoreCollection<BloodRequest>("blood_requests")
+    ]);
+
+    const notifications = allNotifs
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 20)
+      .map(n => ({
+        ...n,
+        recipient_id: n.recipient_id?.includes('@') ? n.recipient_id.split('@')[0] + '@masked' : (/^\d{10,}$/.test(String(n.recipient_id || '')) ? '[PROTECTED PHONE]' : n.recipient_id),
+        message_body: (n.message_body || '').replace(/\b\d{10,12}\b/g, '[PROTECTED PHONE]').replace(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi, '[PROTECTED EMAIL]')
+      }));
+
+    const matches = allMatches.map(m => ({
+      id: m.id,
+      request_id: m.request_id,
+      donor_id: m.donor_id,
+      donor_response: m.donor_response,
+      created_at: m.created_at
+    }));
+
+    const donors = allDonors.map(d => ({
+      id: d.id,
+      full_name: d.full_name,
+      blood_type: d.blood_type,
+      city: d.city
+    }));
+
+    const requests = allReqs.map(r => ({
+      id: r.id,
+      blood_type_needed: r.blood_type_needed,
+      hospital_name: r.hospital_name,
+      hospital_city: r.hospital_city,
+      units_required: r.units_required,
+      urgency_level: r.urgency_level,
+      status: r.status,
+      tracking_code: r.tracking_code,
+      requester_name: r.requester_name,
+      broadcast_to_simulator: r.broadcast_to_simulator,
+      created_at: r.created_at
+    }));
+
+    return res.json({ notifications, matches, donors, requests });
+  });
+
   app.get("/api/requests/:trackingCode", async (req, res) => {
     const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
     const request = all.find(r => r.tracking_code.toUpperCase() === req.params.trackingCode.toUpperCase().trim() || r.id === req.params.trackingCode);
