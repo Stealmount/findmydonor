@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Bell, Droplet, User as UserIcon, LogOut, ArrowUpRight, ShieldAlert, CheckCircle, Activity, Plus, Minus, Send, Check } from 'lucide-react';
 import { HospitalUser, BloodType, BloodRequest, Match, User } from '../../types';
 import { useLanguage } from '../../lib/LanguageContext';
-import { getCollection } from '../../lib/db';
+import { authenticatedApi } from '../../lib/api';
 
 interface HospitalDashboardProps {
   hospital: HospitalUser;
@@ -59,9 +59,15 @@ export function HospitalDashboard({ hospital, onLogout }: HospitalDashboardProps
   // Load matches and requests from Database
   const fetchLiveMatches = async () => {
     try {
-      const allRequests = await getCollection<BloodRequest>('blood_requests');
-      const allMatches = await getCollection<Match>('matches');
-      const allUsers = await getCollection<User>('users');
+      const data = await authenticatedApi<{
+        requests: BloodRequest[];
+        matches: Match[];
+        users: User[];
+      }>('/api/hospital/dashboard', undefined, 'GET');
+
+      const allRequests = data.requests || [];
+      const allMatches = data.matches || [];
+      const allUsers = data.users || [];
 
       // Filter requests sent by this hospital
       const hospitalReqs = allRequests.filter(r => 
