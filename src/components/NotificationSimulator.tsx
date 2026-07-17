@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getCollection as getLocalOrFirestoreCollection, 
-  saveDoc as saveLocalOrFirestoreDoc
-} from '../lib/db';
+import { getCollection as getLocalOrFirestoreCollection } from '../lib/db';
+import { authenticatedApi } from '../lib/api';
 import { sendRealEmail } from '../lib/email';
 import { Match, BloodRequest, User } from '../types';
 import { MessageSquare, Mail, AlertTriangle, Check, X, Bell, Sparkles, Trash2, Clock, ShieldAlert, Lock, PartyPopper } from 'lucide-react';
@@ -52,89 +50,16 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
     const nowStr = new Date().toISOString();
 
     if (reply === 'YES') {
-      const updatedMatch: Match = {
-        ...match,
-        donor_response: 'approved',
-        donor_response_at: nowStr,
-        contact_shared_at: nowStr,
-      } as any;
-      await saveLocalOrFirestoreDoc('matches', matchId, updatedMatch);
-
-      const newRequestStatus = 'partially_matched';
-
-      await saveLocalOrFirestoreDoc('blood_requests', request.id, {
-        ...request,
-        status: newRequestStatus,
-        updated_at: nowStr
-      });
-
-      const receiverNotifId = crypto.randomUUID();
-      const recMsg = `Great news! A donor is willing to help with your blood request (Request ID: ${request.tracking_code}). Donor Name: ${donor.full_name} | WhatsApp: ${donor.whatsapp_number} | Blood Type: ${donor.blood_type}. Please contact them as soon as possible and coordinate directly. Once donation is complete, please mark the request as fulfilled.`;
-      
-      await saveLocalOrFirestoreDoc('notifications', receiverNotifId, {
-        id: receiverNotifId,
-        type: 'whatsapp',
-        notification_channel: 'whatsapp',
-        recipient_type: 'receiver',
-        recipient_id: request.requester_phone,
-        trigger_event: 'donor_approved',
-        message_body: recMsg,
-        status: 'delivered',
-        sent_at: nowStr,
-        created_at: nowStr
-      });
-
-      const receiverEmailId = crypto.randomUUID();
-      await saveLocalOrFirestoreDoc('notifications', receiverEmailId, {
-        id: receiverEmailId,
-        type: 'email',
-        notification_channel: 'email',
-        recipient_type: 'receiver',
-        recipient_id: request.requester_email,
-        trigger_event: 'donor_approved',
-        message_body: recMsg,
-        status: 'sent',
-        sent_at: nowStr,
-        created_at: nowStr
-      });
-      await sendRealEmail(request.requester_email, `RaktDaan: Match Approved! (Req ID: ${request.tracking_code})`, recMsg);
-
-      const donorCongratsId = crypto.randomUUID();
-      const donorCongratsMsg = `🎉 Congratulations & Thank You, ${donor.full_name}!\nYou have accepted Request #${request.tracking_code} in real time.\n\nSpecific Verified Details:\n• Patient: ${request.patient_name} (${request.patient_age || 35} yrs)\n• Hospital: ${request.hospital_name}, ${request.hospital_area} (${request.hospital_pincode})\n• Blood Required: ${request.units_required} units of ${request.blood_type_needed}\n• Requester Contact: ${request.requester_name} | Phone: ${request.requester_phone}\n\nPlease reach out or navigate directly via Google Maps!`;
-      await saveLocalOrFirestoreDoc('notifications', donorCongratsId, {
-        id: donorCongratsId,
-        type: 'whatsapp',
-        notification_channel: 'whatsapp',
-        recipient_type: 'donor',
-        recipient_id: donor.whatsapp_number || donor.phone,
-        trigger_event: 'donor_approved',
-        message_body: donorCongratsMsg,
-        status: 'delivered',
-        sent_at: nowStr,
-        created_at: nowStr
-      });
-
-      // Trigger the real-time congratulations card
+      await authenticatedApi(`/api/matches/${matchId}/approve`, {}, 'POST');
       setCongratsMatch({
         donor: donor.full_name,
         requester: request.requester_name,
         trackingCode: request.tracking_code
       });
-
     } else if (reply === 'NO') {
-      const updatedMatch: Match = {
-        ...match,
-        donor_response: 'declined',
-        donor_response_at: nowStr,
-      } as any;
-      await saveLocalOrFirestoreDoc('matches', matchId, updatedMatch);
+      await authenticatedApi(`/api/matches/${matchId}/decline`, {}, 'POST');
     } else if (reply === 'TIMEOUT') {
-      const updatedMatch: Match = {
-        ...match,
-        donor_response: 'timed_out',
-        donor_response_at: nowStr,
-      } as any;
-      await saveLocalOrFirestoreDoc('matches', matchId, updatedMatch);
+      await authenticatedApi(`/api/matches/${matchId}/timeout`, {}, 'POST');
     }
 
     await loadData();

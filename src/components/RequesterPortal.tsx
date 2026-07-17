@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { Requester, BloodRequest, Match, User, BloodType } from '../types';
-import { getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc, getDoc as getLocalOrFirestoreDoc } from '../lib/db';
+import { getCollection as getLocalOrFirestoreCollection } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
@@ -114,23 +114,13 @@ export default function RequesterPortal({
       const uid = data.user?.id;
       if (!uid) throw new Error("No user returned");
 
-      let requesterDoc = await getLocalOrFirestoreDoc<Requester>('requesters', uid);
-
-      if (!requesterDoc) {
-        // Fallback or automatic creation if they registered on google earlier
-        const nowStr = new Date().toISOString();
-        requesterDoc = {
-          id: uid,
-          full_name: data.user.user_metadata?.full_name || email.split('@')[0],
-          email: data.user.email || email,
-          phone: '+91 9999999999',
-          created_at: nowStr,
-          updated_at: nowStr
-        };
-        await saveLocalOrFirestoreDoc('requesters', uid, requesterDoc);
+      const authState = (await authenticatedApi('/api/auth/me', undefined, 'GET')) as any;
+      if (authState && authState.profile) {
+        onLoginSuccess(authState.profile);
+        return;
+      } else {
+        throw new Error('No requester profile found');
       }
-
-      onLoginSuccess(requesterDoc);
     } catch (err: any) {
       console.error(err);
       setAuthError('Invalid email or password. Please try again.');
@@ -165,12 +155,7 @@ export default function RequesterPortal({
     try {
       const nowStr = new Date().toISOString();
       
-      const updatedReq: BloodRequest = {
-        ...request,
-        status: 'fulfilled',
-        fulfilled_at: nowStr,
-      };
-      await saveLocalOrFirestoreDoc('blood_requests', request.id, updatedReq);
+      await authenticatedApi(`/api/requests/${request.tracking_code}/fulfill`, {}, 'PATCH');
 
       // Trigger verification messages for matches who approved
       const reqMatches = matches.filter(m => m.request_id === request.id);
@@ -182,7 +167,7 @@ export default function RequesterPortal({
           const checkNotifId = crypto.randomUUID();
           const bodyMsg = `Did you successfully donate blood for Request ID: ${request.tracking_code} at ${request.hospital_name}? Reply YES to CONFIRM and activate your 60-day recovery cooldown, or NO to indicate it did not happen.`;
           
-          await saveLocalOrFirestoreDoc('notifications', checkNotifId, {
+          await authenticatedApi('/api/notifications', {
             id: checkNotifId,
             type: 'whatsapp',
             recipient_type: 'donor',
@@ -192,7 +177,7 @@ export default function RequesterPortal({
             status: 'delivered',
             sent_at: nowStr,
             created_at: nowStr
-          });
+          }, 'POST');
         }
       }
 
@@ -221,11 +206,7 @@ export default function RequesterPortal({
     if (!window.confirm("Are you sure you want to cancel this request? It will be marked inactive and retracted from matching systems.")) return;
 
     try {
-      const updatedReq: BloodRequest = {
-        ...request,
-        status: 'cancelled',
-      };
-      await saveLocalOrFirestoreDoc('blood_requests', request.id, updatedReq);
+      await authenticatedApi(`/api/requests/${request.tracking_code}/cancel`, {}, 'PATCH');
 
       await loadDashboardData();
       if (onStateChange) onStateChange();
@@ -238,9 +219,7 @@ export default function RequesterPortal({
 
   const handleToggleBroadcast = async (req: BloodRequest) => {
     try {
-      const newVal = !(req.broadcast_to_simulator);
-      const updated = { ...req, broadcast_to_simulator: newVal };
-      await saveLocalOrFirestoreDoc('blood_requests', req.id, updated);
+      await authenticatedApi(`/api/requests/${req.tracking_code}/broadcast-toggle`, {}, 'PATCH');
       await loadDashboardData();
       if (onStateChange) onStateChange();
     } catch (err) {

@@ -1851,6 +1851,25 @@ async function startServer() {
     return res.json({ success: true, request: updated });
   });
 
+  app.patch("/api/requests/:trackingCode/fulfill", async (req, res) => {
+    const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    const r = all.find(x => x.tracking_code === req.params.trackingCode || x.id === req.params.trackingCode);
+    if (r) await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, status: "fulfilled", fulfilled_at: nowISO() });
+    return res.json({ success: true });
+  });
+
+  app.patch("/api/requests/:trackingCode/broadcast-toggle", async (req, res) => {
+    const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    const r = all.find(x => x.tracking_code === req.params.trackingCode || x.id === req.params.trackingCode);
+    if (r) await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, broadcast_to_simulator: !r.broadcast_to_simulator });
+    return res.json({ success: true });
+  });
+
+  app.post("/api/notifications", async (req, res) => {
+    if (req.body?.id) await saveLocalOrFirestoreDoc("notifications", req.body.id, { ...req.body, created_at: nowISO() });
+    return res.json({ success: true });
+  });
+
   // ─── Delete Notification(s) ─────────────────────────────────────────────
   app.delete("/api/notifications/:notifId", async (req, res) => {
     try {
