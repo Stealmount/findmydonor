@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BloodRequest, BloodType, UrgencyLevel, lookupPincode, Requester, HOSPITAL_NETWORKS, BLOOD_COMPONENTS } from '../types';
-import { getDoc as getLocalOrFirestoreDoc, saveDoc as saveLocalOrFirestoreDoc } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { runMatchingEngine } from '../lib/matching';
 import { authenticatedApi } from '../lib/api';

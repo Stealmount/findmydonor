@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Match, BloodRequest, AvailabilityStatus, NumberSharingPref, lookupPincode, DonationLog } from '../types';
-import { getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc, getDoc as getLocalOrFirestoreDoc } from '../lib/db';
+import { getCollection as getLocalOrFirestoreCollection, getDoc as getLocalOrFirestoreDoc } from '../lib/db';
 import { sendRealEmail } from '../lib/email';
 import { supabase } from '../lib/supabase';
 import { authenticatedApi } from '../lib/api';
@@ -256,13 +256,18 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
         updated_at: new Date().toISOString()
       };
 
+      await authenticatedApi('/api/donor-profile', {
+        pincode: editPincode,
+        area: editArea,
+        city: editCity,
+        availability_status: editAvail,
+        emergency_only: editEmergency,
+      }, 'PUT');
+      
       try {
         await authenticatedApi('/api/donor-profile/availability', { isAvailable: editAvail === 'available' }, 'PATCH');
-      } catch (apiErr) {
-        console.warn("Could not sync availability via API during migration cutover:", apiErr);
-      }
+      } catch { /* ignore availability sync fallback */ }
 
-      await saveLocalOrFirestoreDoc('users', currentUser.id, updatedUser);
       onLoginSuccess(updatedUser); // Update local active user state
       alert("Donor settings updated successfully.");
     } catch (err) {
@@ -278,81 +283,19 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
     if (!currentUser) return;
     setLoadingMatchId(matchId);
     try {
-      await authenticatedApi(`/api/matches/${matchId}/respond`, { decision });
-      await loadDashboardData();
-      if (onStateChange) onStateChange();
-      return;
-    } catch (error: any) {
-      alert(error.message || 'Unable to update this match. Please try again.');
-      return;
-    } finally {
-      setLoadingMatchId(null);
-    }
-
-    const match = matches.find(m => m.id === matchId);
-    if (!match) return;
-
-    const req = requests.find(r => r.id === match.request_id);
-    if (!req) return;
-
-    const nowStr = new Date().toISOString();
-
-    try {
-      // 1. Update match record
-      const updatedMatch: Match = {
-        ...match,
-        donor_response: decision,
-        donor_response_at: nowStr,
-        contact_shared_at: decision === 'approved' ? nowStr : null,
-      };
-      await saveLocalOrFirestoreDoc('matches', matchId, updatedMatch);
-
-      // 2. Alert receiver if approved
       if (decision === 'approved') {
-        const notifId = crypto.randomUUID();
-        const bodyMsg = `Great news! A donor is willing to help with your blood request (Request ID: ${req.tracking_code}). Donor Name: ${currentUser.full_name} | WhatsApp: ${currentUser.whatsapp_number} | Blood Type: ${currentUser.blood_type}. Please contact them as soon as possible and coordinate directly.`;
-        
-        await saveLocalOrFirestoreDoc('notifications', notifId, {
-          id: notifId,
-          type: 'whatsapp',
-          recipient_type: 'receiver',
-          recipient_id: req.requester_phone,
-          trigger_event: 'donor_approved',
-          message_body: bodyMsg,
-          status: 'delivered',
-          sent_at: nowStr,
-          created_at: nowStr
-        });
-
-        // Email alert to receiver
-        const emailId = crypto.randomUUID();
-        await saveLocalOrFirestoreDoc('notifications', emailId, {
-          id: emailId,
-          type: 'email',
-          recipient_type: 'receiver',
-          recipient_id: req.requester_email,
-          trigger_event: 'donor_approved',
-          message_body: bodyMsg,
-          status: 'sent',
-          sent_at: nowStr,
-          created_at: nowStr
-        });
-        await sendRealEmail(req.requester_email, `Blood Connect: Donor Approved Your Request! (${req.tracking_code})`, bodyMsg);
-
-        // Update Request Status to partially_matched
-        await saveLocalOrFirestoreDoc('blood_requests', req.id, {
-          ...req,
-          status: 'partially_matched',
-          updated_at: nowStr
-        });
+        await authenticatedApi(`/api/donor/matches/${matchId}/accept`, {}, 'POST');
+      } else {
+        await authenticatedApi(`/api/matches/${matchId}/decline`, {}, 'POST');
       }
-
       await loadDashboardData();
       if (onStateChange) onStateChange();
       alert(`You have successfully ${decision} this request.`);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to record your response.");
+    } catch (error: any) {
+      console.error(error);
+      alert(error.message || 'Unable to update this match. Please try again.');
+    } finally {
+      setLoadingMatchId(null);
     }
   };
 
@@ -363,56 +306,27 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
 
     setReporting(true);
     try {
-      const nowStr = new Date().toISOString();
       const lastDate = new Date(reportDate);
       const cooldownObj = new Date(lastDate.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days cooldown
       const cooldownUntilStr = cooldownObj.toISOString().split('T')[0];
 
-      // 1. Create Donation Log record
-      const logId = crypto.randomUUID();
-      const log: any = {
-        id: logId,
-        donor_id: currentUser.id,
-        match_id: null,
-        request_id: null,
-        donation_date: reportDate,
-        source: 'self_reported',
-        notes: reportNotes || 'Manually reported external donation.',
-        created_at: nowStr
-      };
-      await saveLocalOrFirestoreDoc('donation_log', logId, log);
+      await authenticatedApi('/api/donor/matches/self/confirm', {
+        notes: reportNotes || 'Manually reported external donation.'
+      }, 'POST');
 
-      // 2. Update Donor Status to Cooldown
       const updatedUser: User = {
         ...currentUser,
         last_donation_date: reportDate,
         cooldown_until: cooldownUntilStr,
         account_status: 'cooldown',
-        updated_at: nowStr
+        updated_at: new Date().toISOString()
       };
-      await saveLocalOrFirestoreDoc('users', currentUser.id, updatedUser);
       onLoginSuccess(updatedUser); // Update local state
-
-      // 3. Queue simulated WhatsApp reminder confirmation
-      const notifId = crypto.randomUUID();
-      const msg = `Hi ${currentUser.full_name}, your reported donation on ${reportDate} is saved. Your profile is now set to COOLDOWN. You will be excluded from new search pools for 60 days (until ${cooldownUntilStr}) to allow full recovery. Thank you for your incredible service!`;
-      
-      await saveLocalOrFirestoreDoc('notifications', notifId, {
-        id: notifId,
-        type: 'whatsapp',
-        recipient_type: 'donor',
-        recipient_id: currentUser.id,
-        trigger_event: 'cooldown_verification',
-        message_body: msg,
-        status: 'delivered',
-        sent_at: nowStr,
-        created_at: nowStr
-      });
 
       alert("Thank you! Your donation was logged successfully. You are now placed in Cooldown for 60 days (until " + cooldownUntilStr + ") to allow you to recover safely.");
       setReportDate('');
       setReportNotes('');
-      loadDashboardData();
+      await loadDashboardData();
     } catch (err) {
       console.error(err);
       alert("Failed to record donation.");

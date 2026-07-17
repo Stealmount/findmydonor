@@ -934,27 +934,26 @@ async function startServer() {
   app.put("/api/donor-profile", rateLimitMiddleware(20, 60_000), async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
-    const linked = await getLinkedProfile(authUser.id);
-    if (!linked?.profile.can_donate || !linked.profile.whatsapp_verified) {
-      return res.status(403).json({ error: "Verified donor role is required." });
-    }
+    const donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
+    if (!donor) return res.status(404).json({ error: "Donor profile not found" });
+
     const body = req.body || {};
-    const groups = new Set(["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]);
-    const latitude = Number(body.latitude);
-    const longitude = Number(body.longitude);
-    const complete = groups.has(body.blood_group) && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 &&
-      Number.isFinite(longitude) && longitude >= -180 && longitude <= 180 && Boolean(String(body.address_text || "").trim()) &&
-      body.health_self_declaration === true;
-    if (!complete) return res.status(400).json({ error: "Blood group, exact location, address, and health declaration are required." });
-    const { data, error } = await getServerSupabase().from("donor_profiles").upsert({
-      profile_id: linked.profile.id, blood_group: body.blood_group, latitude, longitude,
-      address_text: String(body.address_text).trim(), pincode: body.pincode || null, area: body.area || null,
-      city: body.city || null, state: body.state || null, last_donation_date: body.last_donation_date || null,
-      health_self_declaration: true, profile_complete: true, is_available: false, updated_at: nowISO(),
-    }).select("*").single();
-    if (error) return res.status(400).json({ error: "Unable to save donor profile." });
+    const updated = {
+      ...donor,
+      full_name: body.full_name || donor.full_name,
+      blood_type: body.blood_type || body.blood_group || donor.blood_type,
+      pincode: body.pincode || donor.pincode,
+      area: body.area || donor.area,
+      city: body.city || donor.city,
+      whatsapp_number: body.whatsapp_number || donor.whatsapp_number,
+      availability_status: body.availability_status || donor.availability_status,
+      number_sharing_pref: body.number_sharing_pref || donor.number_sharing_pref,
+      emergency_only: body.emergency_only !== undefined ? Boolean(body.emergency_only) : donor.emergency_only,
+      updated_at: nowISO(),
+    };
+    await saveLocalOrFirestoreDoc("users", authUser.id, updated);
     await cacheInvalidatePrefix("eligible_");
-    return res.json({ donorProfile: data });
+    return res.json({ success: true, donorProfile: updated });
   });
 
   app.patch("/api/donor-profile/availability", rateLimitMiddleware(30, 60_000), async (req, res) => {
@@ -1774,6 +1773,188 @@ async function startServer() {
     if (!request) return res.status(404).json({ error: "Request not found" });
     const result = await createNextDonorMatch(request, req.body?.declinedMatchId || req.body?.timedOutMatchId);
     return res.json({ success: !!result, match: result || null });
+  });
+
+  // ─── Donor Match Accept & Confirm aliases ───────────────────────────────
+  app.post("/api/donor/matches/:matchId/accept", async (req, res, next) => {
+    req.url = `/api/matches/${req.params.matchId}/approve`;
+    next();
+  });
+  app.post("/api/donor/matches/:matchId/confirm", async (req, res, next) => {
+    if (req.params.matchId === "self") {
+      const authUser = await getAuthenticatedUser(req);
+      if (!authUser) return res.status(401).json({ error: "Sign in is required" });
+      const donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
+      if (!donor) return res.status(404).json({ error: "Donor not found" });
+
+      const now = new Date();
+      const cooldownEnd = daysFromNow(60);
+      const donationDate = now.toISOString().split("T")[0];
+
+      await Promise.all([
+        saveLocalOrFirestoreDoc("donation_log", `donation_self_${donor.id}_${Date.now()}`, {
+          id: `donation_self_${donor.id}_${Date.now()}`,
+          donor_id: donor.id,
+          match_id: null,
+          request_id: null,
+          donation_date: donationDate,
+          source: "self_reported",
+          notes: req.body.notes || "Manually reported external donation",
+          created_at: nowISO(),
+        }),
+        saveLocalOrFirestoreDoc("users", donor.id, {
+          ...donor,
+          cooldown_until: cooldownEnd,
+          account_status: "cooldown",
+          last_donation_date: donationDate,
+          updated_at: nowISO(),
+        }),
+      ]);
+      await cacheInvalidatePrefix("eligible_");
+      return res.json({ success: true });
+    }
+    req.url = `/api/matches/${req.params.matchId}/confirm-donation`;
+    next();
+  });
+
+  // ─── Requester Cancel & Reopen ──────────────────────────────────────────
+  const checkRequesterAuth = async (req: express.Request, request: BloodRequest) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (authUser && (authUser.id === request.requester_id || authUser.email === request.requester_email)) return true;
+    const { verificationToken } = req.body || {};
+    if (verificationToken && request.requester_phone) {
+      const normalizedPhone = normalizePhone(request.requester_phone);
+      if (await consumeOtpTicket(String(verificationToken), normalizedPhone, "sos")) return true;
+    }
+    return false;
+  };
+
+  app.patch("/api/requests/:trackingCode/cancel", async (req, res) => {
+    const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    const request = allRequests.find(r => r.tracking_code === req.params.trackingCode || r.id === req.params.trackingCode);
+    if (!request) return res.status(404).json({ error: "Request not found" });
+    if (!await checkRequesterAuth(req, request)) return res.status(403).json({ error: "Unauthorized" });
+    const updated = { ...request, status: "cancelled" as const, updated_at: nowISO() };
+    await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
+    await cacheInvalidatePrefix("req_status_");
+    return res.json({ success: true, request: updated });
+  });
+
+  app.patch("/api/requests/:trackingCode/reopen", async (req, res) => {
+    const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    const request = allRequests.find(r => r.tracking_code === req.params.trackingCode || r.id === req.params.trackingCode);
+    if (!request) return res.status(404).json({ error: "Request not found" });
+    if (!await checkRequesterAuth(req, request)) return res.status(403).json({ error: "Unauthorized" });
+    const updated = { ...request, status: "open" as const, updated_at: nowISO() };
+    await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
+    await cacheInvalidatePrefix("req_status_");
+    return res.json({ success: true, request: updated });
+  });
+
+  // ─── Delete Notification(s) ─────────────────────────────────────────────
+  app.delete("/api/notifications/:notifId", async (req, res) => {
+    try {
+      const supabase = getServerSupabase();
+      if (req.params.notifId === "all") {
+        await supabase.from("notifications").delete().neq("id", "dummy");
+      } else {
+        await supabase.from("notifications").delete().eq("id", req.params.notifId);
+      }
+    } catch { /* ignore fallback */ }
+    return res.json({ success: true });
+  });
+
+  // ─── Admin Actions ──────────────────────────────────────────────────────
+  const adminCheck = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authUser = await getAuthenticatedUser(req);
+    const adminEmails = (process.env.ADMIN_EMAILS || "admin@raktdaan.org").split(",").map(e => e.trim().toLowerCase());
+    if (!authUser || !authUser.email || !adminEmails.includes(authUser.email.toLowerCase())) {
+      return res.status(403).json({ error: "Access denied." });
+    }
+    next();
+  };
+
+  app.patch("/api/admin/donors/:donorId/approve", adminCheck, async (req, res) => {
+    const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
+    if (!donor) return res.status(404).json({ error: "Donor not found" });
+    await saveLocalOrFirestoreDoc("users", donor.id, {
+      ...donor,
+      account_status: "active",
+      cooldown_until: null,
+      updated_at: nowISO(),
+    });
+    return res.json({ success: true });
+  });
+
+  app.patch("/api/admin/donors/:donorId/ban", adminCheck, async (req, res) => {
+    const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
+    if (!donor) return res.status(404).json({ error: "Donor not found" });
+    await saveLocalOrFirestoreDoc("users", donor.id, {
+      ...donor,
+      account_status: "banned",
+      updated_at: nowISO(),
+    });
+    const notifId = `notif_ban_${donor.id}`;
+    await saveLocalOrFirestoreDoc("notifications", notifId, {
+      id: notifId,
+      type: "in_app",
+      recipient_type: "donor",
+      recipient_id: donor.id,
+      trigger_event: "account_banned",
+      message_body: `Account Banned. Reason: ${req.body.banReason || "Policy violation."}`,
+      status: "sent",
+      sent_at: nowISO(),
+      created_at: nowISO(),
+    });
+    return res.json({ success: true });
+  });
+
+  app.post("/api/admin/donors/:donorId/log-donation", adminCheck, async (req, res) => {
+    const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
+    if (!donor) return res.status(404).json({ error: "Donor not found" });
+    const now = new Date();
+    const cooldownEnd = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const cooldownStr = cooldownEnd.toISOString().split("T")[0];
+    await saveLocalOrFirestoreDoc("users", donor.id, {
+      ...donor,
+      account_status: "cooldown",
+      cooldown_until: cooldownStr,
+      last_donation_date: now.toISOString().split("T")[0],
+      updated_at: now.toISOString(),
+    });
+    const logId = randomUUID();
+    await saveLocalOrFirestoreDoc("donation_log", logId, {
+      id: logId,
+      donor_id: donor.id,
+      match_id: null,
+      request_id: null,
+      donation_date: now.toISOString().split("T")[0],
+      source: "admin_entered",
+      notes: "Cooldown forced by administrator override.",
+      created_at: now.toISOString(),
+    });
+    return res.json({ success: true });
+  });
+
+  app.post("/api/admin/matches", adminCheck, async (req, res) => {
+    const { matchId, payload } = req.body;
+    await saveLocalOrFirestoreDoc("matches", matchId, payload);
+    if (payload.outcome === "donated") {
+      const match = await getLocalOrFirestoreDoc<Match>("matches", matchId);
+      if (match) {
+        const donor = await getLocalOrFirestoreDoc<User>("users", match.donor_id);
+        if (donor) {
+          const cooldownEnd = new Date(new Date().getTime() + 60 * 24 * 60 * 60 * 1000);
+          await saveLocalOrFirestoreDoc("users", donor.id, {
+            ...donor,
+            account_status: "cooldown",
+            cooldown_until: cooldownEnd.toISOString().split("T")[0],
+            last_donation_date: new Date().toISOString().split("T")[0],
+          });
+        }
+      }
+    }
+    return res.json({ success: true });
   });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

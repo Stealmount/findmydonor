@@ -348,8 +348,8 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                   const handleDeleteLog = async () => {
                     if (clearLocked) return;
                     try {
-                      const { supabase } = await import('../lib/supabase');
-                      await supabase.from('notifications').delete().eq('id', notif.id);
+                      const { authenticatedApi } = await import('../lib/api');
+                      await authenticatedApi(`/api/notifications/${notif.id}`, {}, 'DELETE');
                       loadData();
                     } catch {
                       loadData();
@@ -443,9 +443,8 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                 onClick={async () => {
                   if (window.confirm("Clear all simulated notifications?")) {
                     try {
-                      // Attempt to clear from Supabase
-                      const { supabase } = await import('../lib/supabase');
-                      await supabase.from('notifications').delete().neq('id', 'dummy');
+                      const { authenticatedApi } = await import('../lib/api');
+                      await authenticatedApi('/api/notifications/all', {}, 'DELETE');
                       // Also clear local if it existed
                       localStorage.removeItem('raktdaan_notifications');
                       loadData();

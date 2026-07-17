@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(TEST_BASE_URL=http://localhost:5001 WAHA_WEBHOOK_HMAC_KEY=test-waha-webhook-secret npm run test:security)"
+    ]
+  }
+}

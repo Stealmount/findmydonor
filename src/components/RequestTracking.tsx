@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { BloodRequest, Match, User } from '../types';
 import { getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc } from '../lib/db';
+import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { getCoordinates } from '../data/pincode_coords';
 import HospitalMap from './HospitalMap';
@@ -129,14 +130,14 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
     if (!window.confirm("Are you sure you want to cancel this blood request?")) return;
 
     try {
-      const updatedReq: BloodRequest = {
-        ...request,
-        status: 'cancelled',
-      };
-      await saveLocalOrFirestoreDoc('blood_requests', request.id, updatedReq);
-      setRequest(updatedReq);
-      if (onStateChange) onStateChange();
-      alert("Blood request cancelled successfully.");
+      const response = (await authenticatedApi(`/api/requests/${request.tracking_code}/cancel`, {}, 'PATCH')) as any;
+      if (response && response.request) {
+        setRequest(response.request);
+        if (onStateChange) onStateChange();
+        alert("Blood request cancelled successfully.");
+      } else {
+        throw new Error("Failed to cancel");
+      }
     } catch (err) {
       console.error(err);
       alert("Failed to cancel request.");

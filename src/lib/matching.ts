@@ -214,8 +214,14 @@ export async function runMatchingEngine(request: BloodRequest): Promise<User[]> 
     addDonors(sortedEligible, 5);
   }
 
-  // Sort by rank, then limit — critical requests get more donors notified (15), others get 10
-  matchedDonors.sort((a, b) => a.rank - b.rank);
+  // Sort by rank, then exact match priority, then limit — critical requests get more donors notified (15), others get 10
+  matchedDonors.sort((a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    const aExact = neededBlood === 'ANY' ? true : (a.donor.blood_type || '').toUpperCase().trim() === neededBlood;
+    const bExact = neededBlood === 'ANY' ? true : (b.donor.blood_type || '').toUpperCase().trim() === neededBlood;
+    if (aExact !== bExact) return aExact ? -1 : 1;
+    return 0;
+  });
   const maxMatches = request.urgency_level === 'critical' ? 15 : 10;
   const finalMatches = matchedDonors.slice(0, maxMatches);
 

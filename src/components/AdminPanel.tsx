@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, BloodRequest, Match, NotificationLog, DonationLog, BloodType, RequestStatus } from '../types';
-import { getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc, deleteDoc as deleteLocalOrFirestoreDoc, seedInitialDonors } from '../lib/db';
+import { getCollection as getLocalOrFirestoreCollection, seedInitialDonors } from '../lib/db';
+import { authenticatedApi } from '../lib/api';
 import { 
   Users, 
   Heart, 
@@ -107,33 +108,7 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
     if (!window.confirm(`Force 60-day cooldown on donor ${donor.full_name}?`)) return;
 
     try {
-      const now = new Date();
-      const cooldownEnd = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
-      const cooldownStr = cooldownEnd.toISOString().split('T')[0];
-
-      const updated: User = {
-        ...donor,
-        account_status: 'cooldown',
-        cooldown_until: cooldownStr,
-        last_donation_date: now.toISOString().split('T')[0],
-        updated_at: now.toISOString()
-      };
-
-      await saveLocalOrFirestoreDoc('users', donorId, updated);
-      
-      // Save manual donation log
-      const logId = crypto.randomUUID();
-      await saveLocalOrFirestoreDoc('donation_log', logId, {
-        id: logId,
-        donor_id: donorId,
-        match_id: null,
-        request_id: null,
-        donation_date: now.toISOString().split('T')[0],
-        source: 'admin_entered',
-        notes: 'Cooldown forced by administrator override.',
-        created_at: now.toISOString()
-      });
-
+      await authenticatedApi(`/api/admin/donors/${donorId}/log-donation`, {}, 'POST');
       await loadAdminData();
       if (onStateChange) onStateChange();
       alert(`Forced cooldown on donor ${donor.full_name} successfully.`);
@@ -150,14 +125,7 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
     if (!window.confirm(`Lift cooldown and reset donor ${donor.full_name} to ACTIVE ahead of schedule?`)) return;
 
     try {
-      const updated: User = {
-        ...donor,
-        account_status: 'active',
-        cooldown_until: null,
-        updated_at: new Date().toISOString()
-      };
-
-      await saveLocalOrFirestoreDoc('users', donorId, updated);
+      await authenticatedApi(`/api/admin/donors/${donorId}/approve`, {}, 'PATCH');
       await loadAdminData();
       if (onStateChange) onStateChange();
       alert(`Lifted cooldown on donor ${donor.full_name} successfully.`);
@@ -173,28 +141,7 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
     if (!donor) return;
 
     try {
-      const nowStr = new Date().toISOString();
-      const updated: User = {
-        ...donor,
-        account_status: 'banned',
-        updated_at: nowStr
-      };
-      await saveLocalOrFirestoreDoc('users', banDonorId, updated);
-
-      // Log ban notification
-      const banLogId = `notif_ban_${banDonorId}`;
-      await saveLocalOrFirestoreDoc('notifications', banLogId, {
-        id: banLogId,
-        type: 'in_app',
-        recipient_type: 'donor',
-        recipient_id: banDonorId,
-        trigger_event: 'account_banned',
-        message_body: `Account Banned. Reason: ${banReason || 'Policy violation.'}`,
-        status: 'sent',
-        sent_at: nowStr,
-        created_at: nowStr
-      });
-
+      await authenticatedApi(`/api/admin/donors/${banDonorId}/ban`, { banReason }, 'PATCH');
       setBanDonorId(null);
       setBanReason('');
       await loadAdminData();
@@ -212,12 +159,7 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
     if (!window.confirm(`Reinstate/unban donor ${donor.full_name}?`)) return;
 
     try {
-      const updated: User = {
-        ...donor,
-        account_status: 'active',
-        updated_at: new Date().toISOString()
-      };
-      await saveLocalOrFirestoreDoc('users', donorId, updated);
+      await authenticatedApi(`/api/admin/donors/${donorId}/approve`, {}, 'PATCH');
       await loadAdminData();
       if (onStateChange) onStateChange();
       alert("Donor status reinstated to Active.");
@@ -244,21 +186,9 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
       if (newStatus === 'donated') {
         payload.outcome = 'donated';
         payload.outcome_confirmed_at = nowStr;
-
-        // Force cooldown on donor
-        const donor = donors.find(d => d.id === match.donor_id);
-        if (donor) {
-          const cooldownEnd = new Date(new Date().getTime() + 60 * 24 * 60 * 60 * 1000);
-          await saveLocalOrFirestoreDoc('users', donor.id, {
-            ...donor,
-            account_status: 'cooldown',
-            cooldown_until: cooldownEnd.toISOString().split('T')[0],
-            last_donation_date: new Date().toISOString().split('T')[0]
-          });
-        }
       }
 
-      await saveLocalOrFirestoreDoc('matches', matchId, payload);
+      await authenticatedApi("/api/admin/matches", { matchId, payload }, "POST");
       await loadAdminData();
       if (onStateChange) onStateChange();
       alert("Override completed successfully.");
