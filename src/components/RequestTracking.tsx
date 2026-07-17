@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { BloodRequest, Match, User } from '../types';
-import { getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc } from '../lib/db';
+import { getCollection as getLocalOrFirestoreCollection } from '../lib/db';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { getCoordinates } from '../data/pincode_coords';
@@ -83,7 +83,7 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
         status: 'fulfilled',
         fulfilled_at: nowStr,
       };
-      await saveLocalOrFirestoreDoc('blood_requests', request.id, updatedReq);
+      await authenticatedApi(`/api/requests/${request.tracking_code}/fulfill`, {}, 'PATCH');
       setRequest(updatedReq);
 
       const approvedMatches = matches.filter(m => m.donor_response === 'approved');
@@ -93,7 +93,7 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
           const checkNotifId = crypto.randomUUID();
           const bodyMsg = `Did you successfully donate blood for Request ID: ${request.tracking_code} at ${request.hospital_name}? Reply YES to CONFIRM and activate your 60-day recovery cooldown, or NO to indicate it did not happen.`;
           
-          await saveLocalOrFirestoreDoc('notifications', checkNotifId, {
+          await authenticatedApi('/api/notifications', {
             id: checkNotifId,
             type: 'whatsapp',
             recipient_type: 'donor',
@@ -103,7 +103,7 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
             status: 'delivered',
             sent_at: nowStr,
             created_at: nowStr
-          });
+          }, 'POST');
         }
       }
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Match, BloodRequest, AvailabilityStatus, NumberSharingPref, lookupPincode, DonationLog } from '../types';
-import { getCollection as getLocalOrFirestoreCollection, getDoc as getLocalOrFirestoreDoc } from '../lib/db';
 import { sendRealEmail } from '../lib/email';
 import { supabase } from '../lib/supabase';
 import { authenticatedApi } from '../lib/api';
@@ -172,32 +171,16 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
       const uid = data.user?.id;
       if (!uid) throw new Error("No user returned");
 
-      const found = await getLocalOrFirestoreDoc<User>('users', uid);
-      if (found) {
-        onLoginSuccess(found);
+      const authState = (await authenticatedApi('/api/auth/me', undefined, 'GET')) as any;
+      if (authState && authState.profile) {
+        onLoginSuccess(authState.profile);
         return;
       } else {
         setLoginError('Authenticated successfully, but no corresponding donor profile document was found.');
         return;
       }
     } catch (authErr: any) {
-      console.warn("Supabase Auth login failed, checking fallback seed users...", authErr);
-      
-      try {
-        // Fallback for preseeded test users if real Auth fails
-        const allDonors = await getLocalOrFirestoreCollection<User>('users');
-        const seedUser = allDonors.find(u => u.email.toLowerCase() === email.toLowerCase().trim());
-        
-        if (seedUser && seedUser.id.startsWith('donor_')) {
-          if (password === 'password' || !(seedUser as any).password || (seedUser as any).password === password) {
-            onLoginSuccess(seedUser);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("Seed fallback check failed:", err);
-      }
-
+      console.warn("Supabase Auth login failed:", authErr);
       setLoginError(authErr.message || 'Login failed. Please try again.');
     } finally {
       setLoginLoading(false);
