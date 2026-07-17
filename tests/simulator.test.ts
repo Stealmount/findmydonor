@@ -3,7 +3,8 @@ import test, { describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, ChildProcess } from 'node:child_process';
 
-const BASE = process.env.TEST_BASE_URL || 'http://localhost:5000';
+const PORT = process.env.TEST_PORT || '5002';
+const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 
 describe('Simulator data endpoint (/api/simulator/data)', () => {
   let child: ChildProcess | null = null;
@@ -12,7 +13,7 @@ describe('Simulator data endpoint (/api/simulator/data)', () => {
     try {
       const check = await fetch(`${BASE}/api/health`).catch(() => null);
       if (!check || !check.ok) {
-        child = spawn('npx', ['tsx', 'server.ts'], { stdio: 'pipe', shell: true });
+        child = spawn('npx', ['tsx', 'server.ts'], { stdio: 'pipe', shell: true, env: { ...process.env, PORT } });
         for (let i = 0; i < 30; i++) {
           await new Promise(r => setTimeout(r, 500));
           const res = await fetch(`${BASE}/api/health`).catch(() => null);

@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('server.js',{force:true})\"",
     "lint": "tsc --noEmit",
-    "test": "tsx --test tests/matching.test.ts tests/simulator.test.ts tests/hospital.test.ts",
+    "test": "tsx --test tests/matching.test.ts tests/simulator.test.ts tests/hospital.test.ts tests/admin.test.ts",
     "test:matching": "tsx --test tests/matching.test.ts",
     "test:security": "tsx --test tests/security.test.ts",
     "test:all": "tsx --test tests/*.test.ts"

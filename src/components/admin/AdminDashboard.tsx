@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminUser, BloodRequest, User } from '../../types';
 import { Activity, Users, Droplet, BellRing, Link2, ShieldAlert, CheckCircle, RefreshCcw } from 'lucide-react';
+import { authenticatedApi } from '../../lib/api';
 
 interface AdminDashboardProps {
   admin: AdminUser;
@@ -18,7 +19,7 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
   };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'matcher'>('overview');
-  const [matchingStatus, setMatchingStatus] = useState<'idle' | 'matching' | 'matched'>('idle');
+  const [matchingStatus, setMatchingStatus] = useState<'idle' | 'matching' | 'matched' | 'error'>('idle');
 
   const mockOpenRequests = [
     { id: 'req_1', patient: 'Aarav M.', hospital: 'AIIMS New Delhi', blood: 'O+', units: 2, status: 'CRITICAL', time: '10 min ago' },
@@ -26,12 +27,29 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
     { id: 'req_3', patient: 'Rahul V.', hospital: 'Max Super Speciality', blood: 'AB+', units: 4, status: 'PLANNED', time: '1 hr ago' },
   ];
 
-  const handleForceMatch = () => {
+  const handleForceMatch = async () => {
     setMatchingStatus('matching');
-    setTimeout(() => {
+    try {
+      const matchId = crypto.randomUUID();
+      const reqId = mockOpenRequests[0]?.id.includes('-') ? mockOpenRequests[0].id : 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
+      await authenticatedApi('/api/admin/matches', {
+        matchId,
+        payload: {
+          id: matchId,
+          request_id: reqId,
+          donor_id: 'c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
+          donor_response: 'pending',
+          distance_km: 0,
+          created_at: new Date().toISOString()
+        }
+      }, 'POST');
       setMatchingStatus('matched');
       setTimeout(() => setMatchingStatus('idle'), 3000);
-    }, 1500);
+    } catch (err) {
+      console.error('Error forcing match:', err);
+      setMatchingStatus('error');
+      setTimeout(() => setMatchingStatus('idle'), 3000);
+    }
   };
 
   return (
@@ -204,6 +222,18 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                     >
                       <CheckCircle className="h-5 w-5" />
                       MATCH FORCED (3 Donors Notified)
+                    </motion.div>
+                  )}
+                  {matchingStatus === 'error' && (
+                    <motion.div
+                      key="error"
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="w-full bg-red-950 border border-red-500 text-red-400 font-bold py-3 rounded-lg flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(239,68,68,0.2)]"
+                    >
+                      <ShieldAlert className="h-5 w-5" />
+                      MATCH FAILED
                     </motion.div>
                   )}
                 </AnimatePresence>
