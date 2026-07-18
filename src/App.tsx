@@ -58,6 +58,51 @@ export default function App() {
   const [trackingRole, setTrackingRole] = useState<'donor' | 'requester'>('requester');
   const [trackingMatchId, setTrackingMatchId] = useState<string | undefined>();
 
+  async function handleAuthUser(authUser?: SupabaseAuthUser) {
+    if (authUser) {
+      try {
+        const authState = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET');
+        if (authState.profile) {
+          if (authState.profile.can_donate) {
+            setLoggedInUser(authState.profile as unknown as DonorUser);
+            setLoggedInRequester(null);
+          } else if (authState.profile.can_request) {
+            setLoggedInRequester(authState.profile as unknown as Requester);
+            setLoggedInUser(null);
+          }
+        } else {
+          // Fallback check local/firestore during migration before profile row creation
+          const userDoc = await getLocalOrFirestoreDoc<DonorUser>('users', authUser.id);
+          if (userDoc) {
+            setLoggedInUser(userDoc);
+            setLoggedInRequester(null);
+          } else {
+            const requesterDoc = await getLocalOrFirestoreDoc<Requester>('requesters', authUser.id);
+            if (requesterDoc) {
+              setLoggedInRequester(requesterDoc);
+              setLoggedInUser(null);
+            } else {
+              // Brand new Google Auth user without a profile in our database
+              setPrefilledGoogleUser({
+                uid: authUser.id,
+                email: authUser.email || '',
+                full_name: authUser.user_metadata?.full_name || ''
+              });
+              setLoggedInUser(null);
+              setLoggedInRequester(null);
+              setActiveView('auth-signup');
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error auto-fetching user state via /api/auth/me:", error);
+      }
+    } else {
+      setLoggedInUser(null);
+      setLoggedInRequester(null);
+    }
+  }
+
   // Monitor Auth state changes to persist and auto-restore user sessions
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,54 +114,19 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
-
-    async function handleAuthUser(authUser?: SupabaseAuthUser) {
-      if (authUser) {
-        try {
-          const authState = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET');
-          if (authState.profile) {
-            if (authState.profile.can_donate) {
-              setLoggedInUser(authState.profile as unknown as DonorUser);
-              setLoggedInRequester(null);
-            } else if (authState.profile.can_request) {
-              setLoggedInRequester(authState.profile as unknown as Requester);
-              setLoggedInUser(null);
-            }
-          } else {
-            // Fallback check local/firestore during migration before profile row creation
-            const userDoc = await getLocalOrFirestoreDoc<DonorUser>('users', authUser.id);
-            if (userDoc) {
-              setLoggedInUser(userDoc);
-              setLoggedInRequester(null);
-            } else {
-              const requesterDoc = await getLocalOrFirestoreDoc<Requester>('requesters', authUser.id);
-              if (requesterDoc) {
-                setLoggedInRequester(requesterDoc);
-                setLoggedInUser(null);
-              } else {
-                // Brand new Google Auth user without a profile in our database
-                setPrefilledGoogleUser({
-                  uid: authUser.id,
-                  email: authUser.email || '',
-                  full_name: authUser.user_metadata?.full_name || ''
-                });
-                setLoggedInUser(null);
-                setLoggedInRequester(null);
-                setActiveView('auth-signup');
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Error auto-fetching user state via /api/auth/me:", error);
-        }
-      } else {
-        setLoggedInUser(null);
-        setLoggedInRequester(null);
-      }
-    }
   }, []);
 
   useEffect(() => {
+    // Handle OAuth hash fragment on page load
+    if (window.location.hash.includes('access_token')) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          window.history.replaceState(null, '', window.location.pathname);
+          handleAuthUser(session.user);
+        }
+      });
+    }
+
     // Check /track/{code} pathname first, then ?code= query param for backward compat
     const params = new URLSearchParams(window.location.search);
     const pathMatch = window.location.pathname.match(/^\/track\/([A-Z0-9-]+)/i);
