@@ -38,6 +38,24 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
   useEffect(() => {
     setMode(initialMode);
     setIntent(initialIntent);
+    const otpPending = sessionStorage.getItem('raktdaan_otp_pending');
+    if (otpPending) {
+      try {
+        const saved = JSON.parse(otpPending) as {
+          phone: string; whatsappPhone: string; intent: typeof intent; otpSentAt: number
+        };
+        if (Date.now() - saved.otpSentAt < 15 * 60 * 1000) {
+          setPhone(saved.phone);
+          setWhatsappPhone(saved.whatsappPhone);
+          setSameWhatsApp(saved.phone === saved.whatsappPhone);
+          setIntent(saved.intent);
+          setMode('signup');
+          setSignupStep(4);
+          setInfoMessage(`Welcome back — enter the OTP we sent to ${saved.whatsappPhone}.`);
+        }
+      } catch { /* ignore */ }
+      sessionStorage.removeItem('raktdaan_otp_pending'); // always clear regardless
+    }
     if (initialMode !== 'signup') { setHasOAuthIdentity(false); return; }
     void supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
@@ -45,7 +63,18 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       setFullName(String(metadata.full_name || metadata.name || ''));
       setEmail(user.email || '');
       setHasOAuthIdentity(true);
-      setSignupStep(1);
+      const pending = sessionStorage.getItem('raktdaan_oauth_pending');
+      if (pending) {
+        try {
+          const saved = JSON.parse(pending) as { intent: typeof intent; phone: string };
+          setIntent(saved.intent);
+          if (saved.phone) setPhone(saved.phone);
+          setSignupStep(3); // land on phone + consent step
+        } catch { /* ignore malformed */ }
+        sessionStorage.removeItem('raktdaan_oauth_pending'); // always clear
+      } else {
+        setSignupStep(1);
+      }
     });
   }, [initialMode, initialIntent]);
 
@@ -95,10 +124,17 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
 
   const handleGoogle = async () => {
     setError(''); setLoading(true);
+    sessionStorage.setItem('raktdaan_oauth_pending', JSON.stringify({
+      intent, step: signupStep, phone
+    }));
     try {
       const { error: authError } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
       if (authError) throw authError;
-    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Google authentication failed.'); setLoading(false); }
+    } catch (caught) {
+      sessionStorage.removeItem('raktdaan_oauth_pending');
+      setError(caught instanceof Error ? caught.message : 'Google authentication failed.');
+      setLoading(false);
+    }
   };
 
   const createEmailIdentity = async (event: React.FormEvent) => {
@@ -124,6 +160,12 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Unable to send WhatsApp OTP.');
       setSignupStep(4); setInfoMessage('OTP sent to WhatsApp.');
+      sessionStorage.setItem('raktdaan_otp_pending', JSON.stringify({
+        phone,
+        whatsappPhone: normalizedWhatsApp,
+        intent,
+        otpSentAt: Date.now()
+      }));
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to send OTP.'); }
     finally { setLoading(false); }
   };
@@ -138,6 +180,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       const result = await authenticatedApi<{ nextStep: AuthState['nextStep'] }>('/api/auth/complete-verification', {
         verificationToken: verified.verificationToken, phone, whatsappPhone: normalizedWhatsApp, fullName, intent, consentAccepted,
       });
+      sessionStorage.removeItem('raktdaan_otp_pending');
       if (result.nextStep === 'donor-profile') {
         setInfoMessage('WhatsApp verified. Complete donor details next.');
         onGoogleSignUpRedirect({ uid: (await supabase.auth.getUser()).data.user?.id || '', email, full_name: fullName });
