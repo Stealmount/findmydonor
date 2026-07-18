@@ -96,7 +96,7 @@ export function buildDonorSosMessage(request: BloodRequest, donor: User, matchId
     : request.urgency_level === 'urgent'
     ? 'Needed urgently.'
     : 'Scheduled need.';
-  const appUrl = process.env.APP_URL || 'https://raktdaan.duckdns.org';
+  const appUrl = process.env.APP_URL || 'https://findmydonor.online';
   const link = `${appUrl}/track/${request.tracking_code}?role=donor&matchId=${matchId}`;
 
   return `Hi ${firstName}, ${request.blood_type_needed} blood is needed ${distance}km away.
@@ -130,7 +130,7 @@ Please call or WhatsApp the requester to coordinate your arrival.`;
  */
 export function buildRequesterConfirmMessage(request: BloodRequest, donorName: string): string {
   const firstName = request.requester_name.split(' ')[0];
-  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/track/${request.tracking_code}`;
+  const trackingUrl = `${process.env.APP_URL || 'https://findmydonor.online'}/track/${request.tracking_code}`;
 
   return `🩸 Good news, ${firstName} — ${donorName} has agreed to donate!
 
@@ -169,7 +169,7 @@ Thank you for signing up.`;
  */
 export function buildRequesterSystemAlertMessage(request: BloodRequest, alertedCount: number): string {
   const firstName = request.requester_name.split(' ')[0];
-  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/track/${request.tracking_code}`;
+  const trackingUrl = `${process.env.APP_URL || 'https://findmydonor.online'}/track/${request.tracking_code}`;
   return `Hi ${firstName}, your request is live. We've alerted ${alertedCount} matching donor(s) nearby.
 
 We'll message you as soon as someone accepts.
@@ -181,7 +181,7 @@ Track live: ${trackingUrl}`;
  */
 export function buildNoDonorsFoundAlertMessage(request: BloodRequest): string {
   const firstName = request.requester_name.split(' ')[0];
-  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/track/${request.tracking_code}`;
+  const trackingUrl = `${process.env.APP_URL || 'https://findmydonor.online'}/track/${request.tracking_code}`;
   return `Hi ${firstName}, your request (${request.tracking_code}) has been registered. 🩸
 
 No matching donor is available right now. We'll notify you as soon as a match is found.

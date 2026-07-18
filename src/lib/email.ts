@@ -68,10 +68,10 @@ export function buildDonorSosEmailHTML(params: {
 
       <!-- CTA buttons -->
       <div style="text-align:center;margin-bottom:28px;">
-        <a href="https://raktdaan.duckdns.org/donor-dashboard" style="display:inline-block;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;margin:0 8px 12px;">
+        <a href="https://findmydonor.online/donor-dashboard" style="display:inline-block;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;margin:0 8px 12px;">
           ✅ Accept Request
         </a>
-        <a href="https://raktdaan.duckdns.org/tracking?code=${params.trackingCode}" style="display:inline-block;background:#f3f4f6;color:#374151;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:600;font-size:15px;margin:0 8px 12px;">
+        <a href="https://findmydonor.online/tracking?code=${params.trackingCode}" style="display:inline-block;background:#f3f4f6;color:#374151;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:600;font-size:15px;margin:0 8px 12px;">
           📍 Track Request
         </a>
       </div>
@@ -84,13 +84,13 @@ export function buildDonorSosEmailHTML(params: {
     <!-- Footer -->
     <div style="background:#111;color:rgba(255,255,255,0.5);text-align:center;padding:20px 32px;font-size:12px;">
       <p style="margin:0 0 6px;">RaktDaan — Free Community Blood Donation Network</p>
-      <p style="margin:0;">You received this because you are a verified donor. <a href="https://raktdaan.duckdns.org" style="color:rgba(255,255,255,0.7);">Manage preferences</a></p>
+      <p style="margin:0;">You received this because you are a verified donor. <a href="https://findmydonor.online" style="color:rgba(255,255,255,0.7);">Manage preferences</a></p>
     </div>
   </div>
 </body>
 </html>`;
 
-  const text = `URGENT BLOOD REQUEST — RaktDaan\n\nHi ${params.donorName},\n\nBlood Type: ${params.bloodType}\nUnits: ${params.units}\nHospital: ${params.hospitalName}, ${params.hospitalArea}, ${params.hospitalCity}\nUrgency: ${urgencyLabel}\nRequest ID: ${params.trackingCode}\n\nLog in to accept: https://raktdaan.duckdns.org/donor-dashboard\nTrack: https://raktdaan.duckdns.org/tracking?code=${params.trackingCode}`;
+  const text = `URGENT BLOOD REQUEST — RaktDaan\n\nHi ${params.donorName},\n\nBlood Type: ${params.bloodType}\nUnits: ${params.units}\nHospital: ${params.hospitalName}, ${params.hospitalArea}, ${params.hospitalCity}\nUrgency: ${urgencyLabel}\nRequest ID: ${params.trackingCode}\n\nLog in to accept: https://findmydonor.online/donor-dashboard\nTrack: https://findmydonor.online/tracking?code=${params.trackingCode}`;
 
   return { subject, html, text };
 }
@@ -119,7 +119,7 @@ export function buildRequesterConfirmEmailHTML(params: {
         Great news! <strong>${params.donorName}</strong> has confirmed they will donate <strong>${params.bloodType}</strong> blood for request <code>${params.trackingCode}</code> at ${params.hospitalName}.
       </p>
       <div style="text-align:center;margin:28px 0;">
-        <a href="https://raktdaan.duckdns.org/tracking?code=${params.trackingCode}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#166534);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;">
+        <a href="https://findmydonor.online/tracking?code=${params.trackingCode}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#166534);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;">
           📍 Track Live
         </a>
       </div>
@@ -131,7 +131,7 @@ export function buildRequesterConfirmEmailHTML(params: {
 </body>
 </html>`;
 
-  const text = `Donor Confirmed — RaktDaan\n\nHi ${params.requesterName},\n${params.donorName} has confirmed your ${params.bloodType} request (${params.trackingCode}) at ${params.hospitalName}.\n\nTrack: https://raktdaan.duckdns.org/tracking?code=${params.trackingCode}`;
+  const text = `Donor Confirmed — RaktDaan\n\nHi ${params.requesterName},\n${params.donorName} has confirmed your ${params.bloodType} request (${params.trackingCode}) at ${params.hospitalName}.\n\nTrack: https://findmydonor.online/tracking?code=${params.trackingCode}`;
   return { subject, html, text };
 }
 
@@ -191,7 +191,7 @@ export function buildWelcomeEmailHTML(params: { name: string; type: 'donor' | 'r
         ${body}
       </p>
       <div style="text-align:center;margin:28px 0;">
-        <a href="https://raktdaan.duckdns.org" style="display:inline-block;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;">
+        <a href="https://findmydonor.online" style="display:inline-block;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;">
           Go to Dashboard
         </a>
       </div>
@@ -204,6 +204,6 @@ export function buildWelcomeEmailHTML(params: { name: string; type: 'donor' | 'r
 </body>
 </html>`;
 
-  const text = `Welcome to RaktDaan, ${params.name}!\n\n${params.type === 'donor' ? donorBody.replace(/<[^>]*>?/gm, '') : requesterBody}\n\nGo to Dashboard: https://raktdaan.duckdns.org\n\nSent by raktdaan.contact@gmail.com`;
+  const text = `Welcome to RaktDaan, ${params.name}!\n\n${params.type === 'donor' ? donorBody.replace(/<[^>]*>?/gm, '') : requesterBody}\n\nGo to Dashboard: https://findmydonor.online\n\nSent by raktdaan.contact@gmail.com`;
   return { subject, html, text };
 }

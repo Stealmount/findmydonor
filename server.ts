@@ -568,6 +568,8 @@ async function startServer() {
         const reqHost = (req.header("x-forwarded-host") || req.header("host") || "").split(":")[0];
         const configuredOrigins = new Set([
           process.env.APP_URL,
+          "https://findmydonor.online",
+          "https://www.findmydonor.online",
           "https://raktdaan.duckdns.org",
           `http://145.241.154.187:${PORT}`,
           ...(process.env.CORS_ORIGINS || "").split(","),
@@ -576,6 +578,8 @@ async function startServer() {
         const isAllowed = configuredOrigins.has(origin) ||
                           originHost === reqHost ||
                           originHost === "145.241.154.187" ||
+                          originHost === "findmydonor.online" ||
+                          originHost === "www.findmydonor.online" ||
                           originHost.endsWith(".duckdns.org");
         if (!isAllowed) {
           return res.status(403).json({ error: "Origin not allowed." });
