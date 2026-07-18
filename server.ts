@@ -2024,6 +2024,18 @@ async function startServer() {
     next();
   };
 
+  app.get("/api/admin/dashboard", adminCheck, async (req, res) => {
+    const [users, blood_requests, matches, notifications, donation_log] = await Promise.all([
+      getLocalOrFirestoreCollection<User>("users"),
+      getLocalOrFirestoreCollection<BloodRequest>("blood_requests"),
+      getLocalOrFirestoreCollection<Match>("matches"),
+      getLocalOrFirestoreCollection<NotificationLog>("notifications"),
+      getLocalOrFirestoreCollection<DonationLog>("donation_log")
+    ]);
+    return res.json({ users, blood_requests, matches, notifications, donation_log });
+  });
+
+
   app.patch("/api/admin/donors/:donorId/approve", adminCheck, async (req, res) => {
     const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
     if (!donor) return res.status(404).json({ error: "Donor not found" });

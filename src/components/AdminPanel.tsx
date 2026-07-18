@@ -65,11 +65,18 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
   const loadAdminData = async () => {
     setLoading(true);
     try {
-      const allDonors = await getLocalOrFirestoreCollection<User>('users');
-      const allRequests = await getLocalOrFirestoreCollection<BloodRequest>('blood_requests');
-      const allMatches = await getLocalOrFirestoreCollection<Match>('matches');
-      const allNotifs = await getLocalOrFirestoreCollection<NotificationLog>('notifications');
-      const allDonationLogs = await getLocalOrFirestoreCollection<DonationLog>('donation_log');
+      const data = await authenticatedApi<{
+        users: User[];
+        blood_requests: BloodRequest[];
+        matches: Match[];
+        notifications: NotificationLog[];
+        donation_log: DonationLog[];
+      }>('/api/admin/dashboard', undefined, 'GET');
+      const allDonors = data.users || [];
+      const allRequests = data.blood_requests || [];
+      const allMatches = data.matches || [];
+      const allNotifs = data.notifications || [];
+      const allDonationLogs = data.donation_log || [];
 
       setDonors(allDonors);
       setRequests(allRequests);
