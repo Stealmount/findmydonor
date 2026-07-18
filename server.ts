@@ -697,10 +697,10 @@ async function startServer() {
     const cacheKey = `wa_otp_${normalizedPhone}`;
     const attemptKey = `otp_attempts_${normalizedPhone}`;
 
-    // Store OTP in redis for 5 minutes (300 seconds)
-    await cacheSet(cacheKey, otp, 300);
+    // Store OTP in redis for 15 minutes (900 seconds)
+    await cacheSet(cacheKey, otp, 15 * 60);
     // Reset attempt counter on fresh send
-    await cacheSet(attemptKey, '0', 300);
+    await cacheSet(attemptKey, '0', 15 * 60);
 
     const message = buildOtpMessage(otp);
     const sent = await sendWhatsApp(normalizedPhone, message);
