@@ -76,7 +76,7 @@ export async function sendWhatsApp(phone: string, message: string): Promise<bool
 export function buildOtpMessage(otp: string): string {
   return `Your RaktDaan verification code is: *${otp}*
 
-This code is valid for 5 minutes. Do not share it with anyone.`;
+This code is valid for 15 minutes. Do not share it with anyone.`;
 }
 
 /**
@@ -106,8 +106,7 @@ Contact details and directions are shared only after you reply YES.`;
  */
 export function buildDonorConfirmedDetailsMessage(request: BloodRequest, donor: User): string {
   const firstName = donor.full_name.split(' ')[0];
-  const mapQuery = encodeURIComponent(`${request.hospital_name}, ${request.hospital_area}, ${request.hospital_city}, ${request.hospital_pincode}`);
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
+  const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(`${request.hospital_name} ${request.hospital_city}`)}`;
 
   return `Thank you for accepting, ${firstName}. 🙏
 
@@ -125,9 +124,9 @@ Please call or WhatsApp the requester to coordinate your arrival.`;
  */
 export function buildRequesterConfirmMessage(request: BloodRequest, donorName: string): string {
   const firstName = request.requester_name.split(' ')[0];
-  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/tracking?code=${request.tracking_code}`;
+  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/track/${request.tracking_code}`;
 
-  return `🎉 Good news, ${firstName} — ${donorName} has agreed to donate!
+  return `🩸 Good news, ${firstName} — ${donorName} has agreed to donate!
 
 Blood group: ${request.blood_type_needed} · ${request.hospital_name}
 We'll share their contact once they confirm arrival.
@@ -152,14 +151,9 @@ We appreciate you.`;
  */
 export function buildWelcomeMessage(donorName: string): string {
   const firstName = donorName.split(' ')[0];
-  return `Welcome to RaktDaan, ${firstName}! 🩸
+  return `Welcome to RaktDaan, ${firstName}. 🩸
 
-You're now registered as a volunteer blood donor. When there's a blood request nearby that matches your profile, we'll reach out here on WhatsApp.
-
-How it works:
-1. You get a message when someone nearby needs your blood type.
-2. Reply YES if you can help, NO if you can't.
-3. We share the hospital details and connect you with the requester.
+You're registered as a volunteer donor. When someone nearby needs your blood type, we'll send you a message with a link. Tap it to see details and confirm if you can help.
 
 Thank you for signing up.`;
 }
@@ -169,7 +163,7 @@ Thank you for signing up.`;
  */
 export function buildRequesterSystemAlertMessage(request: BloodRequest, alertedCount: number): string {
   const firstName = request.requester_name.split(' ')[0];
-  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/tracking?code=${request.tracking_code}`;
+  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/track/${request.tracking_code}`;
   return `Hi ${firstName}, your request is live. We've alerted ${alertedCount} matching donor(s) nearby.
 
 We'll message you as soon as someone accepts.
@@ -181,10 +175,10 @@ Track live: ${trackingUrl}`;
  */
 export function buildNoDonorsFoundAlertMessage(request: BloodRequest): string {
   const firstName = request.requester_name.split(' ')[0];
-  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/tracking?code=${request.tracking_code}`;
+  const trackingUrl = `${process.env.APP_URL || 'https://raktdaan.duckdns.org'}/track/${request.tracking_code}`;
   return `Hi ${firstName}, your request (${request.tracking_code}) has been registered. 🩸
 
-No matching donor is available right now, but our system retries every 2 minutes. We'll message you the moment someone becomes available.
+No matching donor is available right now. We'll notify you as soon as a match is found.
 
 Track: ${trackingUrl}`;
 }
