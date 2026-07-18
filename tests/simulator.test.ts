@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, ChildProcess } from 'node:child_process';
 
 const PORT = process.env.TEST_PORT || '5002';
-const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
+const BASE = process.env.TEST_BASE_URL || 'https://raktdaan.duckdns.org';
 
 describe('Simulator data endpoint (/api/simulator/data)', () => {
   let child: ChildProcess | null = null;

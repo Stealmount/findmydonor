@@ -91,43 +91,60 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       } catch { /* ignore */ }
       sessionStorage.removeItem('raktdaan_otp_pending'); // always clear regardless
     }
-    if (initialMode !== 'signup') { setHasOAuthIdentity(false); return; }
     void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-      const metadata = user.user_metadata || {};
-      setFullName(String(metadata.full_name || metadata.name || ''));
-      setEmail(user.email || '');
-      setHasOAuthIdentity(true);
-      const pending = sessionStorage.getItem('raktdaan_oauth_pending');
-      if (pending) {
-        try {
-          const saved = JSON.parse(pending) as { intent: typeof intent; phone: string };
-          setIntent(saved.intent);
-          if (saved.phone) setPhone(saved.phone);
-          setSignupStep(3); // land on phone + consent step
-        } catch { /* ignore malformed */ }
-        sessionStorage.removeItem('raktdaan_oauth_pending'); // always clear
-      } else {
-        setSignupStep(1);
+      if (user) {
+        const metadata = user.user_metadata || {};
+        const isGoogle = user.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('raktdaan_oauth_pending'));
+        if (isGoogle) {
+          setFullName(String(metadata.full_name || metadata.name || ''));
+          setEmail(user.email || '');
+          setHasOAuthIdentity(true);
+        }
+        void resolveSignedInState();
+      } else if (initialMode !== 'signup') {
+        setHasOAuthIdentity(false);
       }
     });
   }, [initialMode, initialIntent]);
 
   const normalizedWhatsApp = sameWhatsApp ? phone : whatsappPhone;
   const resolveSignedInState = async (): Promise<boolean> => {
-    const state = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET');
-    if (!state.profile) {
-      const user = await supabase.auth.getUser();
-      const metadata = user.data.user?.user_metadata || {};
+    const state = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET').catch(() => null);
+    if (!state || !state.authUser) return false;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const isGoogle = state.authUser.provider === 'google' || user?.app_metadata?.provider === 'google' || hasOAuthIdentity || Boolean(sessionStorage.getItem('raktdaan_oauth_pending'));
+    if (isGoogle && user) {
+      const metadata = user.user_metadata || {};
       setFullName(String(metadata.full_name || metadata.name || ''));
-      setEmail(user.data.user?.email || '');
+      setEmail(user.email || '');
+      setHasOAuthIdentity(true);
+    }
+
+    if (!state.profile) {
       setMode('signup');
-      setSignupStep(1);
+      const pending = sessionStorage.getItem('raktdaan_oauth_pending');
+      if (pending) {
+        try {
+          const saved = JSON.parse(pending) as { intent: typeof intent; phone: string };
+          if (saved.intent) setIntent(saved.intent);
+          if (saved.phone) setPhone(saved.phone);
+        } catch { /* ignore */ }
+        sessionStorage.removeItem('raktdaan_oauth_pending');
+      }
+      setSignupStep(isGoogle ? 3 : 1);
       return false;
     }
+
     if (state.nextStep !== 'complete') {
       setMode('signup');
-      setSignupStep(state.nextStep === 'donor-profile' ? 5 : 2);
+      if (state.nextStep === 'donor-profile') {
+        setSignupStep(5);
+      } else if (state.nextStep === 'otp') {
+        setSignupStep(3);
+      } else {
+        setSignupStep(isGoogle ? 3 : 2);
+      }
       return false;
     }
     // Legacy dashboard callbacks stay available until all dashboard reads move to profiles.

@@ -11,7 +11,7 @@
 import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
 
-const BASE = process.env.TEST_BASE_URL || 'http://localhost:5000';
+const BASE = process.env.TEST_BASE_URL || 'https://raktdaan.duckdns.org';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,12 +69,12 @@ describe('CORS allowlist', () => {
 
   test('Approved origin receives Access-Control-Allow-Origin', async () => {
     const res = await fetchAPI('/api/health', {
-      headers: { 'Origin': `http://localhost:5000` },
+      headers: { 'Origin': `https://raktdaan.duckdns.org` },
     });
     assert.equal(res.status, 200);
     assert.equal(
       res.headers.get('access-control-allow-origin'),
-      'http://localhost:5000',
+      'https://raktdaan.duckdns.org',
       'Should echo approved origin',
     );
     assert.equal(res.headers.get('vary'), 'Origin', 'Should set Vary: Origin');
@@ -93,7 +93,7 @@ describe('CORS allowlist', () => {
     const res = await fetchAPI('/api/health', {
       method: 'OPTIONS',
       headers: {
-        'Origin': 'http://localhost:5000',
+        'Origin': 'https://raktdaan.duckdns.org',
         'Access-Control-Request-Method': 'POST',
         'Access-Control-Request-Headers': 'Authorization,Content-Type',
       },
@@ -101,7 +101,7 @@ describe('CORS allowlist', () => {
     assert.equal(res.status, 204, 'Preflight should return 204');
     assert.equal(
       res.headers.get('access-control-allow-origin'),
-      'http://localhost:5000',
+      'https://raktdaan.duckdns.org',
     );
     assert.ok(
       res.headers.get('access-control-allow-methods')?.includes('POST'),

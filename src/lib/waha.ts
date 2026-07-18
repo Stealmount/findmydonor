@@ -12,9 +12,13 @@
 import type { BloodRequest, User } from '../types';
 import { getDistanceBetweenPincodes } from './geo';
 
-const WAHA_URL     = process.env.WAHA_BASE_URL;
-const WAHA_KEY     = process.env.WAHA_API_KEY || '';
-const WAHA_SESSION = process.env.WAHA_SESSION || 'default';
+function getWahaConfig() {
+  return {
+    url: process.env.WAHA_BASE_URL,
+    key: process.env.WAHA_API_KEY || '',
+    session: process.env.WAHA_SESSION || 'default',
+  };
+}
 
 /** Normalize Indian phone → WhatsApp chatId format (91XXXXXXXXXX@c.us) */
 function toChatId(phone: string): string {
@@ -29,7 +33,8 @@ function toChatId(phone: string): string {
  * Returns true on success, false if WAHA is not configured or call fails.
  */
 export async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
-  if (!WAHA_URL) {
+  const { url, key, session } = getWahaConfig();
+  if (!url) {
     console.warn('[WAHA] WAHA_BASE_URL not set — WhatsApp delivery skipped.');
     return false;
   }
@@ -38,18 +43,18 @@ export async function sendWhatsApp(phone: string, message: string): Promise<bool
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const response = await fetch(`${WAHA_URL}/api/sendText`, {
+      const response = await fetch(`${url}/api/sendText`, {
         method:  'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(WAHA_KEY ? { 'X-Api-Key': WAHA_KEY } : {}),
+          ...(key ? { 'X-Api-Key': key } : {}),
         },
         body: JSON.stringify({
-          session: WAHA_SESSION,
+          session,
           chatId,
           text: message,
         }),
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.timeout(15_000),
       });
 
       if (response.ok) {

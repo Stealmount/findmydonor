@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, ChildProcess } from 'node:child_process';
 
 const PORT = process.env.TEST_PORT || '5003';
-const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
+const BASE = process.env.TEST_BASE_URL || 'https://raktdaan.duckdns.org';
 
 describe('Hospital dashboard endpoint (/api/hospital/dashboard)', () => {
   let child: ChildProcess | null = null;

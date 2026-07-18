@@ -471,11 +471,11 @@ async function sendEmailViaResend(
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-function rateLimit(ip: string, max: number, windowMs: number): boolean {
+function rateLimit(key: string, max: number, windowMs: number): boolean {
   const now = Date.now();
-  const entry = rateLimitMap.get(ip);
+  const entry = rateLimitMap.get(key);
   if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
     return true;
   }
   if (entry.count >= max) return false;
@@ -486,7 +486,8 @@ function rateLimit(ip: string, max: number, windowMs: number): boolean {
 function rateLimitMiddleware(max: number, windowMs = 60_000) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const ip = req.ip || "unknown";
-    if (!rateLimit(ip, max, windowMs)) {
+    const key = `${req.method}:${req.baseUrl || ""}${req.path}:${ip}`;
+    if (!rateLimit(key, max, windowMs)) {
       return res.status(429).json({ error: "Too many requests. Please slow down." });
     }
     next();
@@ -550,28 +551,38 @@ async function startServer() {
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
 
-  const allowedOrigins = new Set([
-    process.env.APP_URL,
-    `http://localhost:${PORT}`,
-    `http://127.0.0.1:${PORT}`,
-    ...(process.env.CORS_ORIGINS || "").split(","),
-  ].map((origin) => origin?.trim().replace(/\/$/, "")).filter((origin): origin is string => Boolean(origin)));
-
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)");
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-    res.setHeader("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'");
+    res.setHeader("Content-Security-Policy", "default-src 'self'; connect-src 'self' https: wss: http:; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; base-uri 'self'; frame-ancestors 'none'; object-src 'none'");
     if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 
     if (!req.path.startsWith("/api")) return next();
     const origin = req.header("origin")?.replace(/\/$/, "");
-    if (origin && !allowedOrigins.has(origin)) {
-      return res.status(403).json({ error: "Origin not allowed." });
-    }
     if (origin) {
+      try {
+        const originHost = new URL(origin).hostname;
+        const reqHost = (req.header("x-forwarded-host") || req.header("host") || "").split(":")[0];
+        const configuredOrigins = new Set([
+          process.env.APP_URL,
+          "https://raktdaan.duckdns.org",
+          `http://145.241.154.187:${PORT}`,
+          ...(process.env.CORS_ORIGINS || "").split(","),
+        ].map((o) => o?.trim().replace(/\/$/, "")).filter((o): o is string => Boolean(o)));
+
+        const isAllowed = configuredOrigins.has(origin) ||
+                          originHost === reqHost ||
+                          originHost === "145.241.154.187" ||
+                          originHost.endsWith(".duckdns.org");
+        if (!isAllowed) {
+          return res.status(403).json({ error: "Origin not allowed." });
+        }
+      } catch {
+        return res.status(403).json({ error: "Invalid origin." });
+      }
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
       res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS");
@@ -668,7 +679,7 @@ async function startServer() {
   });
 
   // ─── NEW: WhatsApp OTP Verification ─────────────────────────────────────
-  app.post("/api/wa/send-otp", rateLimitMiddleware(5, 60_000), async (req, res) => {
+  app.post("/api/wa/send-otp", rateLimitMiddleware(15, 60_000), async (req, res) => {
     const { phone } = req.body || {};
     const rawPurpose = String(req.body?.purpose || "signup").toLowerCase();
     const purpose: "signup" | "sos" = rawPurpose === "sos" ? "sos" : "signup";
@@ -1175,6 +1186,33 @@ async function startServer() {
     } catch { /* profiles table may not exist yet — fall through */ }
     if (!requester) {
       requester = await getLocalOrFirestoreDoc<Requester>("requesters", authUser.id);
+    }
+    if (!requester) {
+      const donorDoc = await getLocalOrFirestoreDoc<User>("users", authUser.id);
+      if (donorDoc && (donorDoc.whatsapp_verified || donorDoc.phone)) {
+        requester = {
+          id: authUser.id,
+          full_name: donorDoc.full_name,
+          email: donorDoc.email || authUser.email || "",
+          phone: donorDoc.phone,
+          whatsapp_number: donorDoc.whatsapp_number || donorDoc.phone,
+          created_at: donorDoc.created_at || nowISO(),
+          updated_at: nowISO()
+        };
+      }
+    }
+    if (!requester && req.body && isValidIndianPhone(req.body.requester_phone)) {
+      const now = nowISO();
+      requester = {
+        id: authUser.id,
+        full_name: String(req.body.requester_name || authUser.user_metadata?.full_name || "Requester").trim(),
+        email: authUser.email || String(req.body.requester_email || ""),
+        phone: normalizePhone(req.body.requester_phone),
+        whatsapp_number: normalizePhone(req.body.requester_phone),
+        created_at: now,
+        updated_at: now
+      };
+      await saveLocalOrFirestoreDoc("requesters", requester.id, requester as unknown as Record<string, unknown>);
     }
     if (!requester) return res.status(403).json({ error: "Complete WhatsApp verification before creating a blood request." });
 
@@ -2229,7 +2267,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Server] running on http://localhost:${PORT} in ${process.env.NODE_ENV || "development"} mode`);
+    console.log(`[Server] running on ${process.env.APP_URL || `http://145.241.154.187:${PORT}`} in ${process.env.NODE_ENV || "development"} mode`);
 
     // Start background match worker: first run after 10s, then every 2 minutes
     setTimeout(() => {

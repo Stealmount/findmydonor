@@ -101,15 +101,16 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
   };
 
   useEffect(() => {
-    if (loggedInRequester) {
+    const user = loggedInRequester || loggedInDonor;
+    if (user) {
       setFormData(prev => ({
         ...prev,
-        requester_name: loggedInRequester.full_name,
-        requester_email: loggedInRequester.email,
-        requester_phone: loggedInRequester.phone,
+        requester_name: prev.requester_name || user.full_name,
+        requester_email: prev.requester_email || user.email || '',
+        requester_phone: prev.requester_phone || user.phone || '',
       }));
     }
-  }, [loggedInRequester]);
+  }, [loggedInRequester, loggedInDonor]);
 
   const [loading, setLoading] = useState(false);
   const [captchaChecked, setCaptchaChecked] = useState(false);
@@ -232,12 +233,17 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
       setError('Please complete the verification checkbox to submit.');
       return;
     }
-    if (!formData.patient_name || !formData.hospital_name || !formData.hospital_pincode) {
-      setError('Please fill in all mandatory fields.');
+    if (!formData.patient_name || !formData.hospital_name || !formData.hospital_pincode || !formData.hospital_city || !formData.hospital_area) {
+      setError('Please fill in all mandatory fields including patient details and exact hospital location.');
       return;
     }
-    if (Number(formData.patient_age) >= 120) {
-      setError('Patient age must be less than 120.');
+    if (Number(formData.patient_age) >= 120 || Number(formData.patient_age) <= 0) {
+      setError('Please enter a valid patient age between 1 and 120.');
+      return;
+    }
+    const cleanPhone = formData.requester_phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number for Contact Phone.');
       return;
     }
 
@@ -912,6 +918,81 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               ) : (<><Megaphone className="w-4 h-4" /> {loggedInRequester || loggedInDonor ? 'Broadcast Now' : 'Send OTP & Broadcast Now'}</>)}
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 3: Quick Emergency SOS WhatsApp OTP Verification Screen ────────────
+  if (step === 'sos-verify') {
+    return (
+      <div id="sos-verify-container" className="max-w-md mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-12 p-8 text-center animate-in fade-in zoom-in-95 duration-200">
+        <div className="w-16 h-16 rounded-2xl bg-blood-100 flex items-center justify-center mx-auto mb-6 text-blood-600 shadow-inner">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h3 className="text-2xl font-black text-ink-900 mb-2">Verify WhatsApp Number</h3>
+        <p className="text-sm text-ink-600 mb-6 leading-relaxed">
+          We sent an urgent 6-digit verification code to your WhatsApp number <strong className="text-ink-900 font-bold">{formData.requester_phone}</strong>. Verify now to instantly broadcast your emergency request to compatible blood donors nearby.
+        </p>
+
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-blood-50 border border-blood-200 text-blood-700 text-xs font-medium text-left flex items-start gap-2.5">
+            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-blood-600" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleVerifySosOtpAndBroadcast} className="space-y-6">
+          <div>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="• • • • • •"
+              value={sosOtp}
+              onChange={(e) => setSosOtp(e.target.value.replace(/\D/g, ''))}
+              className="w-full py-4 text-center text-3xl font-black tracking-[0.4em] bg-ink-50/80 border-2 border-ink-200 rounded-2xl focus:border-blood-500 focus:bg-white focus:ring-4 focus:ring-blood-500/15 outline-none transition-all placeholder:tracking-normal placeholder:font-normal placeholder:text-ink-300"
+              autoFocus
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || sosOtp.length !== 6}
+            className="w-full py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 via-blood-700 to-blood-800 hover:from-blood-700 hover:to-blood-900 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Broadcasting Emergency Alert...</span>
+              </span>
+            ) : (
+              <>
+                <Megaphone className="w-4 h-4" />
+                <span>Verify & Broadcast Request Now</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 pt-6 border-t border-ink-100 flex items-center justify-between text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setStep('confirm')}
+            className="text-ink-500 hover:text-ink-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Review</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSendSosOtp}
+            disabled={sosSending}
+            className="text-blood-600 hover:text-blood-700 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {sosSending ? 'Resending OTP...' : 'Resend Code via WhatsApp'}
+          </button>
         </div>
       </div>
     );
