@@ -962,6 +962,74 @@ async function startServer() {
     return res.json({ success: true, donorProfile: updated });
   });
 
+  app.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+
+    const linked = await getLinkedProfile(authUser.id);
+    if (!linked?.profile.whatsapp_verified) return res.status(403).json({ error: "WhatsApp verification required." });
+    if (!linked.profile.can_donate) return res.status(403).json({ error: "Donor role required." });
+    if (!linked.donorProfile) return res.status(404).json({ error: "Donor profile slot not found." });
+
+    const { blood_group, pincode, area, city, last_donation_date, health_self_declaration, emergency_only, number_sharing_pref } = req.body || {};
+
+    const VALID_BLOOD_GROUPS = new Set(["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]);
+    if (!blood_group || !VALID_BLOOD_GROUPS.has(String(blood_group))) return res.status(400).json({ error: "Valid blood group required." });
+    if (!pincode || !/^\d{6}$/.test(String(pincode))) return res.status(400).json({ error: "Valid 6-digit pincode required." });
+    if (!area || !city) return res.status(400).json({ error: "Area and city are required." });
+    if (health_self_declaration !== true) return res.status(400).json({ error: "Health self-declaration is required." });
+
+    const cooldown_until = last_donation_date
+      ? (() => {
+          const d = new Date(last_donation_date);
+          d.setDate(d.getDate() + 90);
+          return d.toISOString().split("T")[0];
+        })()
+      : null;
+
+    const today = nowDate();
+    const is_available = !cooldown_until || cooldown_until < today;
+
+    const { data, error } = await getServerSupabase()
+      .from("donor_profiles")
+      .update({
+        blood_group: String(blood_group),
+        pincode: String(pincode),
+        area: String(area),
+        city: String(city),
+        last_donation_date: last_donation_date || null,
+        cooldown_until,
+        health_self_declaration: true,
+        profile_complete: true,
+        is_available,
+        emergency_only: Boolean(emergency_only),
+        number_sharing_pref: number_sharing_pref || "on_approval",
+        updated_at: nowISO(),
+      })
+      .eq("profile_id", linked.profile.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("[DonorComplete] Update failed:", error);
+      return res.status(500).json({ error: "Unable to save donor profile." });
+    }
+
+    await cacheInvalidatePrefix("eligible_");
+
+    // Send gamified welcome WhatsApp — fire-and-forget
+    (async () => {
+      try {
+        const message = buildWelcomeMessage(linked.profile.full_name);
+        await sendWhatsApp(linked.profile.whatsapp_phone, message);
+      } catch (e: any) {
+        console.error("[DonorComplete] Welcome WhatsApp failed:", e.message);
+      }
+    })();
+
+    return res.json({ donorProfile: data, nextStep: "complete" });
+  });
+
   app.patch("/api/donor-profile/availability", rateLimitMiddleware(30, 60_000), async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
