@@ -5,7 +5,7 @@ import { useLanguage } from "../../lib/LanguageContext";
 
 const faqs = [
   {
-    q: "How does RaktDaan find a donor in real time?",
+    q: "How does FindMyDonor™ find a donor in real time?",
     a: "When a request is posted, our matching engine filters our network by blood group, eligibility, distance, and preferences — and pushes a notification to every donor who fits. The first to accept is locked in; others remain on warm standby for additional units.",
   },
   {
@@ -13,8 +13,8 @@ const faqs = [
     a: "Usually within 3 to 10 minutes. As soon as you post a blood request, our engine instantly alerts verified voluntary donors within a 3–5 km radius whose blood group matches.",
   },
   {
-    q: "Is RaktDaan really 100% free?",
-    a: "Yes. Always. RaktDaan is a non-profit community initiative. We do not charge patients, hospitals, or donors anything. We believe saving lives should never come with a price tag.",
+    q: "Is FindMyDonor™ really 100% free?",
+    a: "Yes. Always. FindMyDonor™ is a non-profit community initiative. We do not charge patients, hospitals, or donors anything. We believe saving lives should never come with a price tag.",
   },
   {
     q: "How does the 60-day safety cooldown work?",
@@ -25,7 +25,7 @@ const faqs = [
     a: "Absolutely. Hospitals and blood banks have a dedicated Requester Portal where they can post multi-unit requests and track real-time donor responses.",
   },
   {
-    q: "How do hospitals integrate RaktDaan?",
+    q: "How do hospitals integrate FindMyDonor™?",
     a: "We offer a REST API and a web console. Most hospitals and blood centers integrate in under a day. Our team handles the onboarding and runs alongside your existing blood bank workflow.",
   },
 ];

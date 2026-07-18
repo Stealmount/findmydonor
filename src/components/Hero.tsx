@@ -81,7 +81,7 @@ export function Hero({ onNavigate }: HeroProps) {
               transition={{ duration: 0.7, delay: 0.2 }}
               className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-600"
             >
-              RaktDaan is a real-time blood matching network. Post a request, and
+              FindMyDonor™ is a real-time blood matching network. Post a request, and
               we instantly notify verified donors nearby who match the blood
               group — multiple donors for multiple units, with 90-day safety
               tracking built in.
@@ -191,7 +191,7 @@ function HeroCard({
             loading="lazy" 
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent flex items-end p-3">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-rose-300 bg-black/30 px-2 py-0.5 rounded-full backdrop-blur-sm">RaktDaan Proximity Grid</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-rose-300 bg-black/30 px-2 py-0.5 rounded-full backdrop-blur-sm">FindMyDonor™ Proximity Grid</span>
           </div>
         </div>
         {/* Header */}

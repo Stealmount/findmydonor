@@ -6,7 +6,7 @@ import { useState } from "react";
 
 const faqs = [
   {
-    q: "How does RaktDaan find a donor in real time?",
+    q: "How does FindMyDonor™ find a donor in real time?",
     a: "When a request is posted, our matching engine filters our network by blood group, 90-day eligibility, distance, and quiet-hour preferences — and pushes a notification to every donor who fits. The first to accept is locked in; others remain on warm standby for additional units.",
   },
   {
@@ -18,7 +18,7 @@ const faqs = [
     a: "It takes roughly 56–90 days for the body to fully replenish red blood cells after a donation. We enforce this cooldown automatically so donors can never be over-notified and so every unit is safe for the recipient.",
   },
   {
-    q: "Is RaktDaan free for donors?",
+    q: "Is FindMyDonor™ free for donors?",
     a: "Yes — forever. Donors are the heart of this network and we will never charge you, show you ads, or sell your data. Family plans and hospital subscriptions keep the lights on.",
   },
   {
@@ -27,10 +27,10 @@ const faqs = [
   },
   {
     q: "Which cities are live?",
-    a: "RaktDaan is live in 240+ cities across India, with the densest coverage in metro areas. We're adding new cities every month — drop your pin at signup and we'll notify you when we launch in your area.",
+    a: "FindMyDonor™ is live in 240+ cities across India, with the densest coverage in metro areas. We're adding new cities every month — drop your pin at signup and we'll notify you when we launch in your area.",
   },
   {
-    q: "How do hospitals integrate RaktDaan?",
+    q: "How do hospitals integrate FindMyDonor™?",
     a: "We offer a FHIR-ready REST API and a web dashboard. Most hospitals integrate in under a day. Our team handles the onboarding and runs alongside your existing blood bank workflow.",
   },
 ];

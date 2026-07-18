@@ -238,7 +238,7 @@ function HeroCard({
             </span>
             <div className="flex flex-col text-right">
               <span className="text-[10px] sm:text-xs font-semibold text-blood-700 font-sans tracking-wide">
-                {isHi ? 'रक्तदान सत्यापित' : 'RaktDaan Verified'}
+                {isHi ? 'रक्तदान सत्यापित' : 'FindMyDonor™ Verified'}
               </span>
             </div>
           </div>

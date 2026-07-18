@@ -97,7 +97,7 @@ export function Footer({ onNavigate }: FooterProps) {
                 <Droplet className="h-4 w-4 text-white fill-white" />
               </div>
               <span className="text-[17px] font-semibold tracking-tight">
-                RaktDaan
+                FindMyDonor™
               </span>
             </div>
             <p className="mt-5 max-w-sm text-[14.5px] leading-relaxed text-white/65">
@@ -180,7 +180,7 @@ export function Footer({ onNavigate }: FooterProps) {
 
         <div className="mt-16 flex flex-col gap-4 border-t border-white/10 pt-7 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[12.5px] text-white/55">
-            © {new Date().getFullYear()} RaktDaan Health Foundation. All rights reserved. Built with care for patients, donors, and the people who love them.
+            © {new Date().getFullYear()} FindMyDonor™ Network Foundation. All rights reserved. Built with care for patients, donors, and the people who love them.
           </p>
           <div className="flex items-center gap-2 text-[12.5px] text-white/55">
             <span className="relative flex h-2 w-2">

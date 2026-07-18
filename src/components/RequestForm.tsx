@@ -396,7 +396,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           {isHi ? 'आपातकालीन रक्त अनुरोध सबमिट करें' : 'Submit Emergency Blood Request'}
         </h2>
         <p className="text-ink-300 text-xs mt-1 max-w-md mx-auto">
-          {isHi ? 'हम रक्तदान नैदानिक एवं अस्पताल विवरण एकत्र करते हैं ताकि हमारा मैचिंग इंजन केवल 100% संगत रक्तदाताओं को तुरंत सूचित करे।' : 'We collect exact RaktDaan clinical & hospital details so our matching engine alerts only 100% compatible, verified donors instantly.'}
+          {isHi ? 'हम रक्तदान नैदानिक एवं अस्पताल विवरण एकत्र करते हैं ताकि हमारा मैचिंग इंजन केवल 100% संगत रक्तदाताओं को तुरंत सूचित करे।' : 'We collect exact FindMyDonor™ clinical & hospital details so our matching engine alerts only 100% compatible, verified donors instantly.'}
         </p>
       </div>
 
@@ -487,7 +487,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-blood-600" />
-              Required Component (RaktDaan Standard)
+              Required Component (FindMyDonor™ Standard)
             </label>
             <select
               id="sel-component-needed"
@@ -702,7 +702,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               <div className="mt-2 flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200">
                 <span className="text-amber-500 mt-0.5 shrink-0">⚠️</span>
                 <p className="text-[11px] text-amber-800 font-medium leading-snug">
-                  <strong>Testing Note:</strong> This email matches your Donor profile. Per RaktDaan's self-match prevention rule, you will <em>not</em> receive a donor match notification for your own request. Use a different email to test the live alert flow.
+                  <strong>Testing Note:</strong> This email matches your Donor profile. Per FindMyDonor™'s self-match prevention rule, you will <em>not</em> receive a donor match notification for your own request. Use a different email to test the live alert flow.
                 </p>
               </div>
             )}

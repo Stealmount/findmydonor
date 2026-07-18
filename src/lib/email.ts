@@ -38,7 +38,7 @@ export function buildDonorSosEmailHTML(params: {
   <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <!-- Header -->
     <div style="background:linear-gradient(135deg,#dc2626,#991b1b);padding:28px 32px;text-align:center;">
-      <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;letter-spacing:-0.5px;">🩸 RaktDaan</h1>
+      <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;letter-spacing:-0.5px;">🩸 FindMyDonor™</h1>
       <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">Real-Time Blood Donation Network</p>
     </div>
 
@@ -83,14 +83,14 @@ export function buildDonorSosEmailHTML(params: {
 
     <!-- Footer -->
     <div style="background:#111;color:rgba(255,255,255,0.5);text-align:center;padding:20px 32px;font-size:12px;">
-      <p style="margin:0 0 6px;">RaktDaan — Free Community Blood Donation Network</p>
+      <p style="margin:0 0 6px;">FindMyDonor™ — Free Community Blood Donation Network</p>
       <p style="margin:0;">You received this because you are a verified donor. <a href="https://findmydonor.online" style="color:rgba(255,255,255,0.7);">Manage preferences</a></p>
     </div>
   </div>
 </body>
 </html>`;
 
-  const text = `URGENT BLOOD REQUEST — RaktDaan\n\nHi ${params.donorName},\n\nBlood Type: ${params.bloodType}\nUnits: ${params.units}\nHospital: ${params.hospitalName}, ${params.hospitalArea}, ${params.hospitalCity}\nUrgency: ${urgencyLabel}\nRequest ID: ${params.trackingCode}\n\nLog in to accept: https://findmydonor.online/donor-dashboard\nTrack: https://findmydonor.online/tracking?code=${params.trackingCode}`;
+  const text = `URGENT BLOOD REQUEST — FindMyDonor™\n\nHi ${params.donorName},\n\nBlood Type: ${params.bloodType}\nUnits: ${params.units}\nHospital: ${params.hospitalName}, ${params.hospitalArea}, ${params.hospitalCity}\nUrgency: ${urgencyLabel}\nRequest ID: ${params.trackingCode}\n\nLog in to accept: https://findmydonor.online/donor-dashboard\nTrack: https://findmydonor.online/tracking?code=${params.trackingCode}`;
 
   return { subject, html, text };
 }
@@ -125,19 +125,19 @@ export function buildRequesterConfirmEmailHTML(params: {
       </div>
     </div>
     <div style="background:#111;color:rgba(255,255,255,0.5);text-align:center;padding:16px;font-size:12px;">
-      RaktDaan — Free Community Blood Donation Network
+      FindMyDonor™ — Free Community Blood Donation Network
     </div>
   </div>
 </body>
 </html>`;
 
-  const text = `Donor Confirmed — RaktDaan\n\nHi ${params.requesterName},\n${params.donorName} has confirmed your ${params.bloodType} request (${params.trackingCode}) at ${params.hospitalName}.\n\nTrack: https://findmydonor.online/tracking?code=${params.trackingCode}`;
+  const text = `Donor Confirmed — FindMyDonor™\n\nHi ${params.requesterName},\n${params.donorName} has confirmed your ${params.bloodType} request (${params.trackingCode}) at ${params.hospitalName}.\n\nTrack: https://findmydonor.online/tracking?code=${params.trackingCode}`;
   return { subject, html, text };
 }
 
 /** Email OTP Template */
 export function buildEmailOtpHTML(otp: string): { subject: string; html: string; text: string } {
-  const subject = `🔒 Your RaktDaan Verification Code: ${otp}`;
+  const subject = `🔒 Your FindMyDonor™ Verification Code: ${otp}`;
   
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -157,23 +157,23 @@ export function buildEmailOtpHTML(otp: string): { subject: string; html: string;
       </p>
     </div>
     <div style="background:#111;color:rgba(255,255,255,0.5);text-align:center;padding:16px;font-size:12px;">
-      RaktDaan — Free Community Blood Donation Network<br/>
+      FindMyDonor™ — Free Community Blood Donation Network<br/>
       Sent by raktdaan.contact@gmail.com
     </div>
   </div>
 </body>
 </html>`;
 
-  const text = `Your RaktDaan Verification Code is: ${otp}\n\nThis code is valid for 5 minutes.\n\nSent by raktdaan.contact@gmail.com`;
+  const text = `Your FindMyDonor™ Verification Code is: ${otp}\n\nThis code is valid for 5 minutes.\n\nSent by raktdaan.contact@gmail.com`;
   return { subject, html, text };
 }
 
 /** Registration Welcome Template */
 export function buildWelcomeEmailHTML(params: { name: string; type: 'donor' | 'requester'; bloodType?: string; city?: string; pincode?: string }): { subject: string; html: string; text: string } {
-  const subject = `Welcome to RaktDaan! 🎉`;
+  const subject = `Welcome to FindMyDonor™! 🎉`;
   
-  const donorBody = `Thank you for registering as a volunteer donor with Blood Connect! Your profile for blood group <strong>${params.bloodType}</strong> is now active in <strong>${params.city}</strong>. You will receive alerts if patients in pincode <strong>${params.pincode}</strong> or adjacent areas need your blood. Your contact remains completely private until you explicitly consent.`;
-  const requesterBody = `Thank you for joining RaktDaan! You can now request emergency blood matching anywhere in Delhi NCR. Verified donors will be instantly notified in real-time.`;
+  const donorBody = `Thank you for registering as a volunteer donor with FindMyDonor™! Your profile for blood group <strong>${params.bloodType}</strong> is now active in <strong>${params.city}</strong>. You will receive alerts if patients in pincode <strong>${params.pincode}</strong> or adjacent areas need your blood. Your contact remains completely private until you explicitly consent.`;
+  const requesterBody = `Thank you for joining FindMyDonor™! You can now request emergency blood matching anywhere in Delhi NCR. Verified donors will be instantly notified in real-time.`;
   
   const body = params.type === 'donor' ? donorBody : requesterBody;
 
@@ -183,7 +183,7 @@ export function buildWelcomeEmailHTML(params: { name: string; type: 'donor' | 'r
 <body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background:#f8f8f8;">
   <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <div style="background:linear-gradient(135deg,#dc2626,#991b1b);padding:28px 32px;text-align:center;">
-      <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;">Welcome to RaktDaan</h1>
+      <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;">Welcome to FindMyDonor™</h1>
     </div>
     <div style="padding:32px;">
       <p style="font-size:16px;color:#111;">Hi <strong>${params.name.split(' ')[0]}</strong>,</p>
@@ -197,13 +197,13 @@ export function buildWelcomeEmailHTML(params: { name: string; type: 'donor' | 'r
       </div>
     </div>
     <div style="background:#111;color:rgba(255,255,255,0.5);text-align:center;padding:16px;font-size:12px;">
-      RaktDaan — Free Community Blood Donation Network<br/>
+      FindMyDonor™ — Free Community Blood Donation Network<br/>
       Sent by raktdaan.contact@gmail.com
     </div>
   </div>
 </body>
 </html>`;
 
-  const text = `Welcome to RaktDaan, ${params.name}!\n\n${params.type === 'donor' ? donorBody.replace(/<[^>]*>?/gm, '') : requesterBody}\n\nGo to Dashboard: https://findmydonor.online\n\nSent by raktdaan.contact@gmail.com`;
+  const text = `Welcome to FindMyDonor™, ${params.name}!\n\n${params.type === 'donor' ? donorBody.replace(/<[^>]*>?/gm, '') : requesterBody}\n\nGo to Dashboard: https://findmydonor.online\n\nSent by raktdaan.contact@gmail.com`;
   return { subject, html, text };
 }

@@ -81,7 +81,7 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
 
   return (
     <>
-      {/* Sleek Floating RaktDaan Simulator Button */}
+      {/* Sleek Floating FindMyDonor™ Simulator Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-full bg-ink-900/95 hover:bg-black text-white shadow-premium-lg border border-ink-700 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer group"
@@ -216,13 +216,13 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                       const capitalized = rawName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
                       recipientName = `${capitalized} (${notif.recipient_type === 'donor' ? 'Donor' : 'Requester'})`;
                     } else {
-                      recipientName = notif.recipient_type === 'donor' ? 'Volunteer Donor' : 'RaktDaan Requester';
+                      recipientName = notif.recipient_type === 'donor' ? 'Volunteer Donor' : 'FindMyDonor™ Requester';
                     }
                   }
 
                   // Clean message body
                   const displayBody = notif.message_body
-                    .replaceAll('Blood Connect', 'RaktDaan')
+                    .replaceAll('FindMyDonor™', 'FindMyDonor™')
                     // Clean up location / pincode references
                     .replace(/active in\s+[A-Za-z0-9\s]+?\.(\s+|$)/i, 'active. ')
                     .replace(/patients in pincode\s*(\d{6})?\s*or adjacent areas/i, 'patients nearby')

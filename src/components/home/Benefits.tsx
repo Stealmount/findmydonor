@@ -55,7 +55,7 @@ export function Benefits() {
 
             <div className="mt-8 rounded-3xl bg-ink-900 p-6 text-white shadow-premium-lg">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blood-300">
-                {useLanguage().language === 'HI' ? 'रक्तदान का वादा' : 'The RaktDaan promise'}
+                {useLanguage().language === 'HI' ? 'रक्तदान का वादा' : 'The FindMyDonor™ promise'}
               </p>
               <p className="mt-3 text-[20px] font-medium leading-snug tracking-tight">
                 {useLanguage().language === 'HI' ? (

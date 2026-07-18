@@ -247,17 +247,17 @@ export const translations: Record<Language, TranslationDictionary> = {
       titleLine1: 'The moment',
       titleHighlight: 'life',
       titleLine2: 'needs blood, we find a donor in minutes.',
-      subtitle: 'RaktDaan is a real-time blood matching network. Post a request, and we instantly notify verified donors nearby who match the blood group — multiple donors for multiple units, with 60-day & 90-day safety tracking built in.',
+      subtitle: 'FindMyDonor™ is a real-time blood matching network. Post a request, and we instantly notify verified donors nearby who match the blood group — multiple donors for multiple units, with 60-day & 90-day safety tracking built in.',
       requestBloodNow: 'Request blood now',
-      joinNetwork: 'Join RaktDaan Network',
+      joinNetwork: 'Join FindMyDonor™ Network',
       trackLiveRequest: 'Track live request',
       safetyVerification: 'Medical safety verification',
       safetyCooldown: '60-day safety cooldown',
       privacyConsent: 'Privacy consent gateway',
     },
     auth: {
-      welcomeSignIn: 'Welcome to RaktDaan',
-      joinNetworkTitle: 'Join the RaktDaan Network',
+      welcomeSignIn: 'Welcome to FindMyDonor™',
+      joinNetworkTitle: 'Join the FindMyDonor™ Network',
       signInSubtitle: 'Sign in once to access your personalized Donor Dashboard or Requester Portal.',
       signUpSubtitle: 'Choose your role below to get started. Registration takes under 60 seconds.',
       signInTab: 'Sign In',
@@ -267,7 +267,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       signInBtn: 'Sign In to Dashboard',
       orContinueWith: 'OR CONTINUE WITH',
       continueGoogle: 'Continue with Google',
-      noAccountText: "Don't have a RaktDaan account yet?",
+      noAccountText: "Don't have a FindMyDonor™ account yet?",
       createOneNow: 'Create one now',
       alreadyHaveAccount: 'Already have an account?',
       signInHere: 'Sign in here',
@@ -298,11 +298,11 @@ export const translations: Record<Language, TranslationDictionary> = {
       col3Admin: 'Admin Console',
       col3SafetyPolicy: 'Medical Safety Policy',
       col3MatchingRules: 'Proximity Matching Rules',
-      copyright: '© 2026 RaktDaan Community Network. All rights reserved. Free & Open for patients, donors, and the community.',
+      copyright: '© 2026 FindMyDonor™ Community Network. All rights reserved. Free & Open for patients, donors, and the community.',
     },
     howItWorks: {
       badge: 'THREE SIMPLE STEPS',
-      title: 'How RaktDaan saves lives in minutes',
+      title: 'How FindMyDonor™ saves lives in minutes',
       subtitle: 'A fast, transparent, and direct bridge between emergency requesters and verified voluntary blood donors nearby.',
       step1Title: '1. Request Emergency Blood SOS',
       step1Desc: 'Enter required blood group, hospital location, and unit count. Our algorithm instantly matches verified donors in your pincode.',
@@ -314,7 +314,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     cta: {
       badge: 'URGENT LIFE-SAVING NETWORK',
       title: 'Ready to make a difference or need blood urgently?',
-      subtitle: 'Whether you need blood immediately or want to register as a voluntary lifesaver, RaktDaan connects you in seconds.',
+      subtitle: 'Whether you need blood immediately or want to register as a voluntary lifesaver, FindMyDonor™ connects you in seconds.',
       requestBtn: 'Request Emergency Blood Now',
       volunteerBtn: 'Become a Volunteer Donor',
     },
@@ -324,7 +324,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       subtitle: 'Everything you need to know about safety protocols, donor eligibility, and emergency blood requests.',
       items: [
         {
-          q: "How does RaktDaan find a donor in real time?",
+          q: "How does FindMyDonor™ find a donor in real time?",
           a: "When a request is posted, our matching engine filters our network by blood group, eligibility, distance, and preferences — and pushes a notification to every donor who fits. The first to accept is locked in; others remain on warm standby for additional units."
         },
         {
@@ -332,8 +332,8 @@ export const translations: Record<Language, TranslationDictionary> = {
           a: "Most requests receive an accepted donor match within 3 to 4 minutes. Our automated paging system contacts donors within a 5 km radius immediately."
         },
         {
-          q: "Is RaktDaan really 100% free?",
-          a: "Yes, RaktDaan is completely free for patients, donors, and hospitals forever. We never charge for blood matching or emergency SOS broadcasting."
+          q: "Is FindMyDonor™ really 100% free?",
+          a: "Yes, FindMyDonor™ is completely free for patients, donors, and hospitals forever. We never charge for blood matching or emergency SOS broadcasting."
         },
         {
           q: "How does the 60-day safety cooldown work?",
@@ -344,7 +344,7 @@ export const translations: Record<Language, TranslationDictionary> = {
           a: "Absolutely. Hospital staff and blood banks can create an official account to broadcast emergency blood requirements directly to verified donors."
         },
         {
-          q: "How do hospitals integrate RaktDaan?",
+          q: "How do hospitals integrate FindMyDonor™?",
           a: "Hospitals can use our clean web dashboard to track inventory, verify patient requests, and coordinate incoming voluntary donors with zero setup fee."
         }
       ]
@@ -352,7 +352,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     features: {
       badge: 'BUILT FOR THE MOMENT THAT MATTERS',
       title: 'Every feature earns its place in the chain of survival.',
-      subtitle: 'We obsess over emergency scenarios — power outages, mid-shift staffing, unreachable phone numbers. RaktDaan is the safety net that turns chaos into a calm, coordinated response.',
+      subtitle: 'We obsess over emergency scenarios — power outages, mid-shift staffing, unreachable phone numbers. FindMyDonor™ is the safety net that turns chaos into a calm, coordinated response.',
       items: [
         {
           title: "Real-time matching engine",
@@ -420,7 +420,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       ]
     },
     benefits: {
-      badge: 'WHY RAKTDAAN',
+      badge: 'WHY FINDMYDONOR™',
       title: 'Designed for speed, trust, and safety.',
       subtitle: 'How we empower donors, patients, and hospitals.',
       items: [
@@ -447,7 +447,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       titleLine1: 'One platform.',
       titleHighlight: 'Three lives',
       titleLine2: 'in the loop.',
-      subtitle: 'The same RaktDaan app serves the patient who needs blood, the donor who gives it, and the hospital that runs the request. Switch between perspectives to see the magic happen.',
+      subtitle: 'The same FindMyDonor™ app serves the patient who needs blood, the donor who gives it, and the hospital that runs the request. Switch between perspectives to see the magic happen.',
       tabRequester: 'Requester view',
       tabDonor: 'Donor view',
       tabHospital: 'Hospital view',
@@ -473,7 +473,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       passwordLabel: 'Administrator Password',
       passwordPlaceholder: "Enter 'admin' to access",
       authenticateBtn: 'Authenticate Admin Credentials',
-      consoleAuthenticated: 'Console Authenticated • Blood Connect',
+      consoleAuthenticated: 'Console Authenticated • FindMyDonor™',
       seedDemoData: 'Seed Demo Data',
       lockSession: 'Lock Session',
       tabAnalytics: 'Dashboard Analytics',
@@ -578,7 +578,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       titleLine1: 'जिस क्षण जीवन को',
       titleHighlight: 'रक्त',
       titleLine2: 'की आवश्यकता होती है, हम मिनटों में रक्तदाता खोजते हैं।',
-      subtitle: 'रक्तदान (RaktDaan) एक रीयल-टाइम रक्त मिलान नेटवर्क है। अनुरोध दर्ज करें, और हम तुरंत आपके पास के सत्यापित रक्तदाताओं को सूचित करते हैं — बिना किसी दलाल के, 100% नि:शुल्क समुदाय।',
+      subtitle: 'FindMyDonor™ एक रीयल-टाइम रक्त मिलान नेटवर्क है। अनुरोध दर्ज करें, और हम तुरंत आपके पास के सत्यापित रक्तदाताओं को सूचित करते हैं — बिना किसी दलाल के, 100% नि:शुल्क समुदाय।',
       requestBloodNow: 'अभी रक्त अनुरोध करें',
       joinNetwork: 'रक्तदान नेटवर्क से जुड़ें',
       trackLiveRequest: 'लाइव अनुरोध ट्रैक करें',
@@ -587,7 +587,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       privacyConsent: 'गोपनीयता और सुरक्षा सहमति',
     },
     auth: {
-      welcomeSignIn: 'रक्तदान (RaktDaan) में आपका स्वागत है',
+      welcomeSignIn: 'FindMyDonor™ में आपका स्वागत है',
       joinNetworkTitle: 'रक्तदान नेटवर्क से जुड़ें',
       signInSubtitle: 'अपने व्यक्तिगत डोनर डैशबोर्ड या रिक्वेस्टर पोर्टल तक पहुँचने के लिए लॉगिन करें।',
       signUpSubtitle: 'शुरू करने के लिए नीचे अपनी भूमिका चुनें। पंजीकरण में 60 सेकंड से भी कम समय लगता है।',
@@ -629,11 +629,11 @@ export const translations: Record<Language, TranslationDictionary> = {
       col3Admin: 'एडमिन कंसोल',
       col3SafetyPolicy: 'चिकित्सा सुरक्षा नीति',
       col3MatchingRules: 'निकटता मिलान नियम',
-      copyright: '© 2026 RaktDaan Community Network. सर्वाधिकार सुरक्षित। मरीजों और रक्तदाताओं के लिए 100% नि:शुल्क।',
+      copyright: '© 2026 FindMyDonor™ Community Network. सर्वाधिकार सुरक्षित। मरीजों और रक्तदाताओं के लिए 100% नि:शुल्क।',
     },
     howItWorks: {
       badge: 'तीन आसान चरण',
-      title: 'रक्तदान (RaktDaan) मिनटों में जीवन कैसे बचाता है',
+      title: 'FindMyDonor™ मिनटों में जीवन कैसे बचाता है',
       subtitle: 'आपातकालीन जरूरतमंदों और आस-पास के सत्यापित स्वैच्छिक रक्तदाताओं के बीच एक तेज़ और सीधा सेतु।',
       step1Title: '1. आपातकालीन रक्त SOS अनुरोध',
       step1Desc: 'आवश्यक रक्त समूह, अस्पताल का स्थान और यूनिट संख्या दर्ज करें। हमारा एल्गोरिदम तुरंत आपके पिनकोड में रक्तदाताओं से मिलान करता है।',

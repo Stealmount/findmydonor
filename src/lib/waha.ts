@@ -79,7 +79,7 @@ export async function sendWhatsApp(phone: string, message: string): Promise<bool
  * Build the OTP WhatsApp message sent during registration.
  */
 export function buildOtpMessage(otp: string): string {
-  return `Your RaktDaan verification code is: *${otp}*
+  return `Your FindMyDonor™ verification code is: *${otp}*
 
 This code is valid for 15 minutes. Do not share it with anyone.`;
 }
@@ -157,7 +157,7 @@ We appreciate you.`;
  */
 export function buildWelcomeMessage(donorName: string): string {
   const firstName = donorName.split(' ')[0];
-  return `Welcome to RaktDaan, ${firstName}. 🩸
+  return `Welcome to FindMyDonor™, ${firstName}. 🩸
 
 You're registered as a volunteer donor. When someone nearby needs your blood type, we'll send you a message with a link. Tap it to see details and confirm if you can help.
 

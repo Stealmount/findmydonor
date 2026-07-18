@@ -106,7 +106,7 @@ export function Features() {
           </div>
           <p className="text-[15.5px] leading-relaxed text-ink-600">
             We obsess over the 2 a.m. scenarios — power outages, mid-shift
-            staffing, unreachable phone numbers. RaktDaan is the safety net
+            staffing, unreachable phone numbers. FindMyDonor™ is the safety net
             that turns chaos into a calm, coordinated response.
           </p>
         </motion.div>

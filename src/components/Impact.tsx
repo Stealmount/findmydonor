@@ -21,7 +21,7 @@ const facts = [
   },
   {
     icon: Globe2,
-    title: "RaktDaan's goal",
+    title: "FindMyDonor™'s goal",
     value: "make that number 10% by 2030.",
   },
 ];

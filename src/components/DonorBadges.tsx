@@ -48,7 +48,7 @@ export const BADGE_TIERS: BadgeTier[] = [
     xpNeeded: 1250,
   },
   {
-    name: 'RaktDaan Legend',
+    name: 'FindMyDonor™ Legend',
     donationsNeeded: 12,
     icon: <Award className="w-10 h-10 text-purple-600 fill-purple-600/20 animate-bounce" />,
     color: 'from-purple-500/10 to-purple-600/30 text-purple-900 border-purple-300 shadow-[0_0_20px_rgba(147,51,234,0.3)]',

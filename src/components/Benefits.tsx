@@ -41,7 +41,7 @@ export function Benefits() {
             className="lg:col-span-5"
           >
             <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-blood-600">
-              Why RaktDaan
+              Why FindMyDonor™
             </p>
             <h2 className="mt-2 text-[clamp(1.85rem,4.5vw,3rem)] font-medium leading-[1.05] tracking-tight text-ink-900">
               The blood supply chain,{" "}
@@ -56,7 +56,7 @@ export function Benefits() {
 
             <div className="mt-8 rounded-3xl bg-ink-900 p-6 text-white shadow-premium-lg">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blood-300">
-                The RaktDaan promise
+                The FindMyDonor™ promise
               </p>
               <p className="mt-3 text-[20px] font-medium leading-snug tracking-tight">
                 "When someone asks for blood, they shouldn't have to ask 30

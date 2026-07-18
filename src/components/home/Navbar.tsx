@@ -47,8 +47,8 @@ export function Navbar({ onNavigate, loggedInUser, loggedInRequester }: NavbarPr
             <Droplet className="h-4 w-4 text-white fill-white" strokeWidth={2.2} />
             <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />
           </div>
-          <span className="text-[16px] font-bold tracking-tight text-ink-900 font-sans">
-            RaktDaan
+          <span className="text-[17px] font-extrabold tracking-tight text-ink-900 font-sans flex items-center">
+            FindMy<span className="text-blood-600">Donor</span><span className="text-[10px] font-bold text-ink-400 ml-0.5 -translate-y-1">™</span>
           </span>
         </button>
 

@@ -56,7 +56,7 @@ export function Showcase() {
             in the loop.
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed text-white/70">
-            The same RaktDaan app serves the patient who needs blood, the donor
+            The same FindMyDonor™ app serves the patient who needs blood, the donor
             who gives it, and the hospital that runs the request. Switch between
             perspectives to see the magic happen.
           </p>

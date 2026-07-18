@@ -84,7 +84,7 @@ export function Footer({ onNavigate }: FooterProps) {
                 <Droplet className="h-4 w-4 text-white fill-white" />
               </div>
               <span className="text-[17px] font-semibold tracking-tight">
-                RaktDaan
+                FindMyDonor™
               </span>
             </div>
             <p className="mt-5 max-w-sm text-[14.5px] leading-relaxed text-white/65">
