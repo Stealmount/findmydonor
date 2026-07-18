@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, ArrowRight, Building2, CheckCircle2, Heart, Lock, Mail, Phone, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { authenticatedApi } from '../lib/api';
-import type { AuthState, Requester, SignupIntent, User } from '../types';
+import type { AuthState, BloodType, Requester, SignupIntent, User } from '../types';
+import { lookupPincode } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface AuthHubProps {
@@ -35,6 +36,14 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
   const [infoMessage, setInfoMessage] = useState('');
   const [hasOAuthIdentity, setHasOAuthIdentity] = useState(false);
   const [emailConfirmPending, setEmailConfirmPending] = useState(false);
+  const [bloodGroup, setBloodGroup] = useState<BloodType | ''>('');
+  const [donorPincode, setDonorPincode] = useState('');
+  const [donorArea, setDonorArea] = useState('');
+  const [donorCity, setDonorCity] = useState('');
+  const [lastDonationDate, setLastDonationDate] = useState('');
+  const [neverDonated, setNeverDonated] = useState(false);
+  const [healthDeclaration, setHealthDeclaration] = useState(false);
+  const [emergencyOnly, setEmergencyOnly] = useState(false);
 
   useEffect(() => {
     setMode(initialMode);
@@ -216,11 +225,40 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       });
       sessionStorage.removeItem('raktdaan_otp_pending');
       if (result.nextStep === 'donor-profile') {
-        setInfoMessage('WhatsApp verified. Complete donor details next.');
-        onGoogleSignUpRedirect({ uid: (await supabase.auth.getUser()).data.user?.id || '', email, full_name: fullName });
-      } else await resolveSignedInState();
+        setSignupStep(5);
+        setInfoMessage('WhatsApp verified! One last step — complete your donor profile.');
+      } else {
+        await resolveSignedInState();
+      }
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to verify WhatsApp.'); }
     finally { setLoading(false); }
+  };
+
+  const submitDonorProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    if (!bloodGroup) { setError('Select your blood group.'); return; }
+    if (!/^\d{6}$/.test(donorPincode)) { setError('Enter a valid 6-digit pincode.'); return; }
+    if (!healthDeclaration) { setError('Health self-declaration is required.'); return; }
+    if (!neverDonated && !lastDonationDate) { setError('Enter your last donation date or select "Never donated".'); return; }
+    setLoading(true);
+    try {
+      await authenticatedApi('/api/donor-profile/complete', {
+        blood_group: bloodGroup,
+        pincode: donorPincode,
+        area: donorArea,
+        city: donorCity,
+        last_donation_date: neverDonated ? null : lastDonationDate,
+        health_self_declaration: true,
+        emergency_only: emergencyOnly,
+        number_sharing_pref: 'on_approval',
+      }, 'PATCH');
+      await resolveSignedInState();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to save profile. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const card = 'rounded-3xl bg-white/95 backdrop-blur-2xl border border-ink-200/80 shadow-premium-lg p-6 sm:p-8';
@@ -284,6 +322,76 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
               {signupStep === 2 && <form className="space-y-4" onSubmit={createEmailIdentity}><h2 className="text-xl font-bold text-ink-900">Create identity</h2><label className="block text-xs font-bold text-ink-600">Full name<input id="signup-name" className={`${field} mt-1`} required value={fullName} onChange={e => setFullName(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Email<input id="signup-email" className={`${field} mt-1`} required type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Password<input id="signup-password" className={`${field} mt-1`} required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Primary phone<input id="signup-phone" className={`${field} mt-1`} required inputMode="numeric" value={phone} onChange={e => setPhone(e.target.value)} /></label><button id="signup-email-submit" disabled={loading} className="h-12 w-full rounded-xl bg-ink-900 text-sm font-bold text-white disabled:opacity-50">{loading ? 'Creating…' : 'Continue'}</button><button id="signup-google" type="button" onClick={handleGoogle} className="w-full text-sm font-bold text-blood-600">Continue with Google instead</button></form>}
               {signupStep === 3 && <div className="space-y-4"><h2 className="text-xl font-bold text-ink-900">Consent and WhatsApp</h2><label className="block text-xs font-bold text-ink-600">Primary phone<input id="signup-google-phone" className={`${field} mt-1`} required inputMode="numeric" value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">WhatsApp number<input id="signup-whatsapp" className={`${field} mt-1`} required value={normalizedWhatsApp} onChange={e => { setSameWhatsApp(false); setWhatsappPhone(e.target.value); }} /></label><label className="flex items-center gap-2 text-xs text-ink-600"><input id="same-whatsapp-phone" type="checkbox" checked={sameWhatsApp} onChange={e => setSameWhatsApp(e.target.checked)} />Same as primary phone</label><label className="flex gap-3 rounded-xl bg-ink-50 p-3 text-xs leading-relaxed text-ink-600"><input id="signup-consent" type="checkbox" checked={consentAccepted} onChange={e => setConsentAccepted(e.target.checked)} />I consent to RaktDaan using this WhatsApp number for verification and life-saving request coordination. I can change availability later.</label><button id="signup-send-otp" type="button" onClick={sendOtp} disabled={loading || !consentAccepted} className="h-12 w-full rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 text-sm font-bold text-white disabled:opacity-50">Send WhatsApp OTP</button></div>}
               {signupStep === 4 && <form className="space-y-4" onSubmit={verifyAndLink}><h2 className="text-xl font-bold text-ink-900">Verify WhatsApp</h2><p className="text-sm text-ink-500">Enter six-digit code sent to {normalizedWhatsApp}.</p><input id="signup-otp" className={`${field} text-center text-xl tracking-[0.5em]`} required inputMode="numeric" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} /><button id="signup-verify-otp" disabled={loading || otp.length !== 6} className="h-12 w-full rounded-xl bg-ink-900 text-sm font-bold text-white disabled:opacity-50">{loading ? 'Verifying…' : 'Verify and continue'}</button><button id="signup-resend-otp" type="button" onClick={sendOtp} className="w-full text-xs font-bold text-blood-600">Resend OTP</button></form>}
+              {signupStep === 5 && (
+                <form className="space-y-4" onSubmit={submitDonorProfile}>
+                  <h2 className="text-xl font-bold text-ink-900">Your donor profile</h2>
+                  <p className="text-sm text-ink-500">Helps us match you with compatible requests nearby.</p>
+
+                  <label className="block text-xs font-bold text-ink-600">
+                    Blood group *
+                    <select required className={`${field} mt-1`} value={bloodGroup} onChange={e => setBloodGroup(e.target.value as BloodType)}>
+                      <option value="">Select blood group</option>
+                      {(['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] as BloodType[]).map(bg => (
+                        <option key={bg} value={bg}>{bg}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block text-xs font-bold text-ink-600">
+                    Pincode *
+                    <input
+                      required
+                      className={`${field} mt-1`}
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="e.g. 110001"
+                      value={donorPincode}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setDonorPincode(val);
+                        if (val.length === 6) {
+                          const result = lookupPincode(val);
+                          if (result) { setDonorArea(result.area); setDonorCity(result.city); }
+                        }
+                      }}
+                    />
+                  </label>
+                  {donorArea && (
+                    <p className="text-xs font-semibold text-emerald-700">📍 {donorArea}, {donorCity}</p>
+                  )}
+
+                  <label className="block text-xs font-bold text-ink-600">
+                    Last donation date
+                    <input
+                      type="date"
+                      disabled={neverDonated}
+                      max={new Date().toISOString().split('T')[0]}
+                      className={`${field} mt-1`}
+                      value={lastDonationDate}
+                      onChange={e => setLastDonationDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-ink-600">
+                    <input type="checkbox" checked={neverDonated} onChange={e => { setNeverDonated(e.target.checked); if (e.target.checked) setLastDonationDate(''); }} />
+                    I have never donated blood before
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-ink-600">
+                    <input type="checkbox" checked={emergencyOnly} onChange={e => setEmergencyOnly(e.target.checked)} />
+                    Only contact me for critical/emergency cases
+                  </label>
+
+                  <label className="flex gap-3 rounded-xl bg-ink-50 p-3 text-xs leading-relaxed text-ink-600">
+                    <input required type="checkbox" checked={healthDeclaration} onChange={e => setHealthDeclaration(e.target.checked)} />
+                    I confirm I am 18–65 years old, weigh at least 45 kg, am not on blood-donation-restricting medication,
+                    and have not donated in the last 90 days. This is a self-declaration.
+                  </label>
+
+                  <button disabled={loading} className="h-12 w-full rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 text-sm font-bold text-white shadow-lg shadow-blood-600/25 disabled:opacity-50">
+                    {loading ? 'Saving…' : 'Complete registration →'}
+                  </button>
+                </form>
+              )}
             </>
           )}
         </motion.div>}
