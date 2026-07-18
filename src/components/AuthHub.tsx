@@ -34,10 +34,37 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [hasOAuthIdentity, setHasOAuthIdentity] = useState(false);
+  const [emailConfirmPending, setEmailConfirmPending] = useState(false);
 
   useEffect(() => {
     setMode(initialMode);
     setIntent(initialIntent);
+    const emailPending = sessionStorage.getItem('raktdaan_email_confirm_pending');
+    if (emailPending) {
+      void (async () => {
+        try {
+          const saved = JSON.parse(emailPending) as { intent: SignupIntent; fullName: string; phone: string; email: string };
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user?.email_confirmed_at) {
+            sessionStorage.removeItem('raktdaan_email_confirm_pending');
+            setIntent(saved.intent);
+            setFullName(saved.fullName);
+            setPhone(saved.phone);
+            setEmail(saved.email);
+            setMode('signup');
+            setSignupStep(3);
+            setInfoMessage('Email confirmed — continue with WhatsApp verification.');
+          } else {
+            setEmailConfirmPending(true);
+            setEmail(saved.email);
+            setIntent(saved.intent);
+            setFullName(saved.fullName);
+            setPhone(saved.phone);
+            setMode('signup');
+          }
+        } catch { sessionStorage.removeItem('raktdaan_email_confirm_pending'); }
+      })();
+    }
     const otpPending = sessionStorage.getItem('raktdaan_otp_pending');
     if (otpPending) {
       try {
@@ -144,7 +171,14 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     try {
       const { data, error: authError } = await supabase.auth.signUp({ email: email.trim().toLowerCase(), password, options: { data: { full_name: fullName.trim() } } });
       if (authError) throw authError;
-      if (!data.session) { setInfoMessage('Check email to confirm identity, then sign in to continue WhatsApp verification.'); setMode('signin'); return; }
+      if (!data.session) {
+        sessionStorage.setItem('raktdaan_email_confirm_pending', JSON.stringify({
+          intent, fullName: fullName.trim(), phone, email: email.trim().toLowerCase()
+        }));
+        setEmailConfirmPending(true);
+        setInfoMessage('Confirmation link sent. Check your inbox, click the link, then return here.');
+        return;
+      }
       setSignupStep(3);
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to create account.'); }
     finally { setLoading(false); }
@@ -216,10 +250,42 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
           <div className="mb-6 flex items-center gap-2">{Array.from({ length: (intent === 'donor' || intent === 'both') ? 5 : 4 }, (_, i) => i + 1).map(n => (
             <span key={n} className={`h-1.5 flex-1 rounded-full ${n <= signupStep ? 'bg-blood-600' : 'bg-ink-200'}`} />
           ))}</div>
-          {signupStep === 1 && <div className="space-y-4"><h2 className="text-xl font-bold text-ink-900">How will you use RaktDaan?</h2><p className="text-sm text-ink-500">Roles can change later. One account covers both.</p>{([['donor', Heart, 'Volunteer donor', 'Get verified, complete health and location details, then choose availability.'], ['requester', Building2, 'Request blood', 'Create and track verified emergency requests.'], ['both', ShieldCheck, 'Both roles', 'Donate when available and request help when needed.']] as const).map(([value, Icon, title, copy]) => <button id={`signup-intent-${value}`} key={value} type="button" onClick={() => { setIntent(value); setSignupStep(hasOAuthIdentity ? 3 : 2); }} className="w-full rounded-2xl border border-ink-200 p-4 text-left transition hover:border-blood-500 hover:bg-blood-50"><span className="flex items-center gap-3 text-sm font-bold text-ink-900"><Icon className="h-5 w-5 text-blood-600" />{title}</span><span className="mt-1 block pl-8 text-xs text-ink-500">{copy}</span></button>)}</div>}
-          {signupStep === 2 && <form className="space-y-4" onSubmit={createEmailIdentity}><h2 className="text-xl font-bold text-ink-900">Create identity</h2><label className="block text-xs font-bold text-ink-600">Full name<input id="signup-name" className={`${field} mt-1`} required value={fullName} onChange={e => setFullName(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Email<input id="signup-email" className={`${field} mt-1`} required type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Password<input id="signup-password" className={`${field} mt-1`} required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Primary phone<input id="signup-phone" className={`${field} mt-1`} required inputMode="numeric" value={phone} onChange={e => setPhone(e.target.value)} /></label><button id="signup-email-submit" disabled={loading} className="h-12 w-full rounded-xl bg-ink-900 text-sm font-bold text-white disabled:opacity-50">{loading ? 'Creating…' : 'Continue'}</button><button id="signup-google" type="button" onClick={handleGoogle} className="w-full text-sm font-bold text-blood-600">Continue with Google instead</button></form>}
-          {signupStep === 3 && <div className="space-y-4"><h2 className="text-xl font-bold text-ink-900">Consent and WhatsApp</h2><label className="block text-xs font-bold text-ink-600">Primary phone<input id="signup-google-phone" className={`${field} mt-1`} required inputMode="numeric" value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">WhatsApp number<input id="signup-whatsapp" className={`${field} mt-1`} required value={normalizedWhatsApp} onChange={e => { setSameWhatsApp(false); setWhatsappPhone(e.target.value); }} /></label><label className="flex items-center gap-2 text-xs text-ink-600"><input id="same-whatsapp-phone" type="checkbox" checked={sameWhatsApp} onChange={e => setSameWhatsApp(e.target.checked)} />Same as primary phone</label><label className="flex gap-3 rounded-xl bg-ink-50 p-3 text-xs leading-relaxed text-ink-600"><input id="signup-consent" type="checkbox" checked={consentAccepted} onChange={e => setConsentAccepted(e.target.checked)} />I consent to RaktDaan using this WhatsApp number for verification and life-saving request coordination. I can change availability later.</label><button id="signup-send-otp" type="button" onClick={sendOtp} disabled={loading || !consentAccepted} className="h-12 w-full rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 text-sm font-bold text-white disabled:opacity-50">Send WhatsApp OTP</button></div>}
-          {signupStep === 4 && <form className="space-y-4" onSubmit={verifyAndLink}><h2 className="text-xl font-bold text-ink-900">Verify WhatsApp</h2><p className="text-sm text-ink-500">Enter six-digit code sent to {normalizedWhatsApp}.</p><input id="signup-otp" className={`${field} text-center text-xl tracking-[0.5em]`} required inputMode="numeric" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} /><button id="signup-verify-otp" disabled={loading || otp.length !== 6} className="h-12 w-full rounded-xl bg-ink-900 text-sm font-bold text-white disabled:opacity-50">{loading ? 'Verifying…' : 'Verify and continue'}</button><button id="signup-resend-otp" type="button" onClick={sendOtp} className="w-full text-xs font-bold text-blood-600">Resend OTP</button></form>}
+          {emailConfirmPending ? (
+            <div className="space-y-5 text-center">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-amber-100">
+                <Mail className="h-7 w-7 text-amber-600" />
+              </div>
+              <h2 className="text-xl font-bold text-ink-900">Check your email</h2>
+              <p className="text-sm text-ink-500">
+                We sent a confirmation link to <strong>{email}</strong>.
+                Click it, then return to this page.
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (user?.email_confirmed_at) {
+                    sessionStorage.removeItem('raktdaan_email_confirm_pending');
+                    setEmailConfirmPending(false);
+                    setSignupStep(3);
+                    setInfoMessage('Email confirmed — continue with WhatsApp verification.');
+                  } else {
+                    setInfoMessage('Not confirmed yet. Check your inbox or spam folder.');
+                  }
+                }}
+                className="h-11 w-full rounded-xl border border-ink-200 bg-white text-sm font-bold text-ink-700"
+              >
+                I've confirmed my email
+              </button>
+            </div>
+          ) : (
+            <>
+              {signupStep === 1 && <div className="space-y-4"><h2 className="text-xl font-bold text-ink-900">How will you use RaktDaan?</h2><p className="text-sm text-ink-500">Roles can change later. One account covers both.</p>{([['donor', Heart, 'Volunteer donor', 'Get verified, complete health and location details, then choose availability.'], ['requester', Building2, 'Request blood', 'Create and track verified emergency requests.'], ['both', ShieldCheck, 'Both roles', 'Donate when available and request help when needed.']] as const).map(([value, Icon, title, copy]) => <button id={`signup-intent-${value}`} key={value} type="button" onClick={() => { setIntent(value); setSignupStep(hasOAuthIdentity ? 3 : 2); }} className="w-full rounded-2xl border border-ink-200 p-4 text-left transition hover:border-blood-500 hover:bg-blood-50"><span className="flex items-center gap-3 text-sm font-bold text-ink-900"><Icon className="h-5 w-5 text-blood-600" />{title}</span><span className="mt-1 block pl-8 text-xs text-ink-500">{copy}</span></button>)}</div>}
+              {signupStep === 2 && <form className="space-y-4" onSubmit={createEmailIdentity}><h2 className="text-xl font-bold text-ink-900">Create identity</h2><label className="block text-xs font-bold text-ink-600">Full name<input id="signup-name" className={`${field} mt-1`} required value={fullName} onChange={e => setFullName(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Email<input id="signup-email" className={`${field} mt-1`} required type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Password<input id="signup-password" className={`${field} mt-1`} required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">Primary phone<input id="signup-phone" className={`${field} mt-1`} required inputMode="numeric" value={phone} onChange={e => setPhone(e.target.value)} /></label><button id="signup-email-submit" disabled={loading} className="h-12 w-full rounded-xl bg-ink-900 text-sm font-bold text-white disabled:opacity-50">{loading ? 'Creating…' : 'Continue'}</button><button id="signup-google" type="button" onClick={handleGoogle} className="w-full text-sm font-bold text-blood-600">Continue with Google instead</button></form>}
+              {signupStep === 3 && <div className="space-y-4"><h2 className="text-xl font-bold text-ink-900">Consent and WhatsApp</h2><label className="block text-xs font-bold text-ink-600">Primary phone<input id="signup-google-phone" className={`${field} mt-1`} required inputMode="numeric" value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="block text-xs font-bold text-ink-600">WhatsApp number<input id="signup-whatsapp" className={`${field} mt-1`} required value={normalizedWhatsApp} onChange={e => { setSameWhatsApp(false); setWhatsappPhone(e.target.value); }} /></label><label className="flex items-center gap-2 text-xs text-ink-600"><input id="same-whatsapp-phone" type="checkbox" checked={sameWhatsApp} onChange={e => setSameWhatsApp(e.target.checked)} />Same as primary phone</label><label className="flex gap-3 rounded-xl bg-ink-50 p-3 text-xs leading-relaxed text-ink-600"><input id="signup-consent" type="checkbox" checked={consentAccepted} onChange={e => setConsentAccepted(e.target.checked)} />I consent to RaktDaan using this WhatsApp number for verification and life-saving request coordination. I can change availability later.</label><button id="signup-send-otp" type="button" onClick={sendOtp} disabled={loading || !consentAccepted} className="h-12 w-full rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 text-sm font-bold text-white disabled:opacity-50">Send WhatsApp OTP</button></div>}
+              {signupStep === 4 && <form className="space-y-4" onSubmit={verifyAndLink}><h2 className="text-xl font-bold text-ink-900">Verify WhatsApp</h2><p className="text-sm text-ink-500">Enter six-digit code sent to {normalizedWhatsApp}.</p><input id="signup-otp" className={`${field} text-center text-xl tracking-[0.5em]`} required inputMode="numeric" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} /><button id="signup-verify-otp" disabled={loading || otp.length !== 6} className="h-12 w-full rounded-xl bg-ink-900 text-sm font-bold text-white disabled:opacity-50">{loading ? 'Verifying…' : 'Verify and continue'}</button><button id="signup-resend-otp" type="button" onClick={sendOtp} className="w-full text-xs font-bold text-blood-600">Resend OTP</button></form>}
+            </>
+          )}
         </motion.div>}
       </AnimatePresence>
     </section>
