@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, BloodRequest, Match, NotificationLog, DonationLog, BloodType, RequestStatus } from '../types';
-import { getCollection as getLocalOrFirestoreCollection, seedInitialDonors } from '../lib/db';
+import { seedInitialDonors } from '../lib/db';
 import { authenticatedApi } from '../lib/api';
 import { 
   Users, 
