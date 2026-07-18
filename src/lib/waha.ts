@@ -83,7 +83,7 @@ This code is valid for 15 minutes. Do not share it with anyone.`;
  * Build the SOS WhatsApp message sent to a matched donor.
  * Concise, human-sounding — no repeated urgency words, max 1-2 emojis.
  */
-export function buildDonorSosMessage(request: BloodRequest, donor: User): string {
+export function buildDonorSosMessage(request: BloodRequest, donor: User, matchId: string): string {
   const firstName = donor.full_name.split(' ')[0];
   const distance = getDistanceBetweenPincodes(donor.pincode, request.hospital_pincode);
   const urgencyNote = request.urgency_level === 'critical'
@@ -91,14 +91,15 @@ export function buildDonorSosMessage(request: BloodRequest, donor: User): string
     : request.urgency_level === 'urgent'
     ? 'Needed urgently.'
     : 'Scheduled need.';
+  const appUrl = process.env.APP_URL || 'https://raktdaan.duckdns.org';
+  const link = `${appUrl}/track/${request.tracking_code}?role=donor&matchId=${matchId}`;
 
-  return `Hi ${firstName}, there's a blood request nearby that matches your profile.
+  return `Hi ${firstName}, ${request.blood_type_needed} blood is needed ${distance}km away.
 
-${request.blood_type_needed} blood needed · ${request.units_required} unit(s) · ${request.hospital_name}, ${request.hospital_area}
-About ${distance} km from you. ${urgencyNote}
+${urgencyNote}
 
-Can you help? Reply YES to accept or NO to pass.
-Contact details and directions are shared only after you reply YES.`;
+Tap to see details and confirm:
+${link}`;
 }
 
 /**

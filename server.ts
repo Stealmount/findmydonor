@@ -410,7 +410,7 @@ async function notifyDonor(
   donor: User
 ): Promise<NotifyResult> {
   const whatsappPhone = donor.whatsapp_number || donor.phone;
-  const sosMessage    = buildDonorSosMessage(request, donor);
+  const sosMessage    = buildDonorSosMessage(request, donor, match.id);
   // Donor alerts are WhatsApp-only. A failed provider call must remain failed.
   const waOk = await sendWhatsApp(whatsappPhone, sosMessage);
 
@@ -1622,25 +1622,21 @@ async function startServer() {
   });
 
   // ─── Approve match ──────────────────────────────────────────────────────
-  app.post("/api/matches/:matchId/approve", async (req, res) => {
-    const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-    if (!match) return res.status(404).json({ error: "Match not found" });
-    if (match.donor_response !== "pending") return res.status(409).json({ error: "Already resolved" });
-
+  async function approveMatchById(matchId: string, timestamp?: string): Promise<{ ok: boolean; error?: string; status?: number; data?: Record<string, unknown> }> {
+    const match = await getLocalOrFirestoreDoc<Match>("matches", matchId);
+    if (!match) return { ok: false, error: "Match not found", status: 404 };
+    if (match.donor_response !== "pending") return { ok: false, error: "Already resolved", status: 409 };
     const [request, donor] = await Promise.all([
       getLocalOrFirestoreDoc<BloodRequest>("blood_requests", match.request_id),
       getLocalOrFirestoreDoc<User>("users", match.donor_id),
     ]);
-    if (!request || !donor) return res.status(404).json({ error: "Request or donor not found" });
-
-    await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
+    if (!request || !donor) return { ok: false, error: "Request or donor not found", status: 404 };
+    await saveLocalOrFirestoreDoc("matches", matchId, {
       ...match,
       donor_response:    "approved",
-      donor_response_at: req.body?.responseTimestamp || nowISO(),
+      donor_response_at: timestamp || nowISO(),
       contact_shared_at: nowISO(),
     });
-
-    // Notify requester of approval
     if (request.requester_phone) {
       await sendWhatsApp(request.requester_phone, buildRequesterConfirmMessage(request, donor.full_name));
     }
@@ -1654,36 +1650,54 @@ async function startServer() {
       });
       await sendEmailViaResend(request.requester_email, ep.subject, ep.html, ep.text);
     }
-
     await cacheInvalidatePrefix("match_status_");
     await cacheInvalidatePrefix("pending_matches_");
     await cacheInvalidatePrefix("req_status_");
-
-    return res.json({
-      success:        true,
+    return { ok: true, data: {
+      success: true,
       requesterPhone: request.requester_phone,
       requesterName:  request.requester_name,
       donorPhone:     donor.whatsapp_number || donor.phone,
       donorName:      donor.full_name,
       hospitalName:   request.hospital_name,
       hospitalArea:   request.hospital_area,
+    }};
+  }
+
+  async function declineMatchById(matchId: string, timestamp?: string): Promise<{ ok: boolean; error?: string; status?: number }> {
+    const match = await getLocalOrFirestoreDoc<Match>("matches", matchId);
+    if (!match) return { ok: false, error: "Match not found", status: 404 };
+    await saveLocalOrFirestoreDoc("matches", matchId, {
+      ...match,
+      donor_response:    "declined",
+      donor_response_at: timestamp || nowISO(),
     });
+    await releaseDonorLock(match.donor_id);
+    await cacheInvalidatePrefix("match_status_");
+    await cacheInvalidatePrefix("pending_matches_");
+    return { ok: true };
+  }
+
+  app.post("/api/matches/:matchId/approve", async (req, res) => {
+    const result = await approveMatchById(req.params.matchId, req.body?.responseTimestamp);
+    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? result.data : { error: result.error });
   });
 
   // ─── Decline match ──────────────────────────────────────────────────────
   app.post("/api/matches/:matchId/decline", async (req, res) => {
-    const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-    if (!match) return res.status(404).json({ error: "Match not found" });
-    await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
-      ...match,
-      donor_response:    "declined",
-      donor_response_at: req.body?.responseTimestamp || nowISO(),
-    });
-    // Release reservation lock so this donor becomes available to other requests immediately
-    await releaseDonorLock(match.donor_id);
-    await cacheInvalidatePrefix("match_status_");
-    await cacheInvalidatePrefix("pending_matches_");
-    return res.json({ success: true });
+    const result = await declineMatchById(req.params.matchId, req.body?.responseTimestamp);
+    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { success: true } : { error: result.error });
+  });
+
+  // ─── Public donor response — matchId UUID is the capability token, no JWT required ──
+  app.post("/api/matches/:matchId/respond-public", async (req, res) => {
+    const { response } = req.body;
+    if (!["approved", "declined"].includes(String(response)))
+      return res.status(400).json({ error: "response must be 'approved' or 'declined'" });
+    const result = response === "approved"
+      ? await approveMatchById(req.params.matchId)
+      : await declineMatchById(req.params.matchId);
+    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { ok: true } : { error: result.error });
   });
 
 

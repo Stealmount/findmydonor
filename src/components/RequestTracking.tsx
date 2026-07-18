@@ -22,9 +22,11 @@ import {
 interface RequestTrackingProps {
   initialCode?: string;
   onStateChange?: () => void;
+  role?: 'donor' | 'requester';
+  matchId?: string;
 }
 
-export default function RequestTracking({ initialCode = '', onStateChange }: RequestTrackingProps) {
+export default function RequestTracking({ initialCode = '', onStateChange, role = 'requester', matchId }: RequestTrackingProps) {
   const { language } = useLanguage();
   const isHi = language === 'HI';
   const [searchCode, setSearchCode] = useState(initialCode);
@@ -33,6 +35,7 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
   const [donors, setDonors] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [donorResponseStatus, setDonorResponseStatus] = useState<'pending' | 'confirmed' | 'declined' | 'already_done'>('pending');
 
   const handleSearch = async (codeToSearch: string) => {
     if (!codeToSearch) return;
@@ -65,6 +68,13 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
       handleSearch(initialCode);
     }
   }, [initialCode]);
+
+  // Auto-refresh every 30 seconds in requester view
+  useEffect(() => {
+    if (role !== 'requester' || !initialCode) return;
+    const id = setInterval(() => handleSearch(searchCode || initialCode), 30_000);
+    return () => clearInterval(id);
+  }, [role, initialCode]);
 
   const handleMarkAsFulfilled = async () => {
     if (!request) return;
@@ -102,11 +112,13 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
       }
 
       try {
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
+        if (role !== 'donor') {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        }
       } catch (confettiErr) {
         console.error("Confetti error:", confettiErr);
       }
@@ -155,9 +167,90 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
     }
   };
 
+  const handleDonorRespond = async (response: 'approved' | 'declined') => {
+    if (!matchId) return;
+    try {
+      const res = await fetch(`/api/matches/${matchId}/respond-public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response }),
+      });
+      if (res.status === 409) { setDonorResponseStatus('already_done'); return; }
+      if (!res.ok) throw new Error('Request failed');
+      setDonorResponseStatus(response === 'approved' ? 'confirmed' : 'declined');
+    } catch {
+      setError('Unable to submit your response. Please try again.');
+    }
+  };
+
   return (
     <div id="tracking-view-container" className="max-w-4xl mx-auto space-y-8">
-      {/* Symmetrical Search Bar Card */}
+
+      {/* Donor view — shown when role=donor and matchId is present */}
+      {role === 'donor' && matchId && (
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg p-6 sm:p-8">
+          {donorResponseStatus === 'confirmed' ? (
+            <div className="text-center py-8">
+              <Heart className="w-12 h-12 text-blood-600 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-ink-900 mb-2">Thank you — the requester has been notified. 🩸</h2>
+              <p className="text-sm text-ink-500">Please coordinate your arrival with the requester. Your contact will be shared shortly.</p>
+            </div>
+          ) : donorResponseStatus === 'declined' ? (
+            <div className="text-center py-8">
+              <ShieldCheck className="w-12 h-12 text-ink-400 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-ink-900 mb-2">Thank you for letting us know.</h2>
+              <p className="text-sm text-ink-500">We've removed you from this request and will look for another match.</p>
+            </div>
+          ) : donorResponseStatus === 'already_done' ? (
+            <div className="text-center py-8">
+              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-ink-900 mb-2">You've already responded to this request.</h2>
+            </div>
+          ) : request ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-2xl blood-drop-gradient shadow-md">
+                  <Heart className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-ink-900">Blood Donation Request</h2>
+                  <p className="text-xs text-ink-500">Someone nearby needs your help</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-ink-50/70 p-5 border border-ink-100 space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-blood-100 px-3 py-1 text-sm font-bold text-blood-700 border border-blood-200">{request.blood_type_needed}</span>
+                  <span className="text-ink-600 font-medium">{request.units_required} unit(s) needed</span>
+                  <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${request.urgency_level === 'critical' ? 'bg-blood-100 text-blood-700' : request.urgency_level === 'urgent' ? 'bg-amber-100 text-amber-700' : 'bg-ink-100 text-ink-600'}`}>{request.urgency_level}</span>
+                </div>
+                <p className="text-xs font-medium text-ink-700 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-blood-500" />
+                  {request.hospital_name}, {request.hospital_city}
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  onClick={() => handleDonorRespond('approved')}
+                  className="flex-1 py-3 px-4 rounded-xl bg-blood-600 hover:bg-blood-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
+                >
+                  <Heart className="w-4 h-4" />
+                  I can help — confirm
+                </button>
+                <button
+                  onClick={() => handleDonorRespond('declined')}
+                  className="py-3 px-4 rounded-xl bg-white hover:bg-ink-50 border border-ink-200 text-ink-700 font-semibold text-sm flex items-center justify-center gap-2 transition-all"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Not available right now
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-ink-400 text-sm">Loading request details…</div>
+          )}
+        </div>
+      )}
+
       <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg p-6 sm:p-8">
         <div className="flex items-center gap-3 mb-4">
           <div className="grid h-10 w-10 place-items-center rounded-2xl blood-drop-gradient shadow-md">
@@ -295,8 +388,8 @@ export default function RequestTracking({ initialCode = '', onStateChange }: Req
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              {request.status !== 'fulfilled' && request.status !== 'cancelled' && (
+              {/* Action Buttons — only shown in authenticated/dashboard context */}
+              {onStateChange && request.status !== 'fulfilled' && request.status !== 'cancelled' && (
                 <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-ink-100">
                   <button
                     onClick={handleMarkAsFulfilled}

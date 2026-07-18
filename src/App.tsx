@@ -55,6 +55,8 @@ export default function App() {
   const [loggedInAdmin, setLoggedInAdmin] = useState<AdminUser | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [prefilledGoogleUser, setPrefilledGoogleUser] = useState<{ uid: string; email: string; full_name: string } | null>(null);
+  const [trackingRole, setTrackingRole] = useState<'donor' | 'requester'>('requester');
+  const [trackingMatchId, setTrackingMatchId] = useState<string | undefined>();
 
   // Monitor Auth state changes to persist and auto-restore user sessions
   useEffect(() => {
@@ -115,15 +117,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Check if there's a tracking code in URL query params
+    // Check /track/{code} pathname first, then ?code= query param for backward compat
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const view = params.get('view');
-    if (code) {
-      setTrackingCode(code);
+    const pathMatch = window.location.pathname.match(/^\/track\/([A-Z0-9-]+)/i);
+    if (pathMatch) {
+      setTrackingCode(pathMatch[1]);
+      setTrackingRole((params.get('role') as 'donor' | 'requester') || 'requester');
+      setTrackingMatchId(params.get('matchId') || undefined);
       setActiveView('tracking');
-    } else if (view && isActiveView(view)) {
-      setActiveView(view);
+    } else {
+      const code = params.get('code');
+      const view = params.get('view');
+      if (code) {
+        setTrackingCode(code);
+        setActiveView('tracking');
+      } else if (view && isActiveView(view)) {
+        setActiveView(view);
+      }
     }
   }, []);
 
@@ -271,7 +281,11 @@ export default function App() {
           )}
 
           {activeView === 'tracking' && (
-            <RequestTracking initialCode={trackingCode} />
+            <RequestTracking
+              initialCode={trackingCode}
+              role={trackingRole}
+              matchId={trackingMatchId}
+            />
           )}
 
           {activeView === 'requester-portal' && (
