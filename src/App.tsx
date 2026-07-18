@@ -338,9 +338,6 @@ export default function App() {
                 setActiveView('requester-register');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              onGoogleSignUpRedirect={(googleData) => {
-                setPrefilledGoogleUser(googleData);
-              }}
             />
           )}
 

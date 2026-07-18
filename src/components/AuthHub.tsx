@@ -14,10 +14,9 @@ interface AuthHubProps {
   onLoginSuccessRequester: (requester: Requester) => void;
   onSelectDonorSignUp?: () => void;
   onSelectRequesterSignUp?: () => void;
-  onGoogleSignUpRedirect?: (googleData: { uid: string; email: string; full_name: string }) => void;
 }
 
-export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLoginSuccessDonor, onLoginSuccessRequester, onGoogleSignUpRedirect }: AuthHubProps) {
+export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLoginSuccessDonor, onLoginSuccessRequester }: AuthHubProps) {
   const { t } = useLanguage();
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [signupStep, setSignupStep] = useState<1 | 2 | 3 | 4 | 5>(1);
