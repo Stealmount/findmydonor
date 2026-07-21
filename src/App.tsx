@@ -23,7 +23,6 @@ import RequestTracking from './components/RequestTracking';
 import DonorDashboard from './components/DonorDashboard';
 import RequesterPortal from './components/RequesterPortal';
 import { AuthHub } from './components/AuthHub';
-import AdminPanel from './components/AdminPanel';
 import NotificationSimulator from './components/NotificationSimulator';
 import { RaktdaanHome } from './components/home/RaktdaanHome';
 import { Navbar } from './components/home/Navbar';
@@ -349,10 +348,6 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
             />
-          )}
-
-          {activeView === 'admin' && (
-            <AdminPanel />
           )}
 
         </main>
