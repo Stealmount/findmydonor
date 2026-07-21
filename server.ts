@@ -707,6 +707,27 @@ async function startServer() {
       return res.status(429).json({ error: "Too many failed OTP attempts. Try again in 15 minutes." });
     }
 
+    // ─── DEV-ONLY OTP BYPASS ────────────────────────────────────────────────
+    // When WAHA is not configured (local dev only), skip the real WhatsApp send
+    // and accept a fixed dummy OTP so the signup flow can be tested end-to-end.
+    // This branch is IMPOSSIBLE to reach in production, where WAHA_BASE_URL is set.
+    // NEVER remove the env guard.
+    if (!process.env.WAHA_BASE_URL) {
+      const DEV_OTP = "000000";
+      await cacheSet(`wa_otp_${normalizedPhone}`, DEV_OTP, 15 * 60);
+      await cacheSet(`otp_attempts_${normalizedPhone}`, '0', 15 * 60);
+      console.warn(
+        `[DEV OTP BYPASS] WAHA_BASE_URL unset — no real WhatsApp sent. ` +
+        `Use OTP "${DEV_OTP}" for ${normalizedPhone}. This must never happen in production.`
+      );
+      return res.json({
+        success: true,
+        purpose,
+        devBypass: true,
+        message: `DEV MODE: WhatsApp disabled. Use OTP ${DEV_OTP}.`,
+      });
+    }
+
     // Generate 6-digit random OTP
     const otp = randomInt(100000, 1_000_000).toString();
     const cacheKey = `wa_otp_${normalizedPhone}`;
