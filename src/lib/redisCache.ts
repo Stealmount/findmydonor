@@ -39,12 +39,14 @@ function memInvalidatePrefix(prefix: string): void {
 let redis: Redis | null = null;
 let useRedis = false;
 let lastRedisWarningAt = 0;
+let redisWarned = false;
 
 function warnRedis(message: string): void {
   const now = Date.now();
-  if (now - lastRedisWarningAt < 300_000) return; // warn at most every 5 min
+  if (redisWarned && now - lastRedisWarningAt < 600_000) return; // warn at most every 10 min after first
+  redisWarned = true;
   lastRedisWarningAt = now;
-  console.warn(`[Redis] ⚠️  ${message}; using in-memory LRU.`);
+  console.warn(`[Redis] ⚠️  ${message}`);
 }
 
 function getRedis(): Redis | null {

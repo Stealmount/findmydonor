@@ -16,28 +16,23 @@ interface RequestFormProps {
 }
 
 export default function RequestForm({ onSuccess, loggedInRequester, loggedInDonor, onLoginSuccess, onNavigate }: RequestFormProps) {
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
-  
-  // Quick Emergency SOS verification state
-  const [sosOtp, setSosOtp] = useState('');
-  const [sosVerificationToken, setSosVerificationToken] = useState('');
-  const [sosSending, setSosSending] = useState(false);
 
   const [formData, setFormData] = useState({
     patient_name: '',
-    patient_age: 35,
-    patient_gender: 'Male' as 'Male' | 'Female' | 'Other',
-    blood_type_needed: 'O+' as BloodType | 'ANY',
-    component_needed: BLOOD_COMPONENTS[0],
-    units_required: 1,
-    hospital_name: HOSPITAL_NETWORKS[0],
+    patient_age: '' as unknown as number,
+    patient_gender: '' as 'Male' | 'Female' | 'Other',
+    blood_type_needed: '' as BloodType | 'ANY',
+    component_needed: '' as any,
+    units_required: '' as unknown as number,
+    hospital_name: '',
     hospital_uhid: '',
     attending_doctor: '',
     hospital_pincode: '',
     hospital_area: '',
     hospital_city: '',
-    urgency_level: 'urgent' as UrgencyLevel,
+    urgency_level: '' as UrgencyLevel,
     requester_name: '',
     requester_email: '',
     requester_phone: '',
@@ -115,90 +110,8 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
   const [loading, setLoading] = useState(false);
   const [captchaChecked, setCaptchaChecked] = useState(false);
   const [error, setError] = useState('');
-  // Step progression: 'form' → fill details, 'confirm' → preview, 'sos-verify' → Quick SOS OTP verification
-  const [step, setStep] = useState<'form' | 'confirm' | 'sos-verify'>('form');
-
-  // Quick Emergency SOS handlers
-  const handleSendSosOtp = async () => {
-    setError('');
-    setSosSending(true);
-    try {
-      const normalizedPhone = formData.requester_phone.replace(/\D/g, '');
-      if (normalizedPhone.length !== 10) {
-        throw new Error('Please enter a valid 10-digit mobile number for WhatsApp verification.');
-      }
-      const res = await fetch('/api/wa/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalizedPhone, purpose: 'sos' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send WhatsApp verification code.');
-      setStep('sos-verify');
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to send WhatsApp OTP.');
-    } finally {
-      setSosSending(false);
-    }
-  };
-
-  const handleVerifySosOtpAndBroadcast = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const normalizedPhone = formData.requester_phone.replace(/\D/g, '');
-      const verifyRes = await fetch('/api/wa/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalizedPhone, otp: sosOtp, purpose: 'sos' }),
-      });
-      const verifyData = await verifyRes.json();
-      if (!verifyRes.ok || !verifyData.verificationToken) {
-        throw new Error(verifyData.error || 'Invalid OTP code.');
-      }
-
-      const token = verifyData.verificationToken;
-      setSosVerificationToken(token);
-
-      // Broadcast anonymous request via /api/sos/requests (plural route)
-      const res = await fetch('/api/sos/requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          verificationToken: token,
-          requester_name: formData.requester_name || formData.patient_name,
-          requester_phone: normalizedPhone,
-          patient_name: formData.patient_name,
-          patient_age: formData.patient_age,
-          patient_gender: formData.patient_gender,
-          blood_type_needed: formData.blood_type_needed,
-          component_needed: formData.component_needed,
-          units_required: formData.units_required,
-          hospital_name: formData.hospital_name,
-          hospital_uhid: formData.hospital_uhid,
-          attending_doctor: formData.attending_doctor,
-          hospital_pincode: formData.hospital_pincode,
-          hospital_area: formData.hospital_area,
-          hospital_city: formData.hospital_city,
-          hospital_state: formData.hospital_state,
-          urgency_level: formData.urgency_level,
-          additional_notes: formData.additional_notes,
-          showcase_opt_in: formData.showcase_opt_in,
-          share_contact_immediately: formData.share_contact_immediately,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to broadcast Quick Emergency SOS.');
-      onSuccess(data.trackingCode);
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to verify and broadcast SOS.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Step progression: 'form' → fill details, 'confirm' → preview
+  const [step, setStep] = useState<'form' | 'confirm'>('form');
 
   // Self-match detection: Warn user if their requester email/phone matches their logged-in donor profile
   const isSelfMatch = !!(
@@ -233,8 +146,8 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
       setError('Please complete the verification checkbox to submit.');
       return;
     }
-    if (!formData.patient_name || !formData.hospital_name || !formData.hospital_pincode || !formData.hospital_city || !formData.hospital_area) {
-      setError('Please fill in all mandatory fields including patient details and exact hospital location.');
+    if (!formData.patient_name || !formData.patient_age || !formData.patient_gender || !formData.blood_type_needed || !formData.component_needed || !formData.units_required || !formData.hospital_name || !formData.hospital_pincode || !formData.hospital_city || !formData.hospital_area || !formData.urgency_level) {
+      setError('Please fill in all mandatory fields (including gender, blood group, required component, units, urgency level, and hospital location).');
       return;
     }
     if (Number(formData.patient_age) >= 120 || Number(formData.patient_age) <= 0) {
@@ -290,99 +203,44 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
 
 
 
-  if (step === 'sos-verify') {
-    return (
-      <div id="request-sos-verify-container" className="max-w-md mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-8">
-        <div className="bg-gradient-to-br from-ink-900 via-ink-950 to-black p-8 text-white text-center relative">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl blood-drop-gradient">
-            <Phone className="w-6 h-6 text-white" />
-          </div>
-          <span className="inline-block px-3 py-1 rounded-full bg-blood-500/20 border border-blood-500/30 text-blood-400 text-[11px] font-mono font-bold uppercase tracking-widest mb-2">
-            ⚡ Quick Emergency SOS Verification
-          </span>
-          <h2 className="text-xl font-bold tracking-tight text-white font-sans">
-            Verify WhatsApp Number
-          </h2>
-          <p className="text-ink-300 text-xs mt-1">
-            Enter the 6-digit verification code sent to +91 {formData.requester_phone} to broadcast your emergency request immediately.
-          </p>
-        </div>
-
-        <form onSubmit={handleVerifySosOtpAndBroadcast} className="p-8 space-y-5">
-          {error && (
-            <div className="p-3.5 rounded-xl bg-blood-50 text-blood-700 border border-blood-200 text-xs font-semibold flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">6-Digit Verification Code *</label>
-            <input
-              id="inp-sos-otp"
-              type="text"
-              required
-              maxLength={6}
-              value={sosOtp}
-              onChange={e => setSosOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="123456"
-              className="w-full h-12 px-4 rounded-xl border border-ink-200 bg-white text-center font-mono text-xl tracking-[0.5em] font-bold text-ink-900 focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
-            />
-          </div>
-
-          <button
-            id="btn-verify-sos-broadcast"
-            type="submit"
-            disabled={loading || sosOtp.length !== 6}
-            className="w-full py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Broadcasting SOS...</span>
-            ) : (<><Megaphone className="w-4 h-4" /> Verify & Broadcast Now</>)}
-          </button>
-
-          <div className="flex items-center justify-between pt-3 border-t border-ink-100 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => setStep('confirm')}
-              className="text-ink-600 hover:text-ink-900"
-            >
-              ← Back to Review
-            </button>
-            <button
-              type="button"
-              onClick={handleSendSosOtp}
-              disabled={sosSending}
-              className="text-blood-600 hover:underline disabled:opacity-50"
-            >
-              {sosSending ? 'Resending...' : 'Resend Code'}
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div id="request-form-container" className="max-w-2xl mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-6">
       {!loggedInRequester && !loggedInDonor && (
-        <div className="bg-ink-900 border-b border-ink-800 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-white">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-blood-500/20 text-blood-400 font-bold text-sm">⚡</span>
-            <div>
-              <p className="text-xs font-bold text-white leading-tight">Quick Emergency SOS Mode</p>
-              <p className="text-[11px] text-ink-300">Broadcasting as public contact without an account (&lt; 45s).</p>
+        <div className="bg-gradient-to-r from-ink-900 via-ink-950 to-blood-950 border-b border-blood-500/30 p-6 sm:p-7 text-white relative overflow-hidden">
+          <div className="absolute -right-10 -bottom-10 w-40 h-40 rounded-full bg-blood-600/15 blur-2xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-blood-500/20 border border-blood-500/30 text-blood-400 font-bold text-lg shrink-0">
+                <ShieldAlert className="w-5 h-5 text-blood-400" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-white tracking-tight leading-snug">
+                  {isHi ? 'रक्त मांगने के लिए खाता सत्यापन आवश्यक है' : 'Account Verification Required to Request Blood'}
+                </p>
+                <p className="text-xs text-ink-300 mt-0.5 leading-relaxed">
+                  {isHi ? 'रोगी की सुरक्षा के लिए और रीयल-टाइम ट्रैकिंग सक्षम करने के लिए, सभी अनुरोधकर्ताओं को पहले साइन अप या साइन इन करना होगा।' : 'To protect patient safety and enable real-time tracking, all requesters must sign up or sign in first.'}
+                </p>
+              </div>
             </div>
+            {onNavigate && (
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('requester-register')}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl btn-glow bg-blood-600 hover:bg-blood-700 text-white font-bold text-xs shadow-md transition-all whitespace-nowrap cursor-pointer"
+                >
+                  {isHi ? 'पंजीकरण करें →' : 'Sign Up to Request →'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('auth-signin')}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/15 transition-all whitespace-nowrap cursor-pointer"
+                >
+                  {isHi ? 'साइन इन करें' : 'Sign In'}
+                </button>
+              </div>
+            )}
           </div>
-          {onNavigate && (
-            <button
-              type="button"
-              onClick={() => onNavigate('auth-signin')}
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/15 transition-all whitespace-nowrap"
-            >
-              Sign In / Create Account →
-            </button>
-          )}
         </div>
       )}
       <div className="bg-gradient-to-br from-ink-900 via-ink-950 to-black p-8 text-white text-center relative">
@@ -428,39 +286,44 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               <input
                 id="inp-patient-age"
                 type="number"
-                min="0"
+                min="1"
                 max="119"
+                placeholder={isHi ? 'आयु दर्ज करें' : 'Enter age'}
                 required
-                value={formData.patient_age}
-                onChange={e => setFormData(prev => ({ ...prev, patient_age: parseInt(e.target.value) || 35 }))}
+                value={formData.patient_age === '' as any ? '' : formData.patient_age}
+                onChange={e => setFormData(prev => ({ ...prev, patient_age: e.target.value === '' ? ('' as any) : parseInt(e.target.value) }))}
                 className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Gender *</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'लिंग *' : 'Gender *'}</label>
               <select
                 id="sel-patient-gender"
+                required
                 value={formData.patient_gender}
                 onChange={e => setFormData(prev => ({ ...prev, patient_gender: e.target.value as any }))}
                 className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
               >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
+                <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Gender --'}</option>
+                <option value="Male">{isHi ? 'पुरुष' : 'Male'}</option>
+                <option value="Female">{isHi ? 'महिला' : 'Female'}</option>
+                <option value="Other">{isHi ? 'अन्य' : 'Other'}</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Blood Group *</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'रक्त समूह *' : 'Blood Group *'}</label>
               <select
                 id="sel-blood-needed"
+                required
                 value={formData.blood_type_needed}
                 onChange={e => setFormData(prev => ({ ...prev, blood_type_needed: e.target.value as BloodType | 'ANY' }))}
                 className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-bold font-mono focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
               >
+                <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Blood Group --'}</option>
                 {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(type => (
                   <option key={type} value={type}>{type}</option>
                 ))}
@@ -469,15 +332,16 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Units Required *</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'आवश्यक यूनिट *' : 'Units Required *'}</label>
               <input
                 id="inp-units"
                 type="number"
                 min="1"
                 max="10"
+                placeholder={isHi ? 'यूनिट' : 'Units'}
                 required
-                value={formData.units_required}
-                onChange={e => setFormData(prev => ({ ...prev, units_required: Number(e.target.value) }))}
+                value={formData.units_required === '' as any ? '' : formData.units_required}
+                onChange={e => setFormData(prev => ({ ...prev, units_required: e.target.value === '' ? ('' as any) : Number(e.target.value) }))}
                 className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-bold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
               />
             </div>
@@ -487,14 +351,16 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-blood-600" />
-              Required Component (FindMyDonor™ Standard)
+              {isHi ? 'आवश्यक घटक (FindMyDonor™ मानक) *' : 'Required Component (FindMyDonor™ Standard) *'}
             </label>
             <select
               id="sel-component-needed"
+              required
               value={formData.component_needed}
               onChange={e => setFormData(prev => ({ ...prev, component_needed: e.target.value as any }))}
               className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
             >
+              <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Component --'}</option>
               {BLOOD_COMPONENTS.map(comp => (
                 <option key={comp} value={comp}>{comp}</option>
               ))}
@@ -503,13 +369,15 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
 
           {/* Hospital & Clinical Identifiers */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Hospital Network / Institution *</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'अस्पताल नेटवर्क / संस्था *' : 'Hospital Network / Institution *'}</label>
             <select
               id="sel-hospital-network"
+              required
               value={formData.hospital_name}
               onChange={e => setFormData(prev => ({ ...prev, hospital_name: e.target.value }))}
               className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
             >
+              <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Hospital / Network --'}</option>
               {HOSPITAL_NETWORKS.map(net => (
                 <option key={net} value={net}>{net}</option>
               ))}
@@ -517,7 +385,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Hospital IPD / UHID / Bed No. (Verification)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'अस्पताल IPD / UHID / बेड नंबर (सत्यापन)' : 'Hospital IPD / UHID / Bed No. (Verification)'}</label>
             <input
               id="inp-hospital-uhid"
               type="text"
@@ -530,7 +398,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           <div className="space-y-1.5 md:col-span-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 flex items-center gap-1.5">
               <Stethoscope className="w-3.5 h-3.5 text-blood-600" />
-              Attending Physician / Doctor Name (Optional)
+              {isHi ? 'उपस्थित चिकित्सक / डॉक्टर का नाम (वैकल्पिक)' : 'Attending Physician / Doctor Name (Optional)'}
             </label>
             <input
               id="inp-attending-doctor"
@@ -545,7 +413,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           <div className="space-y-1.5 md:col-span-2">
             <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 flex items-center gap-1.5">
               <Search className="w-3.5 h-3.5 text-blood-600 animate-pulse" />
-              Quick Location Autocomplete (Area or Pincode)
+              {isHi ? 'त्वरित स्थान खोज (क्षेत्र या पिनकोड)' : 'Quick Location Autocomplete (Area or Pincode)'}
             </label>
             <div className="relative" ref={suggestionsRef}>
               <input
@@ -592,7 +460,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
 
           <div className="grid grid-cols-3 gap-4 md:col-span-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Pincode *</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'पिनकोड *' : 'Pincode *'}</label>
               <input
                 id="inp-hospital-pin"
                 type="text"
@@ -605,11 +473,11 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Locality</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'इलाका' : 'Locality'}</label>
               <input
                 id="inp-hospital-area"
                 type="text"
-                placeholder="Auto-suggested"
+                placeholder={isHi ? 'स्वतः सुझाव' : 'Auto-suggested'}
                 value={formData.hospital_area}
                 onChange={e => setFormData(prev => ({ ...prev, hospital_area: e.target.value }))}
                 className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
@@ -617,7 +485,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">City</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'शहर' : 'City'}</label>
               <input
                 id="inp-hospital-city"
                 type="text"
@@ -631,12 +499,12 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
 
           {/* Urgency & Notes */}
           <div className="space-y-1.5 md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Urgency Level</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'आपातकाल स्तर *' : 'Urgency Level *'}</label>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { value: 'critical', label: 'CRITICAL (< 6 Hrs)', activeColor: 'bg-blood-600 text-white shadow-md' },
-                { value: 'urgent', label: 'URGENT (< 24 Hrs)', activeColor: 'bg-ink-900 text-white shadow-md' },
-                { value: 'planned', label: 'PLANNED / Scheduled', activeColor: 'bg-ink-100 text-ink-800' },
+                { value: 'critical', label: isHi ? 'अत्यावश्यक (< 6 घंटे)' : 'CRITICAL (< 6 Hrs)', activeColor: 'bg-blood-600 text-white shadow-md' },
+                { value: 'urgent', label: isHi ? 'जरूरी (< 24 घंटे)' : 'URGENT (< 24 Hrs)', activeColor: 'bg-ink-900 text-white shadow-md' },
+                { value: 'planned', label: isHi ? 'नियोजित / अनुसूचित' : 'PLANNED / Scheduled', activeColor: 'bg-ink-100 text-ink-800' },
               ].map(opt => (
                 <button
                   key={opt.value}
@@ -657,11 +525,11 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
 
           {/* Requester Contact Details */}
           <div className="space-y-1.5 md:col-span-2 pt-4 border-t border-ink-100">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-ink-800">Requester / Contact Person</h4>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink-800">{isHi ? 'अनुरोधकर्ता / संपर्क व्यक्ति' : 'Requester / Contact Person'}</h4>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Requester Name</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'अनुरोधकर्ता का नाम' : 'Requester Name'}</label>
             <input
               id="inp-req-name"
               type="text"
@@ -672,7 +540,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Contact Phone *</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'संपर्क फोन *' : 'Contact Phone *'}</label>
             <input
               id="inp-req-phone"
               type="tel"
@@ -685,7 +553,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           </div>
 
           <div className="space-y-1.5 md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Contact Email *</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'संपर्क ईमेल *' : 'Contact Email *'}</label>
             <input
               id="inp-req-email"
               type="email"
@@ -709,7 +577,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           </div>
 
           <div className="space-y-1.5 md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">Additional Notes</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-ink-600 block">{isHi ? 'अतिरिक्त नोट्स' : 'Additional Notes'}</label>
             <textarea
               id="inp-req-notes"
               rows={3}
@@ -727,7 +595,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                   className="mt-0.5 rounded border-ink-300 text-blood-600 focus:ring-blood-500"
                 />
                 <span>
-                  <strong>Share my contact details immediately:</strong> Allow matched donors to see my phone number in the initial WhatsApp SOS alert so they can contact me directly.
+                  {isHi ? <><strong>मेरी संपर्क जानकारी तुरंत साझा करें:</strong> मिले हुए रक्तदाताओं को WhatsApp SOS अलर्ट में मेरा फोन नंबर दिखाएं।</> : <><strong>Share my contact details immediately:</strong> Allow matched donors to see my phone number in the initial WhatsApp SOS alert so they can contact me directly.</>}
                 </span>
               </label>
               <label className="flex items-start gap-3 rounded-xl border border-ink-200 bg-ink-50/70 p-3 text-xs text-ink-700 cursor-pointer">
@@ -738,7 +606,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                   onChange={e => setFormData(prev => ({ ...prev, showcase_opt_in: e.target.checked }))}
                 className="mt-0.5 accent-blood-600"
               />
-              <span>Show this request in the public live feed using only blood group, city, urgency, and unit count. No patient, hospital, phone, or tracking details are shared.</span>
+              <span>{isHi ? 'इस अनुरोध को सार्वजनिक लाइव फ़ीड में केवल रक्त समूह, शहर, आपात स्तर और यूनिट काउंट के साथ दिखाएं।' : 'Show this request in the public live feed using only blood group, city, urgency, and unit count. No patient, hospital, phone, or tracking details are shared.'}</span>
             </label>
               <label className="flex items-start gap-3 rounded-xl border border-blood-200 bg-blood-50/40 p-3 text-xs text-blood-900 cursor-pointer font-medium">
                 <input
@@ -749,7 +617,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                   className="mt-0.5 accent-blood-600 w-4 h-4"
                 />
                 <span>
-                  <strong>Broadcast alert to Live Simulator feed:</strong> Enable real-time simulation alerts in the bottom-right Live Simulator console for testing and instant community broadcast.
+                  {isHi ? <><strong>लाइव सिमुलेटर फ़ीड में अलर्ट भेजें:</strong> परीक्षण और सामुदायिक प्रसारण के लिए रीयल-टाइम सिमुलेशन अलर्ट सक्रिय करें।</> : <><strong>Broadcast alert to Live Simulator feed:</strong> Enable real-time simulation alerts in the Live Simulator console for testing and instant community broadcast.</>}
                 </span>
               </label>
             </div>
@@ -766,8 +634,8 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
             className="w-5 h-5 text-blood-600 rounded focus:ring-blood-500 border-ink-300"
           />
           <div className="text-xs text-ink-800 leading-tight font-medium">
-            <p className="font-bold text-ink-900">Genuine Medical Request Verification</p>
-            <p className="text-ink-500 text-[11px] mt-0.5">Spamming or posting fake requests is strictly prohibited and subject to account flagging.</p>
+            <p className="font-bold text-ink-900">{isHi ? 'वास्तविक चिकित्सा अनुरोध सत्यापन' : 'Genuine Medical Request Verification'}</p>
+            <p className="text-ink-500 text-[11px] mt-0.5">{isHi ? 'स्पैमिंग या नकली अनुरोध पोस्ट करना सख्ती से प्रतिबंधित है।' : 'Spamming or posting fake requests is strictly prohibited and subject to account flagging.'}</p>
           </div>
         </div>
 
@@ -778,7 +646,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           className="w-full py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 via-blood-700 to-blood-800 hover:from-blood-700 hover:to-blood-900 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <Eye className="w-4 h-4 text-white" />
-          <span>Preview Request Before Broadcasting</span>
+          <span>{isHi ? 'प्रसारण से पहले अनुरोध देखें' : 'Preview Request Before Broadcasting'}</span>
         </button>
       </form>
     </div>
@@ -798,9 +666,9 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/20 border border-amber-400/30">
             <Eye className="w-6 h-6 text-amber-300" />
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">Review Before Broadcasting</h2>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">{isHi ? 'प्रसारण से पहले समीक्षा करें' : 'Review Before Broadcasting'}</h2>
           <p className="text-ink-300 text-xs mt-1 max-w-md mx-auto">
-            Double-check all details. Once you broadcast, matched donors will be notified immediately.
+            {isHi ? 'सभी विवरण दोबारा जांचें। एक बार प्रसारित करने के बाद, मिले हुए रक्तदाताओं को तुरंत सूचित किया जाएगा।' : 'Double-check all details. Once you broadcast, matched donors will be notified immediately.'}
           </p>
         </div>
 
@@ -907,92 +775,21 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 if (loggedInRequester || loggedInDonor) {
                   handleBroadcast();
                 } else {
-                  handleSendSosOtp();
+                  if (onNavigate) {
+                    onNavigate('requester-register');
+                  } else {
+                    setError('Please sign up or sign in to broadcast blood requests.');
+                  }
                 }
               }}
-              disabled={loading || sosSending}
+              disabled={loading}
               className="flex-1 flex items-center justify-center gap-2 px-5 py-3 btn-glow bg-gradient-to-r from-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg cursor-pointer disabled:opacity-50"
             >
-              {loading || sosSending ? (
-                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{sosSending ? 'Sending OTP...' : 'Broadcasting...'}</span>
-              ) : (<><Megaphone className="w-4 h-4" /> {loggedInRequester || loggedInDonor ? 'Broadcast Now' : 'Send OTP & Broadcast Now'}</>)}
+              {loading ? (
+                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Broadcasting...</span>
+              ) : (<><Megaphone className="w-4 h-4" /> {loggedInRequester || loggedInDonor ? 'Broadcast Now' : 'Sign Up to Broadcast'}</>)}
             </button>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Step 3: Quick Emergency SOS WhatsApp OTP Verification Screen ────────────
-  if (step === 'sos-verify') {
-    return (
-      <div id="sos-verify-container" className="max-w-md mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-12 p-8 text-center animate-in fade-in zoom-in-95 duration-200">
-        <div className="w-16 h-16 rounded-2xl bg-blood-100 flex items-center justify-center mx-auto mb-6 text-blood-600 shadow-inner">
-          <Lock className="w-8 h-8" />
-        </div>
-        <h3 className="text-2xl font-black text-ink-900 mb-2">Verify WhatsApp Number</h3>
-        <p className="text-sm text-ink-600 mb-6 leading-relaxed">
-          We sent an urgent 6-digit verification code to your WhatsApp number <strong className="text-ink-900 font-bold">{formData.requester_phone}</strong>. Verify now to instantly broadcast your emergency request to compatible blood donors nearby.
-        </p>
-
-        {error && (
-          <div className="mb-6 p-4 rounded-xl bg-blood-50 border border-blood-200 text-blood-700 text-xs font-medium text-left flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-blood-600" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleVerifySosOtpAndBroadcast} className="space-y-6">
-          <div>
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="• • • • • •"
-              value={sosOtp}
-              onChange={(e) => setSosOtp(e.target.value.replace(/\D/g, ''))}
-              className="w-full py-4 text-center text-3xl font-black tracking-[0.4em] bg-ink-50/80 border-2 border-ink-200 rounded-2xl focus:border-blood-500 focus:bg-white focus:ring-4 focus:ring-blood-500/15 outline-none transition-all placeholder:tracking-normal placeholder:font-normal placeholder:text-ink-300"
-              autoFocus
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || sosOtp.length !== 6}
-            className="w-full py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 via-blood-700 to-blood-800 hover:from-blood-700 hover:to-blood-900 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Broadcasting Emergency Alert...</span>
-              </span>
-            ) : (
-              <>
-                <Megaphone className="w-4 h-4" />
-                <span>Verify & Broadcast Request Now</span>
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-6 border-t border-ink-100 flex items-center justify-between text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setStep('confirm')}
-            className="text-ink-500 hover:text-ink-800 flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Review</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSendSosOtp}
-            disabled={sosSending}
-            className="text-blood-600 hover:text-blood-700 transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {sosSending ? 'Resending OTP...' : 'Resend Code via WhatsApp'}
-          </button>
         </div>
       </div>
     );

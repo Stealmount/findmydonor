@@ -11,7 +11,7 @@ interface HospitalDashboardProps {
 }
 
 export function HospitalDashboard({ hospital, onLogout }: HospitalDashboardProps) {
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
 
   // --- Real-functioning Inventory State ---
@@ -163,7 +163,27 @@ export function HospitalDashboard({ hospital, onLogout }: HospitalDashboardProps
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Language Switcher Pill [ EN | HI ] */}
+          <div className="flex items-center rounded-full bg-ink-900 p-0.5 border border-ink-800">
+            <button
+              onClick={() => setLanguage('EN')}
+              className={`rounded-full px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                !isHi ? 'bg-blood-600 text-white shadow-sm' : 'text-ink-400 hover:text-white'
+              }`}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLanguage('HI')}
+              className={`rounded-full px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                isHi ? 'bg-blood-600 text-white shadow-sm' : 'text-ink-400 hover:text-white'
+              }`}
+            >
+              HI
+            </button>
+          </div>
+
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-[11px] font-bold uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             {isHi ? 'स्थिर' : 'Stable'}
@@ -374,7 +394,7 @@ export function HospitalDashboard({ hospital, onLogout }: HospitalDashboardProps
               {isHi ? 'आपातकालीन कंसोल' : 'Emergency Console'}
             </h2>
             <h3 className="text-xl font-bold text-white mb-5 tracking-tight">
-              {isHi ? 'SOS अनुरोध भेजें' : 'Broadcast SOS Request'}
+              {isHi ? 'आपातकालीन रक्त अनुरोध भेजें' : 'Broadcast Emergency Request'}
             </h3>
             
             <AnimatePresence mode="wait">

@@ -27,7 +27,7 @@ interface RequestTrackingProps {
 }
 
 export default function RequestTracking({ initialCode = '', onStateChange, role = 'requester', matchId }: RequestTrackingProps) {
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
   const [searchCode, setSearchCode] = useState(initialCode);
   const [request, setRequest] = useState<BloodRequest | null>(null);
@@ -192,19 +192,24 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
           {donorResponseStatus === 'confirmed' ? (
             <div className="text-center py-8">
               <Heart className="w-12 h-12 text-blood-600 mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-ink-900 mb-2">Thank you — the requester has been notified. 🩸</h2>
-              <p className="text-sm text-ink-500">Please coordinate your arrival with the requester. Your contact will be shared shortly.</p>
+              <h2 className="text-xl font-bold text-ink-900 mb-2">
+                {isHi ? 'धन्यवाद — अनुरोधकर्ता को सूचित कर दिया गया है। 🩸' : 'Thank you — the requester has been notified. 🩸'}
+              </h2>
+              <p className="text-sm text-ink-500">
+                {isHi ? 'कृपया अनुरोधकर्ता के साथ अपनी पहुँच का समन्वय करें। आपका संपर्क जल्द ही साझा किया जाएगा।' : 'Please coordinate your arrival with the requester. Your contact will be shared shortly.'}
+              </p>
             </div>
           ) : donorResponseStatus === 'declined' ? (
             <div className="text-center py-8">
               <ShieldCheck className="w-12 h-12 text-ink-400 mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-ink-900 mb-2">Thank you for letting us know.</h2>
-              <p className="text-sm text-ink-500">We've removed you from this request and will look for another match.</p>
+              <h2 className="text-xl font-bold text-ink-900 mb-2">{isHi ? 'आपकी प्रतिक्रिया दर्ज कर ली गई है' : 'Your response has been recorded'}</h2>
+              <p className="text-sm text-ink-500">{isHi ? 'अद्यतन के लिए धन्यवाद। हम अन्य संगत रक्तदाताओं को खोजना जारी रखेंगे।' : 'Thank you for updating. We will continue matching with other compatible donors.'}</p>
             </div>
           ) : donorResponseStatus === 'already_done' ? (
             <div className="text-center py-8">
-              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-ink-900 mb-2">You've already responded to this request.</h2>
+              <Clock className="w-12 h-12 text-ink-400 mx-auto mb-4" />
+              <h2 className="text-xl font-bold text-ink-900 mb-2">{isHi ? 'प्रतिक्रिया पहले ही दर्ज हो चुकी है' : 'Response already recorded'}</h2>
+              <p className="text-sm text-ink-500">{isHi ? 'आप इस रक्तदान अनुरोध के लिए पहले ही अपनी प्रतिक्रिया दर्ज कर चुके हैं।' : 'You have already submitted your availability response for this request.'}</p>
             </div>
           ) : request ? (
             <div className="space-y-5">
@@ -213,14 +218,14 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
                   <Heart className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-ink-900">Blood Donation Request</h2>
-                  <p className="text-xs text-ink-500">Someone nearby needs your help</p>
+                  <h2 className="text-lg font-bold text-ink-900">{isHi ? 'रक्तदान अनुरोध' : 'Blood Donation Request'}</h2>
+                  <p className="text-xs text-ink-500">{isHi ? 'आसपास किसी को आपकी मदद की जरूरत है' : 'Someone nearby needs your help'}</p>
                 </div>
               </div>
               <div className="rounded-2xl bg-ink-50/70 p-5 border border-ink-100 space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="rounded-full bg-blood-100 px-3 py-1 text-sm font-bold text-blood-700 border border-blood-200">{request.blood_type_needed}</span>
-                  <span className="text-ink-600 font-medium">{request.units_required} unit(s) needed</span>
+                  <span className="text-ink-600 font-medium">{request.units_required} {isHi ? 'यूनिट की आवश्यकता' : 'unit(s) needed'}</span>
                   <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${request.urgency_level === 'critical' ? 'bg-blood-100 text-blood-700' : request.urgency_level === 'urgent' ? 'bg-amber-100 text-amber-700' : 'bg-ink-100 text-ink-600'}`}>{request.urgency_level}</span>
                 </div>
                 <p className="text-xs font-medium text-ink-700 flex items-center gap-1.5">
@@ -231,22 +236,22 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
                   onClick={() => handleDonorRespond('approved')}
-                  className="flex-1 py-3 px-4 rounded-xl bg-blood-600 hover:bg-blood-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-sm"
+                  className="flex-1 py-3 px-4 rounded-xl bg-blood-600 hover:bg-blood-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
                 >
                   <Heart className="w-4 h-4" />
-                  I can help — confirm
+                  {isHi ? 'मैं मदद कर सकता हूँ — पुष्टि करें' : 'I can help — confirm'}
                 </button>
                 <button
                   onClick={() => handleDonorRespond('declined')}
-                  className="py-3 px-4 rounded-xl bg-white hover:bg-ink-50 border border-ink-200 text-ink-700 font-semibold text-sm flex items-center justify-center gap-2 transition-all"
+                  className="py-3 px-4 rounded-xl bg-white hover:bg-ink-50 border border-ink-200 text-ink-700 font-semibold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <XCircle className="w-4 h-4" />
-                  Not available right now
+                  {isHi ? 'अभी उपलब्ध नहीं हूँ' : 'Not available right now'}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-ink-400 text-sm">Loading request details…</div>
+            <div className="text-center py-8 text-ink-400 text-sm">{isHi ? 'अनुरोध विवरण लोड हो रहा है…' : 'Loading request details…'}</div>
           )}
         </div>
       )}

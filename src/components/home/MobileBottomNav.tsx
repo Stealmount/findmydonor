@@ -1,6 +1,7 @@
 import React from 'react';
 import { Home, HeartPulse, Activity, UserPlus, UserCheck } from 'lucide-react';
 import type { User, Requester } from '../../types';
+import { useLanguage } from '../../lib/LanguageContext';
 
 interface MobileBottomNavProps {
   activeView: string;
@@ -15,6 +16,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   loggedInUser,
   loggedInRequester
 }) => {
+  const { language } = useLanguage();
+  const isHi = language === 'HI';
+
   const getDashboardView = () => {
     if (loggedInUser) return 'donor-dashboard';
     if (loggedInRequester) return 'requester-portal';
@@ -24,14 +28,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const navItems = [
     {
       id: 'home',
-      label: 'Explore',
+      label: isHi ? 'होम' : 'Explore',
       icon: Home,
       view: 'home',
       activeColor: 'text-blood-600',
     },
     {
       id: 'request',
-      label: 'SOS Request',
+      label: isHi ? 'रक्त मांग' : 'Request Blood',
       icon: HeartPulse,
       view: 'request',
       isSOS: true,
@@ -39,21 +43,21 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     },
     {
       id: 'tracking',
-      label: 'Track Code',
+      label: isHi ? 'ट्रैकिंग' : 'Track Code',
       icon: Activity,
       view: 'tracking',
       activeColor: 'text-blood-600',
     },
     {
       id: 'signup',
-      label: 'Sign Up',
+      label: isHi ? 'पंजीकरण' : 'Sign Up',
       icon: UserPlus,
       view: 'auth-signup',
       activeColor: 'text-blood-600',
     },
     {
       id: 'dashboard',
-      label: loggedInUser || loggedInRequester ? 'My Portal' : 'Sign In',
+      label: loggedInUser || loggedInRequester ? (isHi ? 'पोर्टल' : 'My Portal') : (isHi ? 'लॉग इन' : 'Sign In'),
       icon: UserCheck,
       view: getDashboardView(),
       activeColor: 'text-blood-600',

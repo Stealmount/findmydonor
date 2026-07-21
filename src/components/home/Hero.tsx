@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Droplet,
   Search,
@@ -17,14 +17,7 @@ interface HeroProps {
 }
 
 export function Hero({ onNavigate }: HeroProps) {
-  const [unitsRequested, setUnitsRequested] = useState(3);
-  const [donorsFound, setDonorsFound] = useState(0);
   const { t } = useLanguage();
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDonorsFound(unitsRequested), 1200);
-    return () => clearTimeout(timer);
-  }, [unitsRequested]);
 
   return (
     <section
@@ -134,16 +127,7 @@ export function Hero({ onNavigate }: HeroProps) {
 
           {/* Interactive card */}
           <div className="lg:col-span-5">
-            <HeroCard
-              unitsRequested={unitsRequested}
-              donorsFound={donorsFound}
-              onNavigate={onNavigate}
-              onAddUnit={() => {
-                setUnitsRequested((u) => Math.min(u + 1, 10));
-                setDonorsFound(0);
-                setTimeout(() => setDonorsFound(unitsRequested + 1), 1100);
-              }}
-            />
+            <HeroCard onNavigate={onNavigate} />
           </div>
         </div>
 
@@ -157,8 +141,8 @@ export function Hero({ onNavigate }: HeroProps) {
         >
           <p className="text-center text-[12px] font-medium uppercase tracking-[0.18em] text-ink-400">
             {useLanguage().language === 'HI'
-              ? 'समुदाय नेटवर्क, अस्पतालों और 380,000+ सत्यापित रक्तदाताओं द्वारा विश्वसनीय'
-              : 'Trusted by community networks, hospitals, and 380,000+ verified donors'}
+              ? 'समुदाय नेटवर्क, अस्पतालों और सत्यापित रक्तदाताओं द्वारा विश्वसनीय'
+              : 'Trusted by community networks, hospitals, and verified voluntary donors'}
           </p>
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 items-center gap-x-8 gap-y-6">
             {["Apollo", "Medanta", "RedCross+", "Lifeline", "AIIMS", "Fortis"].map(
@@ -181,19 +165,34 @@ export function Hero({ onNavigate }: HeroProps) {
 }
 
 function HeroCard({
-  unitsRequested,
-  donorsFound,
   onNavigate,
-  onAddUnit,
 }: {
-  unitsRequested: number;
-  donorsFound: number;
   onNavigate: (view: 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'admin') => void;
-  onAddUnit: () => void;
 }) {
   const [quickBlood, setQuickBlood] = useState('O+');
+  const [stats, setStats] = useState<{ bloodGroupCounts: Record<string, number> }>({ bloodGroupCounts: {} });
   const { language } = useLanguage();
   const isHi = language === 'HI';
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((res) => res.json())
+      .then((data) => setStats(data || { bloodGroupCounts: {} }))
+      .catch(() => {});
+  }, []);
+
+  const compatibilityMap: Record<string, { canReceiveFrom: string[]; canDonateTo: string[]; avgTime: string }> = {
+    'O+': { canReceiveFrom: ['O+', 'O-'], canDonateTo: ['O+', 'A+', 'B+', 'AB+'], avgTime: '< 3 mins' },
+    'A+': { canReceiveFrom: ['A+', 'A-', 'O+', 'O-'], canDonateTo: ['A+', 'AB+'], avgTime: '< 4 mins' },
+    'B+': { canReceiveFrom: ['B+', 'B-', 'O+', 'O-'], canDonateTo: ['B+', 'AB+'], avgTime: '< 4 mins' },
+    'AB+': { canReceiveFrom: ['All 8 Types (Universal Recipient)'], canDonateTo: ['AB+ Only'], avgTime: '< 5 mins' },
+    'O-': { canReceiveFrom: ['O- Only'], canDonateTo: ['All 8 Types (Universal Donor)'], avgTime: '< 6 mins' },
+    'A-': { canReceiveFrom: ['A-', 'O-'], canDonateTo: ['A-', 'A+', 'AB-', 'AB+'], avgTime: '< 7 mins' },
+    'B-': { canReceiveFrom: ['B-', 'O-'], canDonateTo: ['B-', 'B+', 'AB-', 'AB+'], avgTime: '< 7 mins' },
+    'AB-': { canReceiveFrom: ['AB-', 'A-', 'B-', 'O-'], canDonateTo: ['AB-', 'AB+'], avgTime: '< 8 mins' },
+  };
+
+  const currentCompat = compatibilityMap[quickBlood] || compatibilityMap['O+'];
 
   return (
     <motion.div
@@ -211,91 +210,212 @@ function HeroCard({
       <div className="relative rounded-3xl bg-white shadow-premium-lg subtle-border p-5 sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="relative grid h-9 w-9 place-items-center rounded-xl blood-drop-gradient">
-              <Droplet className="h-4 w-4 text-white fill-white" />
+          <div className="flex items-center gap-2.5">
+            <div className="relative grid h-10 w-10 place-items-center rounded-xl blood-drop-gradient shadow-sm">
+              <Droplet className="h-5 w-5 text-white fill-white" />
             </div>
             <div>
-              <p className="text-[12px] font-bold uppercase tracking-wider text-blood-600">
-                {isHi ? 'तत्काल आपातकालीन SOS अनुरोध' : 'Quick Emergency SOS Requisition'}
+              <p className="text-[12px] font-extrabold uppercase tracking-wider text-blood-600 font-mono">
+                {isHi ? 'इंटरएक्टिव रक्त संगतता केंद्र' : 'Interactive Blood Group Compatibility Hub'}
               </p>
-              <p className="text-[13px] font-semibold text-ink-900">
-                {isHi ? 'सत्यापित अस्पताल रक्तदाताओं से तुरंत जुड़ें' : 'Instantly connect with verified hospital donors'}
+              <p className="text-[13px] font-bold text-ink-900">
+                {isHi ? 'रक्त समूह चुनें और जानें किसे रक्तदान कर सकते हैं' : 'Tap any blood group to view exact donor & recipient matches'}
               </p>
             </div>
           </div>
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/60 flex items-center">
-            <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/60 flex items-center shrink-0">
+            <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             {isHi ? 'लाइव 24/7' : 'Live 24/7'}
           </span>
         </div>
 
-        {/* Quick Requisition Selector Box */}
-        <div className="mt-4 p-4 rounded-2xl bg-blood-50/70 border border-blood-200/80 space-y-3">
+        {/* Quick Requisition & Compatibility Box */}
+        <div className="mt-4 p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-blood-50/80 to-ink-50/60 border border-blood-200/80 space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-blood-900">
-              {isHi ? 'आवश्यक रक्त समूह चुनें:' : 'Select Needed Blood Group:'}
+            <span className="text-xs font-extrabold uppercase tracking-wider text-blood-950 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blood-600 inline-block" />
+              {isHi ? 'अपना / आवश्यक रक्त समूह चुनें:' : 'Select Blood Group To Check:'}
             </span>
-            <div className="flex flex-col text-right">
-              <span className="text-[10px] sm:text-xs font-semibold text-blood-700 font-sans tracking-wide">
-                {isHi ? 'रक्तदान सत्यापित' : 'FindMyDonor™ Verified'}
-              </span>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'].map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setQuickBlood(type)}
-                className={`h-9 rounded-xl text-xs font-bold font-mono transition-all cursor-pointer ${
-                  quickBlood === type
-                    ? 'blood-drop-gradient text-white shadow-md scale-105'
-                    : 'bg-white text-ink-800 border border-ink-200 hover:border-blood-400'
-                }`}
-              >
-                {type}
-              </button>
-            ))}
+            <span className="text-[10px] sm:text-xs font-bold text-blood-700 font-sans tracking-wide bg-blood-100/80 px-2 py-0.5 rounded-md">
+              {isHi ? 'चिकित्सकीय रूप से सत्यापित' : 'FindMyDonor™ Verified'}
+            </span>
           </div>
 
-          <button
-            onClick={() => {
-              onNavigate('request');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="w-full mt-2 btn-glow group flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 py-3.5 text-sm font-bold text-white shadow-md hover:from-blood-700 hover:to-blood-800 transition-all cursor-pointer"
-          >
-            <Heart className="w-4 h-4 text-white fill-white animate-bounce" />
-            {isHi ? `${quickBlood} के लिए तुरंत SOS अनुरोध भेजें` : `Launch SOS Request for ${quickBlood} Now`}
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </button>
+          {/* Blood Group Buttons */}
+          <div className="grid grid-cols-4 gap-2">
+            {['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-'].map((type) => {
+              const isActive = quickBlood === type;
+              return (
+                <motion.button
+                  key={type}
+                  type="button"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => setQuickBlood(type)}
+                  className={`relative h-11 rounded-xl text-sm font-black font-mono transition-colors cursor-pointer flex items-center justify-center gap-1 overflow-hidden ${
+                    isActive
+                      ? 'text-white shadow-lg ring-2 ring-blood-300'
+                      : 'bg-white text-ink-800 border border-ink-200 hover:border-blood-500 hover:bg-blood-50/50'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeBloodGroupIndicator"
+                      className="absolute inset-0 blood-drop-gradient z-0 rounded-xl"
+                      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                    />
+                  )}
+                  <span className="relative z-10">{type}</span>
+                </motion.button>
+              );
+            })}
+          </div>
+
+          {/* Dynamic Compatibility Display Matrix */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={quickBlood}
+              initial={{ opacity: 0, y: 12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1"
+            >
+              {/* Box 1: Can Receive From */}
+              <div className="p-3.5 rounded-xl bg-white border border-emerald-200/90 shadow-sm space-y-2.5 hover:border-emerald-400 transition-colors">
+                <div className="flex items-center gap-1.5 text-emerald-800 font-extrabold text-xs uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>{isHi ? 'किससे रक्त ले सकते हैं (Recipients)' : 'Can Receive Blood From:'}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 min-h-[28px] items-center">
+                  {currentCompat.canReceiveFrom.map((badge, i) => (
+                    <motion.span
+                      key={`${quickBlood}-rx-${badge}`}
+                      initial={{ opacity: 0, scale: 0.8, y: 4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ delay: i * 0.04, type: 'spring', stiffness: 450, damping: 25 }}
+                      whileHover={{ scale: 1.08, y: -1 }}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-950 font-mono font-bold text-xs shadow-2xs cursor-default"
+                    >
+                      {badge}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Box 2: Can Donate To */}
+              <div className="p-3.5 rounded-xl bg-white border border-blood-200/90 shadow-sm space-y-2.5 hover:border-blood-400 transition-colors">
+                <div className="flex items-center gap-1.5 text-blood-800 font-extrabold text-xs uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-blood-600 animate-pulse" />
+                  <span>{isHi ? 'किसे रक्त दे सकते हैं (Donors)' : 'Can Donate Blood To:'}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 min-h-[28px] items-center">
+                  {currentCompat.canDonateTo.map((badge, i) => (
+                    <motion.span
+                      key={`${quickBlood}-tx-${badge}`}
+                      initial={{ opacity: 0, scale: 0.8, y: 4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ delay: i * 0.04, type: 'spring', stiffness: 450, damping: 25 }}
+                      whileHover={{ scale: 1.08, y: -1 }}
+                      className="px-2.5 py-1 rounded-lg bg-blood-50 border border-blood-300 text-blood-950 font-mono font-bold text-xs shadow-2xs cursor-default"
+                    >
+                      {badge}
+                    </motion.span>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Action CTAs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                onNavigate('request');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="w-full btn-glow flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 py-3.5 px-4 text-xs font-extrabold text-white shadow-md hover:from-blood-700 hover:to-blood-800 transition-all cursor-pointer group"
+            >
+              <Heart className="w-4 h-4 text-white fill-white animate-pulse shrink-0" />
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={`cta-req-${quickBlood}`}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {isHi ? `${quickBlood} रक्त का अनुरोध करें →` : `Request ${quickBlood} Blood →`}
+                </motion.span>
+              </AnimatePresence>
+            </motion.button>
+
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                onNavigate('donor-register');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-white border-2 border-blood-600 hover:bg-blood-50 py-3.5 px-4 text-xs font-extrabold text-blood-700 shadow-sm transition-all cursor-pointer group"
+            >
+              <Droplet className="w-4 h-4 text-blood-600 fill-blood-600 shrink-0" />
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={`cta-don-${quickBlood}`}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {isHi ? `${quickBlood} रक्तदाता बनें →` : `Register as ${quickBlood} Donor →`}
+                </motion.span>
+              </AnimatePresence>
+            </motion.button>
+          </div>
         </div>
 
         {/* Request details simulation */}
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {[
-            { label: isHi ? 'रक्त समूह' : 'Blood group', value: quickBlood, color: 'blood' },
-            { label: isHi ? 'तैयार रक्तदाता' : 'Donors Ready', value: isHi ? '14 पास में' : '14 Near', color: 'ink' },
-            { label: isHi ? 'औसत प्रतिक्रिया' : 'Avg Response', value: isHi ? '< 4 मिनट' : '< 4 mins', color: 'blood' },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="rounded-2xl border border-ink-100 bg-ink-50/50 p-3"
-            >
-              <p className="text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-                {s.label}
-              </p>
-              <p
-                className={`mt-1 text-[16px] font-semibold ${
-                  s.color === "blood" ? "text-blood-600" : "text-ink-900"
-                }`}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`stats-${quickBlood}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 grid grid-cols-3 gap-2.5"
+          >
+            {[
+              { label: isHi ? 'चयनित समूह' : 'Selected Group', value: quickBlood, color: 'blood' },
+              {
+                label: isHi ? 'तैयार रक्तदाता' : 'Verified Donors',
+                value: stats.bloodGroupCounts[quickBlood] ? `${stats.bloodGroupCounts[quickBlood]} ${isHi ? 'पंजीकृत' : 'Registered'}` : isHi ? 'सक्रिय नेटवर्क' : 'Active Network',
+                color: 'ink'
+              },
+              { label: isHi ? 'औसत प्रतिक्रिया' : 'Avg Response', value: currentCompat.avgTime, color: 'blood' },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="rounded-2xl border border-ink-200/70 bg-ink-50/60 p-3 text-center transition-all hover:bg-white hover:shadow-xs"
               >
-                {s.value}
-              </p>
-            </div>
-          ))}
-        </div>
+                <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-ink-500">
+                  {s.label}
+                </p>
+                <p
+                  className={`mt-1 text-base sm:text-lg font-black font-mono ${
+                    s.color === "blood" ? "text-blood-600" : "text-ink-900"
+                  }`}
+                >
+                  {s.value}
+                </p>
+              </div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Authentic Clinical Photography Banner (100% Real Unsplash Photo) */}
         <div className="mt-4 overflow-hidden rounded-2xl border border-ink-200/80 relative group">

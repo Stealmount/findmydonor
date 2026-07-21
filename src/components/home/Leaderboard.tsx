@@ -12,16 +12,8 @@ interface LeaderboardEntry {
   isLegend: boolean;
 }
 
-const DEFAULT_LEADERBOARD: LeaderboardEntry[] = [
-  { name: 'Aditya Mehta', donations: 14, city: 'Gurugram', bloodType: 'O-', rank: 1, isLegend: true },
-  { name: 'Rahul Sharma', donations: 9, city: 'New Delhi', bloodType: 'A+', rank: 2, isLegend: true },
-  { name: 'Priya Patel', donations: 8, city: 'Noida', bloodType: 'B+', rank: 3, isLegend: false },
-  { name: 'Dr. Faisal', donations: 7, city: 'Ghaziabad', bloodType: 'AB-', rank: 4, isLegend: false },
-  { name: 'Meera K.', donations: 5, city: 'Faridabad', bloodType: 'O+', rank: 5, isLegend: false },
-];
-
 export function Leaderboard() {
-  const [leaders, setLeaders] = useState<LeaderboardEntry[]>(DEFAULT_LEADERBOARD);
+  const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,9 +31,12 @@ export function Leaderboard() {
             isLegend: item.donation_count >= 6,
           }));
           setLeaders(list.slice(0, 5));
+        } else {
+          setLeaders([]);
         }
       } catch (err) {
         console.error('Error fetching leaderboard:', err);
+        setLeaders([]);
       } finally {
         setLoading(false);
       }
@@ -69,6 +64,15 @@ export function Leaderboard() {
 
         {/* Leaderboard list container */}
         <div className="bg-white rounded-3xl border border-ink-200/80 shadow-premium-lg overflow-hidden divide-y divide-ink-100 relative z-10">
+          {leaders.length === 0 && !loading && (
+            <div className="p-10 text-center space-y-3">
+              <Trophy className="w-10 h-10 text-amber-500 mx-auto animate-bounce" />
+              <h3 className="text-base sm:text-lg font-bold text-ink-900">Be the First Lifesaver on the Leaderboard!</h3>
+              <p className="text-xs sm:text-sm text-ink-600 max-w-md mx-auto">
+                No voluntary donations recorded yet in your area. Register as a volunteer donor today, complete your first donation, and earn the top spot on our Hero Honor Roll.
+              </p>
+            </div>
+          )}
           {leaders.map((entry, idx) => {
             const isTop3 = entry.rank <= 3;
             return (

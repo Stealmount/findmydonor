@@ -2,15 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Radio, Heart, Bell } from 'lucide-react';
 
-const LIVE_EVENTS = [
-  { text: 'Amit K. matched for O+ blood request at AIIMS New Delhi', time: 'Just now', type: 'match' },
-  { text: 'New donor registered in Noida Sector 15', time: '1 min ago', type: 'donor' },
-  { text: 'Aditya M. donated 2 units of A- at Max Saket', time: '3 min ago', type: 'donation' },
-  { text: 'Emergency SOS sent to 14 donors in Gurugram', time: '4 min ago', type: 'sos' },
-  { text: 'Priya S. matched for AB- at Medanta Hospital', time: '7 min ago', type: 'match' },
-  { text: 'Faisal I. completed blood donation safety cooldown', time: '12 min ago', type: 'cooldown' },
-  { text: 'Safdarjung Hospital registered 3 critical blood requests', time: '15 min ago', type: 'request' },
-  { text: 'Fortis Hospital Noida matched 100% compatible O- donor', time: '18 min ago', type: 'match' },
+const SYSTEM_STATUS_EVENTS = [
+  { text: 'Real-time pincode matching engine active & listening across network', time: 'Live Status', type: 'match' },
+  { text: 'WhatsApp & Email instant notification gateway operational', time: 'Live Status', type: 'cooldown' },
+  { text: '60-day & 90-day medical safety cooldown verification system active', time: 'Live Status', type: 'match' },
+  { text: 'Zero commercial fees · 100% free community blood matching network', time: 'Live Status', type: 'request' },
+  { text: 'No active emergency blood requests pending in your area right now', time: 'Live Status', type: 'request' },
 ];
 
 type LiveRequest = {
@@ -32,7 +29,7 @@ export function LiveFeed() {
         const payload = await response.json();
         if (active && response.ok) setLiveRequests(payload.requests || []);
       } catch {
-        // The static feed is a graceful fallback while the API is unavailable.
+        // Fallback to network readiness events while API loads or when zero requests exist.
       }
     };
     void load();
@@ -45,7 +42,7 @@ export function LiveFeed() {
         text: `${request.urgency_level.toUpperCase()} request: ${request.units_required} unit${request.units_required > 1 ? 's' : ''} of ${request.blood_type_needed} needed in ${request.hospital_city}`,
         time: 'Live', type: 'request',
       }))
-    : LIVE_EVENTS;
+    : SYSTEM_STATUS_EVENTS;
 
   useEffect(() => {
     const interval = setInterval(() => {

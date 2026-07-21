@@ -17,7 +17,8 @@ interface AuthHubProps {
 }
 
 export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLoginSuccessDonor, onLoginSuccessRequester }: AuthHubProps) {
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
+  const isHi = language === 'HI';
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [signupStep, setSignupStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [intent, setIntent] = useState<SignupIntent>(initialIntent);
@@ -52,8 +53,9 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       void (async () => {
         try {
           const saved = JSON.parse(emailPending) as { intent: SignupIntent; fullName: string; phone: string; email: string };
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user?.email_confirmed_at) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const user = session?.user;
+          if (user && user.email_confirmed_at) {
             sessionStorage.removeItem('raktdaan_email_confirm_pending');
             setIntent(saved.intent);
             setFullName(saved.fullName);
@@ -170,7 +172,16 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
       const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (authError) throw authError;
       await resolveSignedInState();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to sign in.'); }
+    } catch (caught) {
+      const msg = caught instanceof Error ? caught.message : 'Unable to sign in.';
+      if (msg.includes('Email not confirmed')) {
+        setError('Your email is not yet confirmed. Check your inbox for the confirmation link.');
+      } else if (msg.includes('Invalid login credentials')) {
+        setError('Incorrect email or password. Please try again.');
+      } else {
+        setError(msg);
+      }
+    }
     finally { setLoading(false); }
   };
 
@@ -212,7 +223,8 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
   const sendOtp = async () => {
     setError('');
     if (!consentAccepted) { setError('Consent is required before WhatsApp verification.'); return; }
-    if (!/^\d{10,12}$/.test(normalizedWhatsApp.replace(/\D/g, ''))) { setError('Enter a valid Indian WhatsApp number.'); return; }
+    const digits = normalizedWhatsApp.replace(/\D/g, '');
+    if (!/^(?:91)?[6-9]\d{9}$/.test(digits)) { setError('Enter a valid 10-digit Indian WhatsApp number.'); return; }
     setLoading(true);
     try {
       const response = await fetch('/api/wa/send-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: normalizedWhatsApp }) });
@@ -285,10 +297,14 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     <section className="w-full max-w-xl relative z-10">
       <header className="mb-8 text-center">
         <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl blood-drop-gradient shadow-lg shadow-blood-600/30"><Heart className="h-7 w-7 fill-white text-white" /></div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">{mode === 'signin' ? t.auth.welcomeSignIn : 'Join FindMyDonor™ safely'}</h1>
-        <p className="mt-2 text-sm text-ink-500">One verified WhatsApp identity. Choose both roles whenever needed.</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">
+          {mode === 'signin' ? t.auth.welcomeSignIn : (isHi ? 'सुरक्षित रूप से FindMyDonor™ से जुड़ें' : 'Join FindMyDonor™ safely')}
+        </h1>
+        <p className="mt-2 text-sm text-ink-500">
+          {isHi ? 'एक सत्यापित WhatsApp पहचान। आवश्यकता पड़ने पर दोनों भूमिकाएँ चुनें।' : 'One verified WhatsApp identity. Choose both roles whenever needed.'}
+        </p>
         <div className="mt-6 inline-flex rounded-2xl border border-ink-200 bg-ink-100 p-1.5">
-          {(['signin', 'signup'] as const).map(item => <button id={`auth-mode-${item}`} key={item} type="button" onClick={() => { setMode(item); setError(''); }} className={`rounded-xl px-6 py-2.5 text-sm font-bold transition ${mode === item ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600'}`}>{item === 'signin' ? 'Sign in' : 'Create account'}</button>)}
+          {(['signin', 'signup'] as const).map(item => <button id={`auth-mode-${item}`} key={item} type="button" onClick={() => { setMode(item); setError(''); }} className={`rounded-xl px-6 py-2.5 text-sm font-bold transition cursor-pointer ${mode === item ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600'}`}>{item === 'signin' ? (isHi ? 'साइन इन करें' : 'Sign in') : (isHi ? 'खाता बनाएं' : 'Create account')}</button>)}
         </div>
       </header>
       {error && <div role="alert" className="mb-5 flex gap-3 rounded-2xl border border-blood-200 bg-blood-50 p-4 text-sm font-semibold text-blood-700"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
@@ -317,13 +333,30 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
               <button
                 type="button"
                 onClick={async () => {
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (user?.email_confirmed_at) {
-                    sessionStorage.removeItem('raktdaan_email_confirm_pending');
-                    setEmailConfirmPending(false);
-                    setSignupStep(3);
-                    setInfoMessage('Email confirmed — continue with WhatsApp verification.');
-                  } else {
+                  try {
+                    // After clicking the confirm link, the session may be available
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (user?.email_confirmed_at) {
+                        sessionStorage.removeItem('raktdaan_email_confirm_pending');
+                        setEmailConfirmPending(false);
+                        setSignupStep(3);
+                        setInfoMessage('Email confirmed — continue with WhatsApp verification.');
+                        return;
+                      }
+                    }
+                    // No session yet — try refreshing to pick up the confirmed session
+                    const { data: refreshed } = await supabase.auth.refreshSession();
+                    if (refreshed.session?.user?.email_confirmed_at) {
+                      sessionStorage.removeItem('raktdaan_email_confirm_pending');
+                      setEmailConfirmPending(false);
+                      setSignupStep(3);
+                      setInfoMessage('Email confirmed — continue with WhatsApp verification.');
+                    } else {
+                      setInfoMessage('Not confirmed yet. Check your inbox or spam folder.');
+                    }
+                  } catch {
                     setInfoMessage('Not confirmed yet. Check your inbox or spam folder.');
                   }
                 }}

@@ -73,7 +73,7 @@ export function Navbar({ onNavigate, loggedInUser, loggedInRequester }: NavbarPr
             onClick={() => onNavigate('hospital-register' as any)}
             className="rounded-full px-3 py-1.5 text-xs xl:text-[13.5px] font-semibold text-ink-600 transition-colors hover:text-ink-900 hover:bg-ink-100/60 cursor-pointer whitespace-nowrap"
           >
-            For hospitals
+            {language === 'HI' ? 'अस्पतालों के लिए' : 'For hospitals'}
           </button>
 
           {!loggedInUser && !loggedInRequester ? (
@@ -211,7 +211,7 @@ export function Navbar({ onNavigate, loggedInUser, loggedInRequester }: NavbarPr
                 onClick={() => { setOpen(false); onNavigate('hospital-register' as any); }}
                 className="w-full text-left rounded-xl px-3.5 py-3 min-h-[44px] text-sm font-semibold text-ink-800 hover:bg-ink-100/80 active:scale-[0.99] transition flex items-center justify-between"
               >
-                <span>For hospitals</span>
+                <span>{language === 'HI' ? 'अस्पतालों के लिए' : 'For hospitals'}</span>
                 <HeartHandshake className="w-4 h-4 text-ink-400" />
               </button>
 

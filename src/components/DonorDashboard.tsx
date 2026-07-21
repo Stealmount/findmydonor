@@ -36,10 +36,11 @@ interface DonorDashboardProps {
   onLogout: () => void;
   onStateChange?: () => void;
   onGoogleRegisterRedirect?: (googleData: { uid: string; email: string; full_name: string }) => void;
+  onNavigateToRequest?: () => void;
 }
 
-export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, onStateChange, onGoogleRegisterRedirect }: DonorDashboardProps) {
-  const { t, language } = useLanguage();
+export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, onStateChange, onGoogleRegisterRedirect, onNavigateToRequest }: DonorDashboardProps) {
+  const { t, language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
   
   // Login State
@@ -460,12 +461,49 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
             id="btn-donor-logout"
             onClick={onLogout}
             className="p-3 rounded-2xl bg-white text-blood-700 hover:bg-white/90 transition-colors cursor-pointer shadow-lg"
-            title="Log Out"
+            title={isHi ? 'लॉग आउट' : 'Log Out'}
           >
             <LogOut className="w-5 h-5" />
           </button>
         </div>
       </div>
+
+      {/* ⚡ Need Blood? Switch to Requester Mode / Request Generator Banner */}
+      {onNavigateToRequest && (
+        <div className="rounded-3xl bg-gradient-to-r from-ink-900 via-ink-950 to-blood-950 border border-blood-500/30 p-6 sm:p-7 text-white relative overflow-hidden shadow-premium-lg">
+          <div className="absolute -right-10 -bottom-10 w-48 h-48 rounded-full bg-blood-600/15 blur-3xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 relative z-10">
+            <div className="flex items-start sm:items-center gap-4 max-w-2xl">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blood-500/20 border border-blood-500/30 text-blood-400 font-bold text-xl shrink-0 shadow-inner">
+                ⚡
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-extrabold text-white tracking-tight">
+                    {isHi ? 'क्या परिवार या मरीज के लिए तुरंत रक्त चाहिए?' : 'Need Emergency Blood for Family or Patient?'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-blood-500/20 border border-blood-500/30 text-blood-400 text-[10px] font-mono font-bold uppercase">
+                    1-Click Switch
+                  </span>
+                </div>
+                <p className="text-xs text-ink-300 mt-1 leading-relaxed">
+                  {isHi
+                    ? 'आप एक सत्यापित रक्तदाता हैं! बिना दोबारा पंजीकरण किए तुरंत अनुरोधकर्ता मोड में जाएं और रक्त अनुरोध जनरेट करें।'
+                    : 'You are a verified donor! Instantly switch to Requester Mode and broadcast an emergency blood request without signing up again.'}
+                </p>
+              </div>
+            </div>
+            <button
+              id="btn-donor-switch-requester"
+              type="button"
+              onClick={onNavigateToRequest}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl btn-glow bg-blood-600 hover:bg-blood-700 text-white font-extrabold text-xs shadow-lg transition-all whitespace-nowrap cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>{isHi ? '➕ रक्त अनुरोध जनरेट करें →' : '➕ Switch & Request Blood →'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Match Requests & Action Items Tab Box */}

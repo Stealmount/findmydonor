@@ -3,35 +3,43 @@ import { motion } from "framer-motion";
 import { HeartPulse, Clock, MapPin, Building2 } from "lucide-react";
 import { useLanguage } from "../../lib/LanguageContext";
 
-const stats = [
-  {
-    icon: HeartPulse,
-    n: "50+",
-    label: "Verified voluntary donors",
-    sub: "Ready to respond on safety cooldowns in Delhi NCR",
-  },
-  {
-    icon: Clock,
-    n: "18 mins",
-    label: "Median time to match",
-    sub: "Down from hours via traditional phone groups",
-  },
-  {
-    icon: MapPin,
-    n: "3",
-    label: "Active pilot cities",
-    sub: "Delhi, Noida, and Gurugram live",
-  },
-  {
-    icon: Building2,
-    n: "5",
-    label: "Partner hospitals",
-    sub: "Direct SOS integration during our pilot phase",
-  },
-];
-
 export function Impact() {
   const { t, language } = useLanguage();
+  const [dbStats, setDbStats] = React.useState({ totalDonors: 0, activeRequests: 0, livesSaved: 0 });
+
+  React.useEffect(() => {
+    fetch('/api/stats')
+      .then((res) => res.json())
+      .then((data) => setDbStats(data || { totalDonors: 0, activeRequests: 0, livesSaved: 0 }))
+      .catch(() => {});
+  }, []);
+
+  const stats = [
+    {
+      icon: HeartPulse,
+      n: dbStats.totalDonors > 0 ? `${dbStats.totalDonors}` : "Live",
+      label: language === 'HI' ? "सत्यापित स्वैच्छिक रक्तदाता" : "Verified voluntary donors",
+      sub: language === 'HI' ? "सुरक्षा कूलडाउन पर प्रतिक्रिया के लिए तैयार" : "Ready to respond with safety cooldown verification",
+    },
+    {
+      icon: Clock,
+      n: "< 3 mins",
+      label: language === 'HI' ? "पिनकोड मिलान समय" : "Automated pincode matching",
+      sub: language === 'HI' ? "पारंपरिक फोन समूहों की तुलना में त्वरित अलर्ट" : "Instant SMS & WhatsApp emergency broadcast engine",
+    },
+    {
+      icon: MapPin,
+      n: "Delhi NCR",
+      label: language === 'HI' ? "सक्रिय नेटवर्क क्षेत्र" : "Active pilot coverage",
+      sub: language === 'HI' ? "दिल्ली, नोएडा, और गुरुग्राम लाइव" : "Real-time geographical matching in NCR & surrounding regions",
+    },
+    {
+      icon: Building2,
+      n: dbStats.livesSaved > 0 ? `${dbStats.livesSaved}` : "0 Fees",
+      label: language === 'HI' ? "समुदाय समर्थित मंच" : "100% Free Community Platform",
+      sub: language === 'HI' ? "बिना किसी वाणिज्यिक शुल्क या सदस्यता के" : "Direct voluntary connection without commercial hospital tiers",
+    },
+  ];
 
   return (
     <section
@@ -70,10 +78,10 @@ export function Impact() {
                   {language === 'HI' ? 'औसत प्रतिक्रिया' : 'Avg. response'}
                 </p>
                 <p className="mt-1.5 text-[28px] font-semibold tracking-tight text-white">
-                  {language === 'HI' ? '3 मिनट 42 सेकंड' : '3m 42s'}
+                  {language === 'HI' ? '< 3 मिनट' : '< 3m'}
                 </p>
                 <p className="text-[12px] text-white/80">
-                  {language === 'HI' ? 'अनुरोध → रक्तदाता' : 'request → donor'}
+                  {language === 'HI' ? 'स्वचालित पिनकोड अलर्ट' : 'automated pincode alert'}
                 </p>
               </div>
             </div>
@@ -95,14 +103,14 @@ export function Impact() {
                       <f.icon className="h-5 w-5" />
                     </div>
                     <p className="text-[12px] font-semibold uppercase tracking-wider text-ink-500">
-                      {t.impact.stats?.[i]?.label || f.label}
+                      {f.label}
                     </p>
                   </div>
                   <p className="mt-3 text-[26px] font-bold tracking-tight text-ink-900">
                     {f.n}
                   </p>
                   <p className="mt-1 text-[13.5px] leading-snug text-ink-600">
-                    {t.impact.stats?.[i]?.sub || f.sub}
+                    {f.sub}
                   </p>
                 </motion.div>
               ))}

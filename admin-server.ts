@@ -33,9 +33,10 @@ async function getAuthenticatedUser(req: express.Request) {
 
 async function startAdminServer() {
   const app = express();
-  const PORT = Number(process.env.ADMIN_PORT || 6001);
+  const PORT = Number(process.env.ADMIN_PORT || 6000);
   const adminOrigins = new Set([
-    "https://findmydonor.online:6001",
+    "https://findmydonor.online",
+    `http://145.241.154.187:${PORT}`,
     `http://localhost:${PORT}`,
   ]);
 

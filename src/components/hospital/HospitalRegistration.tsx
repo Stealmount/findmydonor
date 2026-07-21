@@ -10,7 +10,7 @@ interface HospitalRegistrationProps {
 }
 
 export function HospitalRegistration({ onRegister, onBack }: HospitalRegistrationProps) {
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
 
   const [formData, setFormData] = useState({
@@ -67,6 +67,26 @@ export function HospitalRegistration({ onRegister, onBack }: HospitalRegistratio
       <div className="absolute top-12 left-1/4 w-96 h-96 bg-blood-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-12 right-1/4 w-96 h-96 bg-ink-900/10 rounded-full blur-3xl pointer-events-none" />
 
+      {/* Top right language switcher */}
+      <div className="absolute top-6 right-6 z-20 flex items-center rounded-full bg-white/90 p-0.5 border border-ink-200 shadow-md">
+        <button
+          onClick={() => setLanguage('EN')}
+          className={`rounded-full px-3 py-1 text-xs font-bold transition-all cursor-pointer ${
+            !isHi ? 'bg-blood-600 text-white shadow-sm' : 'text-ink-600 hover:text-ink-900'
+          }`}
+        >
+          EN
+        </button>
+        <button
+          onClick={() => setLanguage('HI')}
+          className={`rounded-full px-3 py-1 text-xs font-bold transition-all cursor-pointer ${
+            isHi ? 'bg-blood-600 text-white shadow-sm' : 'text-ink-600 hover:text-ink-900'
+          }`}
+        >
+          HI
+        </button>
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -74,7 +94,7 @@ export function HospitalRegistration({ onRegister, onBack }: HospitalRegistratio
       >
         <button
           onClick={onBack}
-          className="mb-6 text-ink-500 hover:text-ink-900 transition flex items-center text-sm font-bold uppercase tracking-wider"
+          className="mb-6 text-ink-500 hover:text-ink-900 transition flex items-center text-sm font-bold uppercase tracking-wider cursor-pointer"
         >
           {isHi ? '← मुख्य पृष्ठ पर वापस जाएं' : '← Back to home'}
         </button>

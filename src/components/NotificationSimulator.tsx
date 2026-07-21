@@ -4,12 +4,15 @@ import { sendRealEmail } from '../lib/email';
 import { Match, BloodRequest, User } from '../types';
 import { MessageSquare, Mail, AlertTriangle, Check, X, Bell, Sparkles, Trash2, Clock, ShieldAlert, Lock, PartyPopper } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface NotificationSimulatorProps {
   onStateChange?: () => void;
 }
 
 export default function NotificationSimulator({ onStateChange }: NotificationSimulatorProps) {
+  const { language } = useLanguage();
+  const isHi = language === 'HI';
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
@@ -89,7 +92,7 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blood-600/20 text-blood-400 group-hover:bg-blood-600 group-hover:text-white transition-colors">
           <Sparkles className="w-4 h-4" />
         </div>
-        <span className="text-xs font-semibold tracking-tight">Live Simulator</span>
+        <span className="text-xs font-semibold tracking-tight">{isHi ? 'लाइव सिमुलेटर' : 'Live Simulator'}</span>
         {notifications.length > 0 && (
           <span className="flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-blood-600 px-1.5 text-[11px] font-bold text-white shadow-sm">
             {notifications.length}
@@ -114,8 +117,8 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                   <Sparkles className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm tracking-tight text-ink-900">Live Simulator</h3>
-                  <p className="text-xs text-ink-500 font-medium">Live notification stream & test console</p>
+                  <h3 className="font-bold text-sm tracking-tight text-ink-900">{isHi ? 'लाइव सिमुलेटर' : 'Live Simulator'}</h3>
+                  <p className="text-xs text-ink-500 font-medium">{isHi ? 'लाइव सूचना स्ट्रीम और टेस्ट कंसोल' : 'Live notification stream & test console'}</p>
                 </div>
               </div>
               <button 
@@ -136,7 +139,7 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                     : 'text-ink-500 hover:text-ink-900'
                 }`}
               >
-                Recent Broadcasts ({notifications.length})
+                {isHi ? 'हाल के प्रसारण' : 'Recent Broadcasts'} ({notifications.length})
               </button>
               <button
                 onClick={() => setActiveTab('congrats')}
@@ -146,7 +149,7 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                     : 'text-ink-500 hover:text-ink-900'
                 }`}
               >
-                Recent Congrats ({congratsCount})
+                {isHi ? 'बधाई संदेश' : 'Recent Congrats'} ({congratsCount})
               </button>
             </div>
 
@@ -182,8 +185,12 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                   <div className="grid h-12 w-12 mx-auto mb-3 place-items-center rounded-2xl bg-ink-100 text-ink-400">
                     <Bell className="w-6 h-6" />
                   </div>
-                  <p className="text-sm font-semibold text-ink-800">No simulated notifications yet</p>
-                  <p className="text-xs text-ink-500 mt-1">Submit a blood request or register as donor to trigger real-time simulated alerts.</p>
+                  <p className="text-sm font-semibold text-ink-800">
+                    {isHi ? 'अभी कोई सिमुलेटेड सूचना नहीं है' : 'No simulated notifications yet'}
+                  </p>
+                  <p className="text-xs text-ink-500 mt-1">
+                    {isHi ? 'रीयल-टाइम सिमुलेटेड अलर्ट ट्रिगर करने के लिए रक्त अनुरोध सबमिट करें या रक्तदाता के रूप में पंजीकरण करें।' : 'Submit a blood request or register as donor to trigger real-time simulated alerts.'}
+                  </p>
                 </div>
               ) : (
                 filteredNotifs.map((notif) => {
@@ -358,11 +365,11 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
             <div className="p-4 border-t border-ink-100 bg-white/80 flex justify-between items-center text-xs text-ink-500">
               <span className="flex items-center gap-1.5 font-medium">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Auto-refreshing live logs
+                {isHi ? 'स्वचालित रिफ्रेशिंग लाइव लॉग' : 'Auto-refreshing live logs'}
               </span>
               <button 
                 onClick={async () => {
-                  if (window.confirm("Clear all simulated notifications?")) {
+                  if (window.confirm(isHi ? 'सभी सिमुलेटेड सूचनाएं साफ़ करें?' : "Clear all simulated notifications?")) {
                     try {
                       const { authenticatedApi } = await import('../lib/api');
                       await authenticatedApi('/api/notifications/all', {}, 'DELETE');
@@ -378,7 +385,7 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
                 }}
                 className="text-blood-600 hover:text-blood-700 font-semibold flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Clear Logs
+                <Trash2 className="w-3.5 h-3.5" /> {isHi ? 'लॉग साफ़ करें' : 'Clear Logs'}
               </button>
             </div>
           </motion.div>

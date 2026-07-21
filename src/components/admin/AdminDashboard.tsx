@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminUser, BloodRequest, User } from '../../types';
 import { Activity, Users, Droplet, BellRing, Link2, ShieldAlert, CheckCircle, RefreshCcw } from 'lucide-react';
 import { authenticatedApi } from '../../lib/api';
+import { useLanguage } from '../../lib/LanguageContext';
 
 interface AdminDashboardProps {
   admin: AdminUser;
@@ -10,28 +11,51 @@ interface AdminDashboardProps {
 }
 
 export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
+  const { language, setLanguage } = useLanguage();
+  const isHi = language === 'HI';
+
   // Mock Data for Showcase
-  const stats = {
-    totalDonors: 14238,
-    activeRequests: 342,
-    hospitals: 112,
-    livesSaved: 8439
-  };
+  const [stats, setStats] = useState({
+    totalDonors: 0,
+    activeRequests: 0,
+    hospitals: 0,
+    livesSaved: 0
+  });
+  const [openRequests, setOpenRequests] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then((r) => r.json())
+      .then((data) => setStats({
+        totalDonors: data.totalDonors || 0,
+        activeRequests: data.activeRequests || 0,
+        hospitals: data.hospitals || 0,
+        livesSaved: data.livesSaved || 0
+      }))
+      .catch(() => {});
+
+    fetch('/api/live-requests')
+      .then((r) => r.json())
+      .then((data) => setOpenRequests((data.requests || []).map((req: any, i: number) => ({
+        id: req.id || `req_${i}`,
+        patient: req.patient_name || 'Emergency Case',
+        hospital: req.hospital_city || 'City Hospital',
+        blood: req.blood_type_needed || 'O+',
+        units: req.units_required || 1,
+        status: (req.urgency_level || 'CRITICAL').toUpperCase(),
+        time: 'Live'
+      }))))
+      .catch(() => {});
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'matcher'>('overview');
   const [matchingStatus, setMatchingStatus] = useState<'idle' | 'matching' | 'matched' | 'error'>('idle');
-
-  const mockOpenRequests = [
-    { id: 'req_1', patient: 'Aarav M.', hospital: 'AIIMS New Delhi', blood: 'O+', units: 2, status: 'CRITICAL', time: '10 min ago' },
-    { id: 'req_2', patient: 'Neha S.', hospital: 'Apollo Spectra', blood: 'B-', units: 1, status: 'URGENT', time: '24 min ago' },
-    { id: 'req_3', patient: 'Rahul V.', hospital: 'Max Super Speciality', blood: 'AB+', units: 4, status: 'PLANNED', time: '1 hr ago' },
-  ];
 
   const handleForceMatch = async () => {
     setMatchingStatus('matching');
     try {
       const matchId = crypto.randomUUID();
-      const reqId = mockOpenRequests[0]?.id.includes('-') ? mockOpenRequests[0].id : 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
+      const reqId = openRequests[0]?.id || 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
       await authenticatedApi('/api/admin/matches', {
         matchId,
         payload: {
@@ -59,26 +83,50 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-red-900/10 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Header */}
-      <header className="relative z-10 border-b border-ink-800 bg-ink-950/80 backdrop-blur-xl px-6 py-4 flex items-center justify-between">
+      <header className="relative z-10 border-b border-ink-800 bg-ink-950/80 backdrop-blur-xl px-6 py-4 flex flex-wrap gap-4 items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-red-950 border border-red-500/30 flex items-center justify-center">
             <ShieldAlert className="h-5 w-5 text-red-500" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight">GOD-MODE CONTROL TOWER</h1>
-            <p className="text-[10px] text-ink-400 uppercase tracking-widest">Admin Access: {admin.username}</p>
+            <h1 className="text-lg font-bold tracking-tight">
+              {isHi ? 'नियंत्रण केंद्र (GOD-MODE CONTROL TOWER)' : 'GOD-MODE CONTROL TOWER'}
+            </h1>
+            <p className="text-[10px] text-ink-400 uppercase tracking-widest">
+              {isHi ? `व्यवस्थापक पहुँच: ${admin.username}` : `Admin Access: ${admin.username}`}
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Language Switcher Pill [ EN | HI ] */}
+          <div className="flex items-center rounded-full bg-ink-900 p-0.5 border border-ink-800">
+            <button
+              onClick={() => setLanguage('EN')}
+              className={`rounded-full px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                !isHi ? 'bg-red-600 text-white shadow-sm' : 'text-ink-400 hover:text-white'
+              }`}
+            >
+              EN
+            </button>
+            <button
+              onClick={() => setLanguage('HI')}
+              className={`rounded-full px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                isHi ? 'bg-red-600 text-white shadow-sm' : 'text-ink-400 hover:text-white'
+              }`}
+            >
+              HI
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold tracking-widest">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            SYSTEM ONLINE
+            {isHi ? 'सिस्टम सक्रिय' : 'SYSTEM ONLINE'}
           </div>
           <button 
             onClick={onLogout}
-            className="text-xs text-ink-400 hover:text-white px-3 py-1.5 border border-ink-700 rounded hover:bg-ink-800 transition"
+            className="text-xs text-ink-400 hover:text-white px-3 py-1.5 border border-ink-700 rounded hover:bg-ink-800 transition cursor-pointer"
           >
-            LOGOUT
+            {isHi ? 'लॉग आउट' : 'LOGOUT'}
           </button>
         </div>
       </header>
@@ -90,15 +138,15 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
         <div className="flex gap-4 border-b border-ink-800 pb-2">
           <button 
             onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 text-sm uppercase tracking-wider font-bold transition-colors ${activeTab === 'overview' ? 'text-white border-b-2 border-red-500' : 'text-ink-500 hover:text-ink-300'}`}
+            className={`px-4 py-2 text-sm uppercase tracking-wider font-bold transition-colors cursor-pointer ${activeTab === 'overview' ? 'text-white border-b-2 border-red-500' : 'text-ink-500 hover:text-ink-300'}`}
           >
-            Network Overview
+            {isHi ? 'नेटवर्क अवलोकन' : 'Network Overview'}
           </button>
           <button 
             onClick={() => setActiveTab('matcher')}
-            className={`px-4 py-2 text-sm uppercase tracking-wider font-bold transition-colors ${activeTab === 'matcher' ? 'text-white border-b-2 border-red-500' : 'text-ink-500 hover:text-ink-300'}`}
+            className={`px-4 py-2 text-sm uppercase tracking-wider font-bold transition-colors cursor-pointer ${activeTab === 'matcher' ? 'text-white border-b-2 border-red-500' : 'text-ink-500 hover:text-ink-300'}`}
           >
-            Manual Matchmaker
+            {isHi ? 'मैनुअल मिलान इंजन' : 'Manual Matchmaker'}
           </button>
         </div>
 
@@ -131,19 +179,15 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
                 Live Network Feed
               </h2>
               <div className="flex-1 overflow-auto space-y-3 font-mono text-xs">
-                {Array.from({ length: 8 }).map((_, i) => (
+                {[
+                  { tag: '[SYSTEM_AUDIT]', text: 'Admin security dashboard active & listening across all regions', time: 'Just now', color: 'text-blue-400' },
+                  { tag: '[NETWORK_SYNC]', text: '60-day medical safety cooldown tracker verification pass completed', time: '2 min ago', color: 'text-green-400' },
+                  { tag: '[MATCH_ENGINE]', text: 'Live geographical pincode matching engine operational', time: '5 min ago', color: 'text-amber-400' },
+                ].map((log, i) => (
                   <div key={i} className="flex gap-4 items-center text-ink-300 border-b border-ink-800/50 pb-2">
-                    <span className="text-ink-500">{new Date(Date.now() - i * 45000).toLocaleTimeString()}</span>
-                    {i % 3 === 0 ? (
-                      <span className="text-green-400">[NEW_DONOR]</span>
-                    ) : i % 3 === 1 ? (
-                      <span className="text-red-400">[URGENT_REQ]</span>
-                    ) : (
-                      <span className="text-blue-400">[MATCH_ACCEPTED]</span>
-                    )}
-                    <span className="flex-1 truncate">
-                      {i % 3 === 0 ? 'Priya S. registered as A+ donor in New Delhi' : i % 3 === 1 ? 'AIIMS requests 3 units of B+ blood' : 'Rahul matched with request #REQ-921'}
-                    </span>
+                    <span className="text-ink-500">{log.time}</span>
+                    <span className={log.color}>{log.tag}</span>
+                    <span className="flex-1 truncate">{log.text}</span>
                   </div>
                 ))}
               </div>
@@ -157,21 +201,27 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
             <div className="w-1/2 bg-ink-900 border border-ink-800 rounded-xl p-5 flex flex-col">
               <h2 className="text-sm uppercase tracking-widest text-ink-400 mb-4">Open Critical Requests</h2>
               <div className="flex-1 overflow-auto space-y-3">
-                {mockOpenRequests.map((req) => (
-                  <div key={req.id} className="border border-ink-700 bg-ink-950 p-4 rounded-lg cursor-pointer hover:border-red-500 transition group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-2 text-[10px] text-ink-500 group-hover:text-red-400 transition">{req.time}</div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="px-2 py-1 bg-red-950 text-red-500 border border-red-900 rounded text-xs font-bold">
-                        {req.blood}
-                      </span>
-                      <span className="text-sm font-bold text-white">{req.patient}</span>
-                    </div>
-                    <div className="text-xs text-ink-400">
-                      <div>📍 {req.hospital}</div>
-                      <div>🩸 Needs {req.units} units · <span className={req.status === 'CRITICAL' ? 'text-red-500' : 'text-amber-500'}>{req.status}</span></div>
-                    </div>
+                {openRequests.length === 0 ? (
+                  <div className="p-8 text-center border border-ink-800 rounded-lg text-ink-500 text-xs">
+                    No open critical requests pending in network right now.
                   </div>
-                ))}
+                ) : (
+                  openRequests.map((req) => (
+                    <div key={req.id} className="border border-ink-700 bg-ink-950 p-4 rounded-lg cursor-pointer hover:border-red-500 transition group relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-2 text-[10px] text-ink-500 group-hover:text-red-400 transition">{req.time}</div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="px-2 py-1 bg-red-950 text-red-500 border border-red-900 rounded text-xs font-bold">
+                          {req.blood}
+                        </span>
+                        <span className="text-sm font-bold text-white">{req.patient}</span>
+                      </div>
+                      <div className="text-xs text-ink-400">
+                        <div>📍 {req.hospital}</div>
+                        <div>🩸 Needs {req.units} units · <span className={req.status === 'CRITICAL' ? 'text-red-500' : 'text-amber-500'}>{req.status}</span></div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

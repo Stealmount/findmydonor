@@ -46,7 +46,7 @@ export default function RequesterPortal({
   onNavigateToRequest,
   onNavigateToRegister
 }: RequesterPortalProps) {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
   
   // Auth view toggles
@@ -399,7 +399,7 @@ export default function RequesterPortal({
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             id="btn-dashboard-new-req"
             onClick={onNavigateToRequest}
@@ -416,6 +416,52 @@ export default function RequesterPortal({
             <LogOut className="w-4 h-4" />
             {isHi ? 'साइन आउट' : 'Sign Out'}
           </button>
+        </div>
+      </div>
+
+      {/* ⚡ Emergency Request Command Center */}
+      <div className="rounded-3xl bg-gradient-to-r from-ink-900 via-ink-950 to-blood-950 border border-blood-500/30 p-6 sm:p-8 text-white relative overflow-hidden shadow-premium-lg">
+        <div className="absolute right-0 bottom-0 w-64 h-64 bg-blood-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+          <div className="space-y-2 max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blood-500/20 border border-blood-500/30 text-blood-400 text-[11px] font-mono font-bold uppercase tracking-widest">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isHi ? '⚡ आपातकालीन अनुरोध कमांड सेंटर' : '⚡ Emergency Request Command Center'}</span>
+            </div>
+            <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              {isHi ? 'नया आपातकालीन रक्त अनुरोध जनरेट करें' : 'Generate & Broadcast Emergency Blood Requests'}
+            </h3>
+            <p className="text-xs text-ink-300 leading-relaxed">
+              {isHi
+                ? 'तुरंत रक्त अनुरोध बनाएं, लाइव दाताओं से जुड़ें और 60 सेकंड से कम समय में अपने टिकट्स प्रबंधित करें।'
+                : 'Instantly create verified emergency blood requests, broadcast to compatible nearby donors, and manage live tracking tickets.'}
+            </p>
+            <div className="flex flex-wrap items-center gap-4 pt-2 text-xs font-semibold text-ink-300">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{requests.filter(r => ['broadcasting', 'open', 'matching', 'partially_matched'].includes(r.status)).length} Active Broadcasts</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>{requests.filter(r => r.status === 'draft').length} Saved Drafts</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-500" />
+                <span>{requests.filter(r => r.status === 'fulfilled').length} Fulfilled Cases</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
+            <button
+              id="btn-command-center-generate"
+              onClick={onNavigateToRequest}
+              className="px-6 py-4 rounded-2xl btn-glow bg-gradient-to-r from-blood-600 via-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white font-extrabold text-sm shadow-xl flex items-center justify-center gap-2.5 transition-all cursor-pointer group active:scale-[0.99]"
+            >
+              <PlusCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              <span>{isHi ? '➕ नया अनुरोध जनरेट करें' : '➕ Generate New Emergency Request'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
