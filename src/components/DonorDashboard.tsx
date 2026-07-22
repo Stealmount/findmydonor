@@ -414,8 +414,8 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
     <div id="donor-dashboard" className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
       {/* Sleek Glass Overview Header */}
       <div className="rounded-[36px] bg-gradient-to-b from-blood-600 to-blood-700 p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" aria-hidden="true" />
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-black/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" aria-hidden="true" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" aria-hidden="true" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-black/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" aria-hidden="true" />
         
         <div className="flex items-center gap-5 relative z-10">
           <div className="grid h-16 w-16 place-items-center rounded-[20px] bg-white/15 backdrop-blur ring-1 ring-white/20 text-white shadow-lg">
@@ -655,17 +655,39 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
                                     <p className="text-sm font-semibold text-ink-900">{req.patient_name}</p>
                                     <p className="text-xs text-ink-500">{req.patient_age}Y / {req.patient_gender} &bull; Attending: Dr. {req.attending_doctor || 'N/A'}</p>
                                   </div>
-                                  <div className="p-3 rounded-2xl bg-ink-900 text-white flex items-center justify-between gap-3">
-                                     <div className="flex items-center gap-3">
-                                       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10">
-                                         <Phone className="w-4 h-4 text-white" />
-                                       </div>
-                                       <div>
-                                         <p className="text-[11px] text-white/70">{isHi ? 'अनुरोधकर्ता से संपर्क करें' : 'Contact Requester'}</p>
-                                         <p className="font-semibold text-sm">{req.requester_name}</p>
-                                       </div>
-                                     </div>
-                                  </div>
+                                  {req.requester_phone ? (
+                                    <a
+                                      id={`lnk-contact-requester-${match.id}`}
+                                      href={`tel:${req.requester_phone}`}
+                                      className="p-3 rounded-2xl bg-ink-900 text-white flex items-center justify-between gap-3 hover:bg-ink-800 transition-all group cursor-pointer block"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 group-hover:bg-white/20 transition-colors">
+                                          <Phone className="w-4 h-4 text-white" />
+                                        </div>
+                                        <div>
+                                          <p className="text-[11px] text-white/70">{isHi ? 'अनुरोधकर्ता से संपर्क करें' : 'Contact Requester'}</p>
+                                          <p className="font-semibold text-sm flex items-center gap-2">
+                                            <span>{req.requester_name}</span>
+                                            <span className="text-xs text-white/80 font-normal">({req.requester_phone})</span>
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <span className="text-[11px] font-semibold bg-white/10 group-hover:bg-white/20 px-3 py-1 rounded-xl text-white transition-colors">
+                                        {isHi ? 'कॉल करें 📞' : 'Call 📞'}
+                                      </span>
+                                    </a>
+                                  ) : (
+                                    <div className="p-3 rounded-2xl bg-ink-900/50 text-white/60 flex items-center gap-3">
+                                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/5">
+                                        <Phone className="w-4 h-4 text-white/40" />
+                                      </div>
+                                      <div>
+                                        <p className="text-[11px] text-white/50">{isHi ? 'अनुरोधकर्ता से संपर्क करें' : 'Contact Requester'}</p>
+                                        <p className="font-semibold text-xs text-white/60">{isHi ? 'संपर्क जानकारी उपलब्ध नहीं है' : 'Contact info not available'}</p>
+                                      </div>
+                                    </div>
+                                  )}
                                   <a
                                     href={mapsUrl}
                                     target="_blank"
