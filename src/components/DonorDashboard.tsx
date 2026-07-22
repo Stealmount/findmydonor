@@ -56,6 +56,12 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
   const [dashboardTab, setDashboardTab] = useState<'requests' | 'history'>('requests');
   const [donationLogs, setDonationLogs] = useState<DonationLog[]>([]);
   const [loadingMatchId, setLoadingMatchId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Profile Edit fields
   const [editPincode, setEditPincode] = useState('');
@@ -253,10 +259,10 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
       } catch { /* ignore availability sync fallback */ }
 
       onLoginSuccess(updatedUser); // Update local active user state
-      alert("Donor settings updated successfully.");
+      showToast(isHi ? "रक्तदाता सेटिंग्स सफलतापूर्वक अपडेट की गईं।" : "Donor settings updated successfully.", 'success');
     } catch (err) {
       console.error(err);
-      alert("Failed to update settings.");
+      showToast(isHi ? "सेटिंग्स अपडेट करने में विफल।" : "Failed to update settings.", 'error');
     } finally {
       setSavingProfile(false);
     }
@@ -274,10 +280,10 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
       }
       await loadDashboardData();
       if (onStateChange) onStateChange();
-      alert(`You have successfully ${decision} this request.`);
+      showToast(isHi ? `आपने इस अनुरोध को सफलतापूर्वक ${decision === 'approved' ? 'स्वीकार' : 'अस्वीकार'} किया।` : `You have successfully ${decision} this request.`, 'success');
     } catch (error: any) {
       console.error(error);
-      alert(error.message || 'Unable to update this match. Please try again.');
+      showToast(error.message || 'Unable to update this match. Please try again.', 'error');
     } finally {
       setLoadingMatchId(null);
     }
@@ -307,13 +313,13 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
       };
       onLoginSuccess(updatedUser); // Update local state
 
-      alert("Thank you! Your donation was logged successfully. You are now placed in Cooldown for 60 days (until " + cooldownUntilStr + ") to allow you to recover safely.");
+      showToast(isHi ? `धन्यवाद! आपका रक्तदान सफलतापूर्वक दर्ज किया गया। (${cooldownUntilStr} तक विश्राम अवधि)` : "Thank you! Your donation was logged successfully. Cooldown active until " + cooldownUntilStr + ".", 'success');
       setReportDate('');
       setReportNotes('');
       await loadDashboardData();
     } catch (err) {
       console.error(err);
-      alert("Failed to record donation.");
+      showToast(isHi ? "रक्तदान दर्ज करने में विफल।" : "Failed to record donation.", 'error');
     } finally {
       setReporting(false);
     }
@@ -955,6 +961,20 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div
+          id="donor-toast"
+          className={`fixed bottom-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all duration-300 animate-in slide-in-from-bottom-4 flex items-center gap-3 text-xs font-bold ${
+            toast.type === 'error'
+              ? 'bg-red-900/90 text-white border-red-500/50 shadow-red-900/30'
+              : 'bg-emerald-900/90 text-white border-emerald-500/50 shadow-emerald-900/30'
+          }`}
+        >
+          <span className="text-base">{toast.type === 'error' ? '⚠️' : '✅'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }

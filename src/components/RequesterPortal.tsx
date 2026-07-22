@@ -61,6 +61,12 @@ export default function RequesterPortal({
   const [donors, setDonors] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Refresh dashboard data
   const loadDashboardData = async () => {
@@ -194,10 +200,10 @@ export default function RequesterPortal({
         console.error("Confetti error:", confettiErr);
       }
 
-      alert("Blood request marked as fulfilled successfully!");
+      showToast(isHi ? "रक्त अनुरोध सफलतापूर्वक पूर्ण हुआ!" : "Blood request marked as fulfilled successfully!", 'success');
     } catch (err) {
       console.error("Fulfill failed: ", err);
-      alert("Failed to fulfill request. Please try again.");
+      showToast(isHi ? "अनुरोध पूरा करने में विफल। कृपया पुनः प्रयास करें।" : "Failed to fulfill request. Please try again.", 'error');
     }
   };
 
@@ -209,10 +215,10 @@ export default function RequesterPortal({
 
       await loadDashboardData();
       if (onStateChange) onStateChange();
-      alert("Blood request cancelled successfully.");
+      showToast(isHi ? "रक्त अनुरोध सफलतापूर्वक रद्द कर दिया गया।" : "Blood request cancelled successfully.", 'success');
     } catch (err) {
       console.error("Cancel failed: ", err);
-      alert("Failed to cancel request.");
+      showToast(isHi ? "अनुरोध रद्द करने में विफल।" : "Failed to cancel request.", 'error');
     }
   };
 
@@ -270,7 +276,7 @@ export default function RequesterPortal({
       await loadDashboardData();
     } catch (err: any) {
       console.error('Broadcast draft error:', err);
-      alert('Failed to broadcast. Please try again.');
+      showToast(isHi ? 'प्रसारण करने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to broadcast. Please try again.', 'error');
     } finally {
       setBroadcastingDraftId(null);
     }
@@ -820,6 +826,19 @@ export default function RequesterPortal({
 
       </div>
 
+      {toast && (
+        <div
+          id="requester-toast"
+          className={`fixed bottom-6 right-6 z-50 px-5 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all duration-300 animate-in slide-in-from-bottom-4 flex items-center gap-3 text-xs font-bold ${
+            toast.type === 'error'
+              ? 'bg-red-900/90 text-white border-red-500/50 shadow-red-900/30'
+              : 'bg-emerald-900/90 text-white border-emerald-500/50 shadow-emerald-900/30'
+          }`}
+        >
+          <span className="text-base">{toast.type === 'error' ? '⚠️' : '✅'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 }
