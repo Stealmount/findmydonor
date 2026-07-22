@@ -853,7 +853,7 @@ export default function RequesterPortal({
                     </button>
                   </div>
                 ) : (
-                  <div className="pt-6 border-t border-ink-100 bg-ink-50/50 rounded-xl p-5 text-center border border-ink-100">
+                  <div className="bg-ink-50/50 rounded-xl p-5 text-center border border-ink-100 mt-6">
                     <p className="text-[11px] font-semibold text-ink-700 uppercase tracking-wider">
                       {isHi ? 'अनुरोध की स्थिति है:' : 'Request status is:'} <strong className="text-blood-600 ml-1">{selectedRequest.status}</strong>
                     </p>
