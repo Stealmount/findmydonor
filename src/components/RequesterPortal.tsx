@@ -425,6 +425,60 @@ export default function RequesterPortal({
         </div>
       </div>
 
+      {/* Requester Stat Strip */}
+      <div id="requester-stat-strip" className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+              {isHi ? 'सक्रिय प्रसारण' : 'Active Broadcasts'}
+            </span>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-blood-500/10 text-blood-600">
+              <Clock className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-extrabold text-ink-900 mt-2">
+            {requests.filter(r => ['open', 'broadcasting', 'matching', 'partially_matched'].includes(r.status)).length}
+          </p>
+          <p className="text-[11px] text-ink-400 mt-1">
+            {isHi ? 'वर्तमान में सक्रिय' : 'Currently active emergency requests'}
+          </p>
+        </div>
+
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+              {isHi ? 'मिले हुए रक्तदाता' : 'Donors Matched'}
+            </span>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-500/10 text-blue-600">
+              <Users className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-extrabold text-ink-900 mt-2">
+            {matches.filter(m => m.donor_response === 'approved').length}
+          </p>
+          <p className="text-[11px] text-ink-400 mt-1">
+            {isHi ? 'पुष्टीकृत रक्तदाता' : 'Confirmed accepting donors'}
+          </p>
+        </div>
+
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+              {isHi ? 'पूर्ण किए गए मामले' : 'Fulfilled Cases'}
+            </span>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-extrabold text-emerald-600 mt-2">
+            {requests.filter(r => r.status === 'fulfilled').length}
+          </p>
+          <p className="text-[11px] text-ink-400 mt-1">
+            {isHi ? 'सफलतापूर्वक समाप्त' : 'Successfully completed requests'}
+          </p>
+        </div>
+      </div>
+
       {/* ⚡ Emergency Request Command Center */}
       <div className="rounded-3xl bg-gradient-to-r from-ink-900 via-ink-950 to-blood-950 border border-blood-500/30 p-6 sm:p-8 text-white relative overflow-hidden shadow-premium-lg">
         <div className="absolute right-0 bottom-0 w-64 h-64 bg-blood-600/10 rounded-full blur-3xl pointer-events-none" />

@@ -511,6 +511,60 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
         </div>
       )}
 
+      {/* Donor Stat Strip */}
+      <div id="donor-stat-strip" className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+              {isHi ? 'लंबित मिलान' : 'Pending Matches'}
+            </span>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-500/10 text-amber-600">
+              <Clock className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-extrabold text-ink-900 mt-2">
+            {matches.filter(m => m.donor_response === 'pending').length}
+          </p>
+          <p className="text-[11px] text-ink-400 mt-1">
+            {isHi ? 'कार्रवाई की प्रतीक्षा में' : 'Awaiting your response'}
+          </p>
+        </div>
+
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+              {isHi ? 'कुल रक्तदान' : 'Total Donations'}
+            </span>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-blood-500/10 text-blood-600">
+              <Heart className="w-5 h-5 fill-blood-500/20" />
+            </div>
+          </div>
+          <p className="text-3xl font-extrabold text-ink-900 mt-2">
+            {donationLogs.length}
+          </p>
+          <p className="text-[11px] text-ink-400 mt-1">
+            {isHi ? 'सफलतापूर्वक पूर्ण' : 'Completed lifetime'}
+          </p>
+        </div>
+
+        <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
+              {isHi ? 'बचाए गए जीवन' : 'Lives Saved'}
+            </span>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600">
+              <Shield className="w-5 h-5" />
+            </div>
+          </div>
+          <p className="text-3xl font-extrabold text-emerald-600 mt-2">
+            {donationLogs.length * 3}
+          </p>
+          <p className="text-[11px] text-ink-400 mt-1">
+            {isHi ? 'अनुमानित प्रभाव (3 जीवन/रक्तदान)' : 'Estimated impact (3 lives/donation)'}
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Match Requests & Action Items Tab Box */}
         <div className="md:col-span-2 space-y-6">
