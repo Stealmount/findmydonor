@@ -63,22 +63,24 @@ function AppContent() {
   const [prefilledGoogleUser, setPrefilledGoogleUser] = useState<{ uid: string; email: string; full_name: string } | null>(null);
   const [trackingRole, setTrackingRole] = useState<'donor' | 'requester'>('requester');
   const [trackingMatchId, setTrackingMatchId] = useState<string | undefined>();
+  const lastResolvedUserIdRef = React.useRef<string | null>(null);
 
-  async function handleAuthUser(authUser?: SupabaseAuthUser) {
-    if (authUser) {
+  async function handleAuthUser(authUser?: SupabaseAuthUser, forceRefresh = false) {
+    if (authUser && (forceRefresh || authUser.id !== lastResolvedUserIdRef.current)) {
       try {
+        lastResolvedUserIdRef.current = authUser.id;
         const authState = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET');
         if (authState.profile) {
           if (authState.profile.can_donate) {
             setLoggedInUser(authState.profile as unknown as DonorUser);
-            setLoggedInRequester(null);
-          } else if (authState.profile.can_request) {
+          }
+          if (authState.profile.can_request || authState.profile.can_donate) {
             setLoggedInRequester(authState.profile as unknown as Requester);
-            setLoggedInUser(null);
           }
         }
       } catch {
         // silent fail
+        if (!forceRefresh) lastResolvedUserIdRef.current = null;
       }
     }
   }
@@ -128,6 +130,7 @@ function AppContent() {
 
   const handleLogout = async () => {
     try {
+      lastResolvedUserIdRef.current = null;
       await supabase.auth.signOut();
     } catch (error) {
       console.error("Supabase signOut failed:", error);
@@ -237,6 +240,7 @@ function AppContent() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             onNavigateToRequest={() => { setActiveView('request'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onNavigate={(view) => { setActiveView(view as any); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           />
         )}
 

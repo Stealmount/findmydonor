@@ -1,4 +1,4 @@
-import { getCoordinates } from '../data/pincode_coords';
+import { getCoordinates, PINCODE_COORDS } from '../data/pincode_coords';
 
 /**
  * Calculates the great-circle distance between two points on the Earth's surface
@@ -27,5 +27,16 @@ export function getDistanceBetweenPincodes(pinA: string, pinB: string): number {
   if (normA && normA === normB) return 0;
   const coordA = getCoordinates(normA);
   const coordB = getCoordinates(normB);
-  return haversineKm(coordA.lat, coordA.lng, coordB.lat, coordB.lng);
+  const dist = haversineKm(coordA.lat, coordA.lng, coordB.lat, coordB.lng);
+
+  // If one or both pincodes are unmapped in exact coordinates, refine proximity with prefix clamping
+  if (!PINCODE_COORDS[normA] || !PINCODE_COORDS[normB]) {
+    if (normA.length >= 5 && normB.length >= 5 && normA.slice(0, 5) === normB.slice(0, 5)) {
+      return Math.min(dist, 2.5);
+    }
+    if (normA.length >= 4 && normB.length >= 4 && normA.slice(0, 4) === normB.slice(0, 4)) {
+      return Math.min(dist, 6.0);
+    }
+  }
+  return dist;
 }

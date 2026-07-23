@@ -34,6 +34,15 @@ export default function HospitalMap({
 
     if (!mapContainerRef.current) return;
 
+    // Clean up existing map instance if present to avoid "Map container is already initialized"
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+    if ((mapContainerRef.current as any)._leaflet_id) {
+      (mapContainerRef.current as any)._leaflet_id = null;
+    }
+
     // 2. Initialize Map
     const centerLat = donorLat ? (hospitalLat + donorLat) / 2 : hospitalLat;
     const centerLng = donorLng ? (hospitalLng + donorLng) / 2 : hospitalLng;

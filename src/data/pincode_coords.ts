@@ -138,7 +138,7 @@ export function getCoordinates(pincode: string): { lat: number; lng: number } {
   if (PINCODE_COORDS[code]) {
     return PINCODE_COORDS[code];
   }
-  
+
   // Deterministic offset based on string hash to ensure stable distances across test runs
   let hash = 0;
   for (let i = 0; i < code.length; i++) {
@@ -147,6 +147,20 @@ export function getCoordinates(pincode: string): { lat: number; lng: number } {
   }
   const offsetLat = ((hash % 100) / 100 - 0.5) * 0.05;
   const offsetLng = (((hash >> 3) % 100) / 100 - 0.5) * 0.05;
+
+  // If a neighbor shares the first 5 digits, center around its known coordinate
+  const neighbor5 = Object.keys(PINCODE_COORDS).find(k => k.slice(0, 5) === code.slice(0, 5));
+  if (neighbor5) {
+    const base = PINCODE_COORDS[neighbor5];
+    return { lat: base.lat + offsetLat * 0.2, lng: base.lng + offsetLng * 0.2 };
+  }
+
+  // If a neighbor shares the first 4 digits, center around its known coordinate
+  const neighbor4 = Object.keys(PINCODE_COORDS).find(k => k.slice(0, 4) === code.slice(0, 4));
+  if (neighbor4) {
+    const base = PINCODE_COORDS[neighbor4];
+    return { lat: base.lat + offsetLat * 0.5, lng: base.lng + offsetLng * 0.5 };
+  }
 
   const prefix = code.slice(0, 3);
   if (prefix === '110') {

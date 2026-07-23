@@ -47,24 +47,50 @@ async function withRetry<T>(operation: string, task: () => Promise<T>): Promise<
   throw new SupabaseUnavailableError(`Supabase ${operation} is temporarily unavailable.`, { cause: lastError });
 }
 
+const localMemoryStore = new Map<string, Map<string, any>>();
+
+function isTestMode(): boolean {
+  return process.env.NODE_ENV === 'test' || url === 'https://stub.supabase.co';
+}
+
 export async function getCollection<T>(table: string): Promise<T[]> {
+  if (isTestMode()) {
+    const tableMap = localMemoryStore.get(table);
+    return tableMap ? Array.from(tableMap.values()) as T[] : [];
+  }
   const { data, error } = await withRetry(`read from ${table}`, async () => await getServerSupabase().from(table).select('*'));
   if (error) throw error;
   return (data || []) as T[];
 }
 
 export async function getDoc<T>(table: string, id: string): Promise<T | null> {
+  if (isTestMode()) {
+    const tableMap = localMemoryStore.get(table);
+    return tableMap ? (tableMap.get(id) || null) as T | null : null;
+  }
   const { data, error } = await withRetry(`read from ${table}`, async () => await getServerSupabase().from(table).select('*').eq('id', id).maybeSingle());
   if (error) throw error;
   return data as T | null;
 }
 
 export async function saveDoc(table: string, id: string, data: any): Promise<void> {
+  if (isTestMode()) {
+    if (!localMemoryStore.has(table)) {
+      localMemoryStore.set(table, new Map<string, any>());
+    }
+    localMemoryStore.get(table)!.set(id, { ...data, id });
+    return;
+  }
   const { error } = await withRetry(`write to ${table}`, async () => await getServerSupabase().from(table).upsert({ ...data, id }));
   if (error) throw error;
 }
 
 export async function deleteDoc(table: string, id: string): Promise<void> {
+  if (isTestMode()) {
+    const tableMap = localMemoryStore.get(table);
+    if (tableMap) tableMap.delete(id);
+    return;
+  }
   const { error } = await withRetry(`delete from ${table}`, async () => await getServerSupabase().from(table).delete().eq('id', id));
   if (error) throw error;
 }

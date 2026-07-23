@@ -33,42 +33,42 @@ const columns = [
   {
     title: "Product",
     links: [
-      { label: "How it works", view: "" },
-      { label: "Features", view: "" },
+      { label: "How it works", view: "home" },
+      { label: "Request blood", view: "request" },
       { label: "For donors", view: "donor-register" },
       { label: "For hospitals", view: "hospital-register" },
-      { label: "API docs", view: "" },
-      { label: "Changelog", view: "" },
+      { label: "Track request", view: "tracking" },
+      { label: "Community forum", view: "home" },
     ],
   },
   {
     title: "Company",
     links: [
-      { label: "About", view: "" },
-      { label: "Press", view: "" },
-      { label: "Careers", view: "" },
-      { label: "Contact", view: "" },
-      { label: "Partners", view: "" }
+      { label: "About", view: "home" },
+      { label: "Emergency hotline", view: "request" },
+      { label: "Become volunteer", view: "donor-register" },
+      { label: "Contact us", view: "home" },
+      { label: "Hospital portal", view: "hospital-register" }
     ],
   },
   {
     title: "Resources",
     links: [
-      { label: "Blood type guide", view: "" },
-      { label: "Hospital playbook", view: "" },
-      { label: "Donor stories", view: "" },
-      { label: "Research", view: "" },
-      { label: "Help center", view: "" },
+      { label: "Blood type guide", view: "home" },
+      { label: "Hospital playbook", view: "hospital-register" },
+      { label: "Donor safety guidelines", view: "donor-register" },
+      { label: "Live match tracking", view: "tracking" },
+      { label: "Help center", view: "home" },
     ],
   },
   {
-    title: "Legal",
+    title: "Legal & Privacy",
     links: [
-      { label: "Privacy", view: "" },
-      { label: "Terms", view: "" },
-      { label: "Security", view: "" },
-      { label: "HIPAA notice", view: "" },
-      { label: "Cookies", view: "" }
+      { label: "Privacy policy", view: "home" },
+      { label: "Terms of service", view: "home" },
+      { label: "Donor data protection", view: "donor-register" },
+      { label: "HIPAA compliance", view: "hospital-register" },
+      { label: "DigiLocker verification", view: "donor-register" }
     ],
   },
 ];
@@ -110,20 +110,22 @@ export function Footer({ onNavigate }: FooterProps) {
                 Get the app
               </p>
               <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                <a
-                  href="#"
-                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12.5px] font-semibold text-ink-900 hover:bg-white/90"
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.('request')}
+                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-[12.5px] font-semibold text-ink-900 hover:bg-white/90 cursor-pointer"
                 >
                   App Store
                   <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                </a>
-                <a
-                  href="#"
-                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-4 py-2.5 text-[12.5px] font-semibold text-white hover:bg-white/15"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate?.('request')}
+                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-4 py-2.5 text-[12.5px] font-semibold text-white hover:bg-white/15 cursor-pointer"
                 >
                   Google Play
                   <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                </a>
+                </button>
               </div>
             </div>
 
@@ -134,14 +136,15 @@ export function Footer({ onNavigate }: FooterProps) {
                 { Icon: Linkedin, label: "LinkedIn" },
                 { Icon: Github, label: "GitHub" },
               ].map(({ Icon, label }) => (
-                <a
+                <button
                   key={label}
-                  href="#"
+                  type="button"
+                  onClick={() => onNavigate?.('home')}
                   aria-label={label}
-                  className="grid h-9 w-9 place-items-center rounded-full bg-white/5 ring-1 ring-white/10 text-white/70 hover:text-white hover:bg-white/10 transition"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-white/5 ring-1 ring-white/10 text-white/70 hover:text-white hover:bg-white/10 transition cursor-pointer"
                 >
                   <Icon className="h-4 w-4" />
-                </a>
+                </button>
               ))}
             </div>
           </div>
@@ -155,21 +158,13 @@ export function Footer({ onNavigate }: FooterProps) {
                 <ul className="mt-4 space-y-2.5">
                   {c.links.map((l) => (
                     <li key={l.label}>
-                      {l.view ? (
-                        <button
-                          onClick={() => onNavigate?.(l.view)}
-                          className="text-[13.5px] text-white/80 hover:text-white transition cursor-pointer"
-                        >
-                          {l.label}
-                        </button>
-                      ) : (
-                        <a
-                          href="#"
-                          className="text-[13.5px] text-white/80 hover:text-white transition"
-                        >
-                          {l.label}
-                        </a>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => l.view ? onNavigate?.(l.view) : onNavigate?.('home')}
+                        className="text-[13.5px] text-white/80 hover:text-white transition cursor-pointer text-left w-full"
+                      >
+                        {l.label}
+                      </button>
                     </li>
                   ))}
                 </ul>

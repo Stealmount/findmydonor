@@ -103,6 +103,24 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds = 60): Pr
 }
 
 /**
+ * Atomic set-if-not-exists (NX). Returns true if key was set, false if already existed.
+ * Used for idempotency keys and duplicate guards.
+ */
+export async function cacheSetNX(key: string, value: unknown, ttlSeconds = 60): Promise<boolean> {
+  const client = getRedis();
+  if (client && useRedis) {
+    try {
+      const result = await client.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX');
+      return result === 'OK';
+    } catch { /* fall through */ }
+  }
+  // Memory fallback: check-then-set (race possible but acceptable for local dev)
+  if (memoryCache.has(key)) return false;
+  memSet(key, value, ttlSeconds);
+  return true;
+}
+
+/**
  * Delete all keys that begin with `prefix`.
  */
 export async function cacheInvalidatePrefix(prefix: string): Promise<void> {

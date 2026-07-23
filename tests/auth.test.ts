@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, ChildProcess } from 'node:child_process';
 
 const PORT = process.env.TEST_PORT || '5005';
-const BASE = process.env.TEST_BASE_URL || 'https://raktdaan.duckdns.org';
+const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 
 describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', () => {
   let child: ChildProcess | null = null;
@@ -13,9 +13,8 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
     try {
       const check = await fetch(`${BASE}/api/health`).catch(() => null);
       if (!check || !check.ok) {
-        child = spawn('npx', ['tsx', 'server.ts'], {
+        child = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
           stdio: 'pipe',
-          shell: true,
           env: {
             ...process.env,
             PORT,
@@ -36,8 +35,12 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
   });
 
   after(() => {
-    if (child) {
-      child.kill('SIGTERM');
+    if (child && child.pid) {
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/pid', String(child.pid), '/t', '/f']);
+      } else {
+        child.kill();
+      }
     }
   });
 
@@ -65,7 +68,7 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: '9876543210' })
     });
-    assert.ok([200, 429, 500, 503].includes(res.status), `Should respond with status indicating processing or rate limit, got ${res.status}`);
+    assert.ok([200, 410, 429, 500, 503].includes(res.status), `Should respond with status indicating processing or rate limit, got ${res.status}`);
     const body = await res.json() as { success?: boolean; error?: string };
     assert.ok(body !== null, 'Response should be valid JSON payload');
   });

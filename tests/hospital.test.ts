@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, ChildProcess } from 'node:child_process';
 
 const PORT = process.env.TEST_PORT || '5003';
-const BASE = process.env.TEST_BASE_URL || 'https://raktdaan.duckdns.org';
+const BASE = process.env.TEST_BASE_URL || `http://localhost:${PORT}`;
 
 describe('Hospital dashboard endpoint (/api/hospital/dashboard)', () => {
   let child: ChildProcess | null = null;
@@ -13,7 +13,7 @@ describe('Hospital dashboard endpoint (/api/hospital/dashboard)', () => {
     try {
       const check = await fetch(`${BASE}/api/health`).catch(() => null);
       if (!check || !check.ok) {
-        child = spawn('npx', ['tsx', 'server.ts'], { stdio: 'pipe', shell: true, env: { ...process.env, PORT } });
+        child = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], { stdio: 'pipe', env: { ...process.env, PORT, NODE_ENV: 'test', VITE_SUPABASE_URL: 'https://stub.supabase.co' } });
         for (let i = 0; i < 30; i++) {
           await new Promise(r => setTimeout(r, 500));
           const res = await fetch(`${BASE}/api/health`).catch(() => null);

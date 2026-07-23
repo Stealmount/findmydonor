@@ -14,6 +14,7 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { randomInt, randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createServer as createViteServer } from "vite";
 import { Resend } from "resend";
 import {
@@ -27,6 +28,7 @@ import {
 import {
   cacheGet,
   cacheSet,
+  cacheSetNX,
   cacheDel,
   cacheInvalidatePrefix,
   getCacheStats,
@@ -51,6 +53,11 @@ import {
 import { isBloodCompatible, BLOOD_COMPATIBILITY_MATRIX } from "./src/types";
 import type { BloodRequest, BloodType, DonationLog, Match, Requester, User, NotificationLog } from "./src/types";
 
+// ─── Shared Constants ────────────────────────────────────────────────────────
+// ponytail: single source of truth — worker was filtering only ["open","matching"],
+// missing "broadcasting" and "partially_matched" entirely (P0 bug)
+const ACTIVE_REQUEST_STATUSES: readonly string[] = ["broadcasting", "matching", "open", "partially_matched"];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function normalizePhone(phone: string): string {
@@ -62,6 +69,11 @@ function normalizePhone(phone: string): string {
 
 function isValidIndianPhone(phone: string): boolean {
   return /^91[6-9]\d{9}$/.test(normalizePhone(phone));
+}
+
+// Synthetic email for Supabase auth — deterministic, non-forwardable, phone-derived.
+function buildSyntheticEmail(phone: string): string {
+  return `phone+${phone}@raktdaan.local`;
 }
 
 async function getAuthenticatedUser(req: express.Request) {
@@ -128,7 +140,7 @@ async function getLinkedProfile(authUserId: string): Promise<{ profile: LinkedPr
 
 function nextOnboardingStep(linked: Awaited<ReturnType<typeof getLinkedProfile>>): "contact" | "otp" | "donor-profile" | "complete" {
   if (!linked) return "contact";
-  if (!linked.profile.whatsapp_verified) return "otp";
+  // OTP verification disabled — skip "otp" step; unverified numbers proceed to profile or complete
   if (linked.profile.can_donate && !linked.donorProfile?.profile_complete) return "donor-profile";
   return "complete";
 }
@@ -232,29 +244,36 @@ async function findEligibleDonors(
   let finalDonors: (User & { distance_km: number; match_rank: number; is_exact_match: boolean })[] = [];
 
   const sortTier = (a: typeof donorsWithDistance[0], b: typeof donorsWithDistance[0]) => {
+    // ponytail: match_rank is now the primary sort key — staleness bump from
+    // applyStalenessTier actually influences final ordering
+    if (a.match_rank !== b.match_rank) return a.match_rank - b.match_rank;
     // Exact matches first within each tier
     if (a.is_exact_match !== b.is_exact_match) return a.is_exact_match ? -1 : 1;
     return sortDonorsByActivity(a, b);
   };
 
   const tier1 = donorsWithDistance.filter(d => d.distance_km <= 3).map(d => ({ ...d, match_rank: 1 }));
+  applyStalenessTier(tier1);
   tier1.sort(sortTier);
   finalDonors.push(...tier1);
 
   if (finalDonors.length < 3 || isRare) {
     const tier2 = donorsWithDistance.filter(d => d.distance_km > 3 && d.distance_km <= 10).map(d => ({ ...d, match_rank: 2 }));
+    applyStalenessTier(tier2);
     tier2.sort(sortTier);
     finalDonors.push(...tier2);
   }
 
   if (finalDonors.length < 3 || isRare) {
     const tier3 = donorsWithDistance.filter(d => d.distance_km > 10 && d.distance_km <= 25).map(d => ({ ...d, match_rank: 3 }));
+    applyStalenessTier(tier3);
     tier3.sort(sortTier);
     finalDonors.push(...tier3);
   }
 
   if (finalDonors.length < 3 || isRare) {
     const tier4 = donorsWithDistance.filter(d => d.distance_km > 25).map(d => ({ ...d, match_rank: 4 }));
+    applyStalenessTier(tier4);
     tier4.sort(sortTier);
     finalDonors.push(...tier4);
   }
@@ -277,7 +296,29 @@ function sortDonorsByActivity(a: any, b: any) {
   if (a.last_donation_date && b.last_donation_date) {
     return a.last_donation_date.localeCompare(b.last_donation_date);
   }
-  return (a.updated_at || '').localeCompare(b.updated_at || '');
+  // ponytail: descending — fresher profiles sort first (was ascending, putting stalest first)
+  return (b.updated_at || '').localeCompare(a.updated_at || '');
+}
+
+// Feature 2: Deprioritize stale donors (>90 days since updated_at) — bump rank by 1 (max 5)
+function applyStalenessTier(donors: { match_rank: number; updated_at?: string }[]) {
+  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  for (const d of donors) {
+    if (d.updated_at && new Date(d.updated_at).getTime() < cutoff) {
+      d.match_rank = Math.min(d.match_rank + 1, 5);
+    }
+  }
+}
+
+// Feature 3: Append-only audit trail — writes to request_events collection
+async function logRequestEvent(requestId: string, event: string, actor: string = 'system') {
+  try {
+    const id = randomUUID();
+    const record = { id, request_id: requestId, event, actor, at: nowISO() };
+    await saveLocalOrFirestoreDoc("request_events", id, record as unknown as Record<string, unknown>);
+  } catch (e: any) {
+    console.error(`[Audit] Failed to log event for ${requestId}:`, e.message);
+  }
 }
 
 // ── Donor reservation lock helpers (prevents double-booking) ─────────────────
@@ -296,12 +337,7 @@ function donorLockKey(donorId: string): string {
  * Returns true if the lock was acquired (donor is free), false if already locked.
  */
 async function acquireDonorLock(donorId: string, requestId: string): Promise<boolean> {
-  // cacheSet uses SET NX EX semantics — only sets if key doesn't exist
-  const key = donorLockKey(donorId);
-  const existing = await cacheGet<string>(key);
-  if (existing) return false; // already locked by another request
-  await cacheSet(key, requestId, DONOR_LOCK_TTL_S);
-  return true;
+  return cacheSetNX(donorLockKey(donorId), requestId, DONOR_LOCK_TTL_S);
 }
 
 /** Release a donor's reservation lock (on decline, timeout, or match fulfillment). */
@@ -505,6 +541,18 @@ setInterval(() => {
   }
 }, 60_000);
 
+// ─── Structured logging (Feature 6) ─────────────────────────────────────────
+const requestContext = new AsyncLocalStorage<{ requestId: string }>();
+
+function logWithId(...args: unknown[]) {
+  const store = requestContext.getStore();
+  if (store) {
+    console.log(`[req:${store.requestId.slice(0, 8)}]`, ...args);
+  } else {
+    console.log(...args);
+  }
+}
+
 // ─── Express app ─────────────────────────────────────────────────────────────
 
 function validateEnvironmentVariables() {
@@ -554,6 +602,13 @@ async function startServer() {
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
 
+  // Feature 6: x-request-id middleware — wraps every handler in AsyncLocalStorage context
+  app.use((req, _res, next) => {
+    const rid = (req.headers["x-request-id"] as string) || randomUUID();
+    req.headers["x-request-id"] = rid;
+    requestContext.run({ requestId: rid }, () => next());
+  });
+
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
@@ -574,11 +629,13 @@ async function startServer() {
           "https://findmydonor.online",
           "https://www.findmydonor.online",
           `http://145.241.154.187:${PORT}`,
+          "http://localhost:5173",
           ...(process.env.CORS_ORIGINS || "").split(","),
         ].map((o) => o?.trim().replace(/\/$/, "")).filter((o): o is string => Boolean(o)));
 
         const isAllowed = configuredOrigins.has(origin) ||
                           originHost === reqHost ||
+                          originHost === "localhost" ||
                           originHost === "145.241.154.187" ||
                           originHost === "findmydonor.online" ||
                           originHost === "www.findmydonor.online";
@@ -690,8 +747,8 @@ async function startServer() {
     const purpose: "signup" | "sos" = rawPurpose === "sos" ? "sos" : "signup";
     if (!phone) return res.status(400).json({ error: "Phone number required" });
     const normalizedPhone = normalizePhone(phone);
-    if (!isValidIndianPhone(normalizedPhone)) return res.status(400).json({ error: "Enter a valid Indian mobile number" });
-
+    if (!isValidIndianPhone(normalizedPhone)) return res.status(400).json({ error: "Enter a valid 10-digit Indian WhatsApp number" });
+    // Send OTP for signup or sos
     if (purpose === "sos") {
       const sosDailyKey = `sos_send_count_${normalizedPhone}`;
       const dailyCount = parseInt((await cacheGet<string>(sosDailyKey)) || "0", 10) + 1;
@@ -751,6 +808,8 @@ async function startServer() {
 
   // ─── NEW: Email OTP Verification ────────────────────────────────────────
   app.post("/api/email/send-otp", rateLimitMiddleware(5, 60_000), async (req, res) => {
+    // DISABLED: Email OTP flow removed from active auth. Preserved for future use.
+    return res.status(410).json({ error: "Email OTP is not available. Use phone+password or Google sign-in." });
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email address required" });
 
@@ -772,6 +831,8 @@ async function startServer() {
   });
 
   app.post("/api/email/verify-otp", rateLimitMiddleware(10, 60_000), async (req, res) => {
+    // DISABLED: Email OTP flow removed from active auth. Preserved for future use.
+    return res.status(410).json({ error: "Email OTP is not available. Use phone+password or Google sign-in." });
     const { email, otp } = req.body;
     if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
 
@@ -920,6 +981,7 @@ async function startServer() {
         return res.status(429).json({ error: "Too many failed attempts. Your OTP has been invalidated. Request a new one after 15 minutes." });
       }
       await cacheSet(attemptKey, String(attempts), 300);
+      console.warn(`[OTP Verify Failed] Phone: ${normalizedPhone} | Expected: "${storedOtp}" | Received: "${String(otp).trim()}" | Attempts: ${attempts}/5`);
       return res.status(400).json({ error: `Invalid OTP. ${5 - attempts} attempt(s) remaining.` });
     }
   });
@@ -942,36 +1004,216 @@ async function startServer() {
     }
   });
 
+  // ─── Phone + Password signup (with mandatory WhatsApp OTP) ─────────────────
+  app.post("/api/auth/phone-signup", rateLimitMiddleware(10, 60_000), async (req, res) => {
+    const { phone, password, full_name, intent, verificationToken } = req.body || {};
+    if (!String(full_name || "").trim()) return res.status(400).json({ error: "Full name is required." });
+    if (!password || String(password).length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
+    if (!["donor", "requester", "both"].includes(intent)) return res.status(400).json({ error: "Select how you'll use FindMyDonor." });
+
+    const normalized = normalizePhone(String(phone || ""));
+    if (!isValidIndianPhone(normalized)) return res.status(400).json({ error: "Enter a valid Indian WhatsApp number (e.g. 91XXXXXXXXXX)." });
+
+    if (!verificationToken) {
+      return res.status(400).json({ error: "WhatsApp OTP verification is required to sign up." });
+    }
+    if (!await consumeOtpTicket(String(verificationToken), normalized, "signup")) {
+      return res.status(403).json({ error: "WhatsApp verification expired or invalid. Please verify your OTP again." });
+    }
+
+    // Synthetic email so Supabase email provider handles auth; avoids conflict with future real email login.
+    const syntheticEmail = buildSyntheticEmail(normalized);
+    const supabase = getServerSupabase();
+
+    // Check if phone already registered
+    const { data: existingProfile } = await supabase
+      .from("profiles").select("id").eq("phone", normalized).maybeSingle();
+    if (existingProfile) {
+      return res.status(409).json({ error: "This WhatsApp number is already registered. Sign in instead." });
+    }
+
+    // Create Supabase auth user (service role — bypasses email confirmation)
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: syntheticEmail,
+      password: String(password),
+      email_confirm: true, // auto-confirm since it's a synthetic email
+      user_metadata: { full_name: String(full_name).trim(), phone: normalized },
+    });
+    if (authError) {
+      console.error("[Auth] Phone signup createUser failed:", authError);
+      if (authError.message?.includes("already been registered")) {
+        return res.status(409).json({ error: "This WhatsApp number is already registered. Sign in instead." });
+      }
+      return res.status(500).json({ error: "Unable to create account. Please try again." });
+    }
+    const authUserId = authData.user.id;
+    const now = nowISO();
+    const canDonate = intent === "donor" || intent === "both";
+    const canRequest = intent === "requester" || intent === "both";
+
+    // Create profile row (whatsapp_verified = true since OTP was verified)
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles").insert({
+        full_name: String(full_name).trim(),
+        phone: normalized,
+        whatsapp_phone: normalized,
+        is_whatsapp: true,
+        email: null,
+        whatsapp_verified: true,
+        consent_accepted_at: now,
+        can_donate: canDonate,
+        can_request: canRequest,
+      }).select().single();
+
+    if (profileError) {
+      console.error("[Auth] Profile insert failed:", profileError);
+      // Rollback: delete the auth user we just created
+      await supabase.auth.admin.deleteUser(authUserId).catch(() => {});
+      return res.status(500).json({ error: "Unable to create profile. Please try again." });
+    }
+
+    // Link auth user → profile
+    const { error: linkError } = await supabase
+      .from("auth_profile_links").insert({
+        auth_user_id: authUserId,
+        profile_id: profile.id,
+        provider: "phone",
+      });
+    if (linkError) {
+      console.error("[Auth] Profile link insert failed:", linkError);
+    }
+
+    // Create donor_profiles row if donor intent
+    if (canDonate) {
+      try { await supabase.from("donor_profiles").insert({ profile_id: profile.id }); } catch { /* ignore duplicate */ }
+    }
+
+    // Sign in the user to get a session token for the frontend
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: syntheticEmail,
+      password: String(password),
+    });
+
+    // This shouldn't fail since we just created the user, but handle gracefully
+    if (signInError) {
+      console.error("[Auth] Post-signup signin failed:", signInError);
+      return res.status(201).json({
+        profile,
+        nextStep: canDonate ? "donor-profile" : "complete",
+        message: "Account created. Please sign in manually.",
+      });
+    }
+
+    return res.status(201).json({
+      profile,
+      session: signInData.session,
+      nextStep: canDonate && !profile.whatsapp_verified ? "donor-profile" : (canDonate ? "donor-profile" : "complete"),
+    });
+  });
+
+  // ─── Phone + Password sign-in ──────────────────────────────────────────────
+  app.post("/api/auth/phone-signin", rateLimitMiddleware(15, 60_000), async (req, res) => {
+    const { phone, password } = req.body || {};
+    const normalized = normalizePhone(String(phone || ""));
+    if (!isValidIndianPhone(normalized)) return res.status(400).json({ error: "Enter a valid Indian WhatsApp number." });
+    if (!password) return res.status(400).json({ error: "Password is required." });
+
+    const syntheticEmail = buildSyntheticEmail(normalized);
+    const supabase = getServerSupabase();
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: syntheticEmail,
+      password: String(password),
+    });
+    if (authError) {
+      return res.status(401).json({ error: "Incorrect WhatsApp number or password." });
+    }
+
+    // Fetch linked profile for the response
+    try {
+      const linked = await getLinkedProfile(data.user.id);
+      return res.json({
+        session: data.session,
+        profile: linked?.profile || null,
+        donorProfile: linked?.donorProfile || null,
+        nextStep: nextOnboardingStep(linked),
+      });
+    } catch (profileErr) {
+      // Session is valid even if profile lookup fails
+      return res.json({ session: data.session, profile: null, donorProfile: null, nextStep: "contact" });
+    }
+  });
+
+  // ─── Complete verification (Google OAuth users adding WhatsApp number — NO OTP) ─
   app.post("/api/auth/complete-verification", rateLimitMiddleware(10, 60_000), async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
-    const { verificationToken, phone, whatsappPhone, fullName, intent, consentAccepted } = req.body || {};
+    const { phone, whatsappPhone, fullName, intent } = req.body || {};
     const whatsapp = whatsappPhone || phone;
-    if (!verificationToken || !consentAccepted || !String(fullName || "").trim() ||
+    if (!String(fullName || "").trim() ||
       !isValidIndianPhone(phone) || !isValidIndianPhone(whatsapp) || !["donor", "requester", "both"].includes(intent)) {
-      return res.status(400).json({ error: "Complete contact, role, consent, and WhatsApp verification details." });
+      return res.status(400).json({ error: "Provide your name, WhatsApp number, and role selection." });
     }
-    if (!await consumeOtpTicket(String(verificationToken), String(whatsapp), "signup")) {
-      return res.status(400).json({ error: "WhatsApp verification expired. Request a new OTP." });
-    }
+    const normalizedPhone = normalizePhone(String(phone));
+    const normalizedWhatsapp = normalizePhone(String(whatsapp));
     const consentAt = nowISO();
-    const { data: profile, error } = await getServerSupabase().rpc("link_verified_auth_profile", {
-      p_auth_user_id: authUser.id,
-      p_phone: String(phone),
-      p_whatsapp_phone: String(whatsapp),
-      p_full_name: String(fullName).trim(),
-      p_email: authUser.email || "",
-      p_can_donate: intent === "donor" || intent === "both",
-      p_can_request: intent === "requester" || intent === "both",
-      p_consent_accepted_at: consentAt,
-      p_provider: authUser.app_metadata?.provider || null,
-    });
-    if (error) {
-      console.error("[Auth] Profile link failed:", error);
-      return res.status(409).json({ error: "Unable to link this verified phone. Contact support if it belongs to you." });
+    const canDonate = intent === "donor" || intent === "both";
+    const canRequest = intent === "requester" || intent === "both";
+    const supabase = getServerSupabase();
+
+    // Check for existing profile with this phone
+    const { data: existing } = await supabase
+      .from("profiles").select("id").eq("phone", normalizedPhone).maybeSingle();
+
+    let profileId: string;
+    if (existing) {
+      // Update existing profile, link to this auth user
+      await supabase.from("profiles").update({
+        full_name: String(fullName).trim(),
+        whatsapp_phone: normalizedWhatsapp,
+        is_whatsapp: normalizedPhone === normalizedWhatsapp,
+        email: authUser.email || null,
+        consent_accepted_at: consentAt,
+        can_donate: canDonate,
+        can_request: canRequest,
+        updated_at: nowISO(),
+      }).eq("id", existing.id);
+      profileId = existing.id;
+    } else {
+      // Create new profile (whatsapp_verified = false — no OTP)
+      const { data: newProfile, error: profileError } = await supabase
+        .from("profiles").insert({
+          full_name: String(fullName).trim(),
+          phone: normalizedPhone,
+          whatsapp_phone: normalizedWhatsapp,
+          is_whatsapp: normalizedPhone === normalizedWhatsapp,
+          email: authUser.email || null,
+          whatsapp_verified: false,
+          consent_accepted_at: consentAt,
+          can_donate: canDonate,
+          can_request: canRequest,
+        }).select().single();
+      if (profileError) {
+        console.error("[Auth] Profile creation failed:", profileError);
+        return res.status(409).json({ error: "Unable to create profile for this phone number." });
+      }
+      profileId = newProfile.id;
     }
+
+    // Link auth user → profile
+    await supabase.from("auth_profile_links").upsert({
+      auth_user_id: authUser.id,
+      profile_id: profileId,
+      provider: authUser.app_metadata?.provider || "google",
+    });
+
+    // Create donor_profiles row if needed
+    if (canDonate) {
+      try { await supabase.from("donor_profiles").insert({ profile_id: profileId }); } catch { /* ignore duplicate */ }
+    }
+
     const linked = await getLinkedProfile(authUser.id);
-    return res.status(201).json({ profile, donorProfile: linked?.donorProfile || null, nextStep: nextOnboardingStep(linked) });
+    return res.status(201).json({ profile: linked?.profile || null, donorProfile: linked?.donorProfile || null, nextStep: nextOnboardingStep(linked) });
   });
 
   app.put("/api/donor-profile", rateLimitMiddleware(20, 60_000), async (req, res) => {
@@ -1087,6 +1329,8 @@ async function startServer() {
 
   // Profiles are created by the API only after both Supabase Auth and WhatsApp OTP succeed.
   app.post("/api/profiles/donor", rateLimitMiddleware(10, 60_000), async (req, res) => {
+    // DISABLED: Legacy OTP-gated donor creation. Use /api/auth/phone-signup + /api/donor-profile/complete.
+    return res.status(410).json({ error: "Legacy donor signup is disabled. Use the new auth flow." });
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
 
@@ -1145,14 +1389,13 @@ async function startServer() {
     (async () => {
       try {
         const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
-        const openRequests = allRequests.filter(r =>
-          ["open", "matching"].includes(r.status) &&
+        const activeRequests = allRequests.filter(r => ACTIVE_REQUEST_STATUSES.includes(r.status) &&
           (!r.expires_at || new Date(r.expires_at) > new Date())
         );
-        if (openRequests.length === 0) return;
-        console.log(`[DonorTrigger] New donor ${donor.full_name} registered. Checking ${openRequests.length} open request(s)...`);
+        if (activeRequests.length === 0) return;
+        console.log(`[DonorTrigger] New donor ${donor.full_name} registered. Checking ${activeRequests.length} open request(s)...`);
         await cacheInvalidatePrefix("eligible_"); // bust cache so new donor is included
-        for (const req of openRequests) {
+        for (const req of activeRequests) {
           try {
             const result = await matchAndNotifyRequest(req);
             if (result.matched > 0) {
@@ -1171,6 +1414,8 @@ async function startServer() {
   });
 
   app.post("/api/profiles/requester", rateLimitMiddleware(10, 60_000), async (req, res) => {
+    // DISABLED: Legacy OTP-gated requester creation. Use /api/auth/phone-signup.
+    return res.status(410).json({ error: "Legacy requester signup is disabled. Use the new auth flow." });
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
 
@@ -1242,6 +1487,25 @@ async function startServer() {
     }
     if (!requester) return res.status(403).json({ error: "Complete WhatsApp verification before creating a blood request." });
 
+    // Feature 1: Idempotency — prevent double-taps from creating duplicate requests
+    const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
+    if (idempotencyKey) {
+      const acquired = await cacheSetNX(`idem_${idempotencyKey}`, "1", 60);
+      if (!acquired) {
+        // ponytail: poll for in-flight result from concurrent request
+        const resultKey = `idem_result_${idempotencyKey}`;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const cached = await cacheGet<string>(resultKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            return res.status(409).json({ error: "Duplicate request", ...parsed });
+          }
+          await new Promise(r => setTimeout(r, 150));
+        }
+        return res.status(409).json({ error: "Request still processing, retry in a few seconds" });
+      }
+    }
+
     const body = req.body || {};
     const bloodGroups = new Set(["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]);
     const units = Number(body.units_required);
@@ -1251,6 +1515,21 @@ async function startServer() {
     }
     if (body.component_needed && !["Whole Blood (WB)", "Packed Red Blood Cells (PRBC)"].includes(body.component_needed)) {
       return res.status(400).json({ error: "Component-specific matching requires blood-bank review. Use whole blood or PRBC for this pilot." });
+    }
+
+    // Feature 5: Duplicate-request guard — same requester+hospital+blood within 10 min → return existing
+    {
+      const allReqs = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const dup = allReqs.find(r =>
+        r.requester_phone === requester!.phone &&
+        r.hospital_name?.toLowerCase().trim() === String(body.hospital_name).toLowerCase().trim() &&
+        r.blood_type_needed === body.blood_type_needed &&
+        r.created_at >= tenMinAgo
+      );
+      if (dup) {
+        return res.status(200).json({ requestId: dup.id, trackingCode: dup.tracking_code, status: dup.status, duplicate: true });
+      }
     }
 
     const isDraft = body.status === 'draft';
@@ -1273,6 +1552,11 @@ async function startServer() {
       created_at: now,
     };
     await saveLocalOrFirestoreDoc("blood_requests", id, request as unknown as Record<string, unknown>);
+    // Cache the result for concurrent double-tap protection
+    if (idempotencyKey) {
+      await cacheSet(`idem_result_${idempotencyKey}`, JSON.stringify({ requestId: id, trackingCode: request.tracking_code }), 60);
+    }
+    logRequestEvent(id, "created", requester.id).catch(() => {});
 
     // If saved as a draft, skip matching entirely — no notifications sent.
     if (isDraft) {
@@ -1607,6 +1891,40 @@ async function startServer() {
       if (!request) return;
 
       if (body === "YES") {
+        // Guard: Check if request is already fulfilled or closed
+        if (request.status && request.status !== "open") {
+          await saveLocalOrFirestoreDoc("matches", pendingMatch.id, {
+            ...pendingMatch,
+            donor_response: "declined",
+            donor_response_at: nowISO(),
+            outcome: "request_closed"
+          });
+          await sendWhatsApp(
+            donor.whatsapp_number || donor.phone,
+            "🙏 Thank you for responding! This emergency blood request has already been closed or fulfilled."
+          );
+          return;
+        }
+
+        // Guard: Check if approved matches already fulfill units_required
+        const approvedMatches = allMatches.filter(
+          (m) => m.request_id === pendingMatch.request_id && m.donor_response === "approved"
+        );
+        const unitsRequired = request.units_required || 1;
+        if (approvedMatches.length >= unitsRequired) {
+          await saveLocalOrFirestoreDoc("matches", pendingMatch.id, {
+            ...pendingMatch,
+            donor_response: "declined",
+            donor_response_at: nowISO(),
+            outcome: "fulfilled_by_other"
+          });
+          await sendWhatsApp(
+            donor.whatsapp_number || donor.phone,
+            "🙏 Thank you for responding! The required units for this emergency request have just been fulfilled by another donor nearby. We deeply appreciate your readiness to save lives!"
+          );
+          return;
+        }
+
         // Approve match
         await saveLocalOrFirestoreDoc("matches", pendingMatch.id, {
           ...pendingMatch,
@@ -1614,6 +1932,16 @@ async function startServer() {
           donor_response_at: nowISO(),
           contact_shared_at: nowISO(),
         });
+
+        // If this approval reaches required units, mark request fulfilled
+        if (approvedMatches.length + 1 >= unitsRequired) {
+          await saveLocalOrFirestoreDoc("blood_requests", request.id, {
+            ...request,
+            status: "fulfilled",
+            fulfilled_at: nowISO(),
+            updated_at: nowISO()
+          });
+        }
 
         // Notify donor confirmation with full requester details
         await sendWhatsApp(
@@ -2063,6 +2391,24 @@ async function startServer() {
     return res.json({ notifications, matches, donors, requests });
   });
 
+  async function adminCheck(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser || (authUser.email !== "admin@raktdaan.org" && (authUser as any).role !== "admin")) {
+      return res.status(403).json({ error: "Access denied: Admin privileges required." });
+    }
+    (req as any).adminUser = authUser;
+    next();
+  }
+
+  app.post("/api/admin/matches", adminCheck, async (req, res) => {
+    const { matchId, payload } = req.body || {};
+    if (!matchId || !payload) {
+      return res.status(400).json({ error: "matchId and payload required" });
+    }
+    await saveLocalOrFirestoreDoc("matches", matchId, payload);
+    return res.json({ success: true, match: payload });
+  });
+
   app.get("/api/hospital/dashboard", async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) {
@@ -2121,9 +2467,19 @@ async function startServer() {
     const allDonors = await getLocalOrFirestoreCollection<User>("users");
     const donors = matches.map(m => {
       const d = allDonors.find(u => u.id === m.donor_id);
-      return d ? (m.donor_response === "approved" ? d : { id: d.id, blood_type: d.blood_type, area: d.area, city: d.city } as User) : null;
+      return d ? { id: d.id, blood_type: d.blood_type, area: d.area, city: d.city } : null;
     }).filter(Boolean);
-    return res.json({ request, matches, donors });
+    // Mask requester PII — tracking code is public but contact info is not
+    const safeRequest = {
+      ...request,
+      requester_name: undefined,
+      requester_email: undefined,
+      requester_phone: undefined,
+      patient_name: undefined,
+      patient_age: undefined,
+      patient_gender: undefined,
+    };
+    return res.json({ request: safeRequest, matches, donors });
   });
 
   app.patch("/api/requests/:trackingCode/cancel", async (req, res) => {
@@ -2134,6 +2490,7 @@ async function startServer() {
     const updated = { ...request, status: "cancelled" as const, updated_at: nowISO() };
     await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
     await cacheInvalidatePrefix("req_status_");
+    logRequestEvent(request.id, "cancelled", request.requester_id).catch(() => {});
     return res.json({ success: true, request: updated });
   });
 
@@ -2145,20 +2502,26 @@ async function startServer() {
     const updated = { ...request, status: "open" as const, updated_at: nowISO() };
     await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
     await cacheInvalidatePrefix("req_status_");
+    logRequestEvent(request.id, "reopened", request.requester_id).catch(() => {});
     return res.json({ success: true, request: updated });
   });
 
   app.patch("/api/requests/:trackingCode/fulfill", async (req, res) => {
     const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
     const r = all.find(x => x.tracking_code === req.params.trackingCode || x.id === req.params.trackingCode);
-    if (r) await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, status: "fulfilled", fulfilled_at: nowISO() });
+    if (!r) return res.status(404).json({ error: "Request not found" });
+    if (!await checkRequesterAuth(req, r)) return res.status(403).json({ error: "Unauthorized" });
+    await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, status: "fulfilled", fulfilled_at: nowISO() });
+    logRequestEvent(r.id, "fulfilled", r.requester_id).catch(() => {});
     return res.json({ success: true });
   });
 
   app.patch("/api/requests/:trackingCode/broadcast-toggle", async (req, res) => {
     const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
     const r = all.find(x => x.tracking_code === req.params.trackingCode || x.id === req.params.trackingCode);
-    if (r) await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, broadcast_to_simulator: !r.broadcast_to_simulator });
+    if (!r) return res.status(404).json({ error: "Request not found" });
+    if (!await checkRequesterAuth(req, r)) return res.status(403).json({ error: "Unauthorized" });
+    await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, broadcast_to_simulator: !r.broadcast_to_simulator });
     return res.json({ success: true });
   });
 
@@ -2168,13 +2531,18 @@ async function startServer() {
   });
 
   // ─── Delete Notification(s) ─────────────────────────────────────────────
+  // ponytail: was completely unauthenticated — anyone could wipe all notifications.
+  // Now requires signed-in user; "all" is scoped to that user.
   app.delete("/api/notifications/:notifId", async (req, res) => {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: "Sign in to manage notifications." });
+    const userId = user.id;
     try {
       const supabase = getServerSupabase();
       if (req.params.notifId === "all") {
-        await supabase.from("notifications").delete().neq("id", "dummy");
+        await supabase.from("notifications").delete().eq("user_id", userId);
       } else {
-        await supabase.from("notifications").delete().eq("id", req.params.notifId);
+        await supabase.from("notifications").delete().eq("id", req.params.notifId).eq("user_id", userId);
       }
     } catch { /* ignore fallback */ }
     return res.json({ success: true });
@@ -2267,17 +2635,16 @@ const STALE_MATCH_MINUTES = 30; // auto-expire pending matches after 30 min
 
 async function runBackgroundMatchWorker() {
   // Acquire a Redis lock to prevent overlapping runs (e.g. PM2 cluster)
-  const lockVal = await cacheGet<string>(WORKER_LOCK_KEY);
-  if (lockVal) {
+  const acquired = await cacheSetNX(WORKER_LOCK_KEY, "1", WORKER_LOCK_TTL_S);
+  if (!acquired) {
     console.log("[Worker] Skipped — previous run still active.");
     return;
   }
-  await cacheSet(WORKER_LOCK_KEY, "1", WORKER_LOCK_TTL_S);
 
   try {
     const now = new Date();
     const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
-    const activeRequests = allRequests.filter(r => ["open", "matching"].includes(r.status));
+    const activeRequests = allRequests.filter(r => ACTIVE_REQUEST_STATUSES.includes(r.status));
 
     let closedCount = 0;
     let matchedTotal = 0;
@@ -2307,6 +2674,7 @@ async function runBackgroundMatchWorker() {
         }
 
         closedCount++;
+        logRequestEvent(req.id, "auto_closed_expired", "worker").catch(() => {});
         continue; // skip matching for expired requests
       }
     }
@@ -2332,7 +2700,7 @@ async function runBackgroundMatchWorker() {
 
         // Auto-cascade: try to find the next donor for this request
         const request = allRequests.find(r => r.id === match.request_id);
-        if (request && ["open", "matching"].includes(request.status)) {
+        if (request && ACTIVE_REQUEST_STATUSES.includes(request.status)) {
           try {
             await createNextDonorMatch(request, match.id);
           } catch (e: any) {
@@ -2342,9 +2710,34 @@ async function runBackgroundMatchWorker() {
       }
     }
 
+    // ── Step 2b: SLA notification — if request >15 min old and no donor approved, WhatsApp requester
+    const slaCutoff = new Date(now.getTime() - 15 * 60 * 1000);
+    for (const req of allRequests) {
+      if (!ACTIVE_REQUEST_STATUSES.includes(req.status)) continue;
+      if (new Date(req.created_at) > slaCutoff) continue; // too new
+
+      // Check if any match for this request has donor_response === "approved"
+      const requestMatches = allMatches.filter(m => m.request_id === req.id);
+      const hasApproved = requestMatches.some(m => m.donor_response === "approved");
+      if (hasApproved) continue;
+
+      // Guard: only send once per request (6h TTL)
+      const slaKey = `sla_notified_${req.id}`;
+      const alreadyNotified = await cacheSetNX(slaKey, "1", 6 * 60 * 60);
+      if (!alreadyNotified) continue;
+
+      const totalNotified = requestMatches.length;
+      const phone = req.requester_phone;
+      if (phone) {
+        const text = `Still searching for ${req.blood_type_needed}. ${totalNotified} donors notified so far.`;
+        await sendWhatsApp(phone, text).catch(e => console.error("[Worker] SLA WhatsApp failed:", e.message));
+        logRequestEvent(req.id, "sla_notified", "worker").catch(() => {});
+      }
+    }
+
     // ── Step 3: Re-run matching for all still-active requests ──
     const stillActive = allRequests.filter(
-      r => ["open", "matching"].includes(r.status) &&
+      r => ACTIVE_REQUEST_STATUSES.includes(r.status) &&
            (!r.expires_at || new Date(r.expires_at) >= now)
     );
 
