@@ -147,7 +147,7 @@ export function buildDonorThankYouMessage(donor: User, trackingCode: string, coo
   const firstName = donor.full_name.split(' ')[0];
   return `Thank you, ${firstName}. Your decision to donate for request \`${trackingCode}\` will save a life today. 🩸
 
-Your 60-day safety cooldown is now active. You won't receive new requests until ${cooldownUntil}.
+Your 90-day safety cooldown is now active. You won't receive new requests until ${cooldownUntil}.
 
 We appreciate you.`;
 }

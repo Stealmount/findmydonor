@@ -223,7 +223,7 @@ async function findEligibleDonors(
     // Self-match prevention
     if (normalizePhone(d.phone) === normalizePhone(request.requester_phone)) return false;
     if (d.whatsapp_number && normalizePhone(d.whatsapp_number) === normalizePhone(request.requester_phone)) return false;
-    if (d.email.toLowerCase().trim() === request.requester_email.toLowerCase().trim()) return false;
+    if (d.email && request.requester_email && d.email.toLowerCase().trim() === request.requester_email.toLowerCase().trim()) return false;
 
     return true;
   });
@@ -1006,7 +1006,7 @@ async function startServer() {
 
   // ─── Phone + Password signup (with mandatory WhatsApp OTP) ─────────────────
   app.post("/api/auth/phone-signup", rateLimitMiddleware(10, 60_000), async (req, res) => {
-    const { phone, password, full_name, intent, verificationToken } = req.body || {};
+    const { phone, password, full_name, email, intent, verificationToken } = req.body || {};
     if (!String(full_name || "").trim()) return res.status(400).json({ error: "Full name is required." });
     if (!password || String(password).length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
     if (!["donor", "requester", "both"].includes(intent)) return res.status(400).json({ error: "Select how you'll use FindMyDonor." });
@@ -1058,7 +1058,7 @@ async function startServer() {
         phone: normalized,
         whatsapp_phone: normalized,
         is_whatsapp: true,
-        email: null,
+        email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()) ? String(email).trim().toLowerCase() : null,
         whatsapp_verified: true,
         consent_accepted_at: now,
         can_donate: canDonate,
@@ -1148,7 +1148,7 @@ async function startServer() {
   app.post("/api/auth/complete-verification", rateLimitMiddleware(10, 60_000), async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
-    const { phone, whatsappPhone, fullName, intent } = req.body || {};
+    const { phone, whatsappPhone, fullName, email, intent } = req.body || {};
     const whatsapp = whatsappPhone || phone;
     if (!String(fullName || "").trim() ||
       !isValidIndianPhone(phone) || !isValidIndianPhone(whatsapp) || !["donor", "requester", "both"].includes(intent)) {
@@ -1172,7 +1172,7 @@ async function startServer() {
         full_name: String(fullName).trim(),
         whatsapp_phone: normalizedWhatsapp,
         is_whatsapp: normalizedPhone === normalizedWhatsapp,
-        email: authUser.email || null,
+        email: (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) ? String(email).trim().toLowerCase() : (authUser.email || null),
         consent_accepted_at: consentAt,
         can_donate: canDonate,
         can_request: canRequest,
@@ -1187,7 +1187,7 @@ async function startServer() {
           phone: normalizedPhone,
           whatsapp_phone: normalizedWhatsapp,
           is_whatsapp: normalizedPhone === normalizedWhatsapp,
-          email: authUser.email || null,
+          email: (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) ? String(email).trim().toLowerCase() : (authUser.email || null),
           whatsapp_verified: false,
           consent_accepted_at: consentAt,
           can_donate: canDonate,
@@ -1474,10 +1474,11 @@ async function startServer() {
     }
     if (!requester && req.body && isValidIndianPhone(req.body.requester_phone)) {
       const now = nowISO();
+      const email = req.body.requester_email;
       requester = {
         id: authUser.id,
         full_name: String(req.body.requester_name || authUser.user_metadata?.full_name || "Requester").trim(),
-        email: authUser.email || String(req.body.requester_email || ""),
+        email: (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) ? String(email).trim().toLowerCase() : (authUser.email || null),
         phone: normalizePhone(req.body.requester_phone),
         whatsapp_number: normalizePhone(req.body.requester_phone),
         created_at: now,

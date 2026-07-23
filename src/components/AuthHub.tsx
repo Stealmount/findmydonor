@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ArrowRight, Building2, CheckCircle2, Heart, Lock, Phone, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, Building2, CheckCircle2, Heart, Lock, Mail, Phone, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { authenticatedApi } from '../lib/api';
 import type { AuthState, BloodType, Requester, SignupIntent, User } from '../types';
@@ -26,6 +26,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [otpInput, setOtpInput] = useState('');
   const [devBypassNotice, setDevBypassNotice] = useState('');
   const [loading, setLoading] = useState(false);
@@ -52,6 +53,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
         const isGoogle = user.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('raktdaan_oauth_pending'));
         if (isGoogle) {
           setFullName(String(user.user_metadata?.full_name || user.user_metadata?.name || ''));
+          setEmail(user.email || '');
         }
         void resolveSignedInState();
       }
@@ -66,6 +68,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     const isGoogle = state.authUser.provider === 'google' || user?.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('raktdaan_oauth_pending'));
     if (isGoogle && user) {
       setFullName(String(user.user_metadata?.full_name || user.user_metadata?.name || ''));
+      setEmail(user.email || '');
     }
 
     if (!state.profile) {
@@ -190,6 +193,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
           phone: formattedPhone,
           password,
           full_name: fullName.trim(),
+          email: email.trim() || undefined,
           intent,
           verificationToken,
         }),
@@ -241,6 +245,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
         phone: `91${phone.replace(/\D/g, '')}`,
         whatsappPhone: `91${phone.replace(/\D/g, '')}`,
         fullName: fullName.trim(),
+        email: email.trim() || undefined,
         intent,
       });
 
@@ -354,6 +359,10 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
               <input id="signup-name" className={`${field} mt-1`} required value={fullName} onChange={e => setFullName(e.target.value)} />
             </label>
 
+            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'ईमेल (वैकल्पिक)' : 'Email (optional)'}
+              <input id="signup-email" className={`${field} mt-1`} type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+            </label>
+
             <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'WhatsApp नंबर' : 'WhatsApp Number'}</label>
             <div className="mt-1 flex gap-2">
               <div className="flex h-[46px] items-center rounded-xl border border-ink-200 bg-ink-50 px-3 text-sm font-bold text-ink-600 select-none">91</div>
@@ -434,6 +443,10 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
 
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'पूरा नाम' : 'Full name'}
               <input id="google-fullname" className={`${field} mt-1`} required value={fullName} onChange={e => setFullName(e.target.value)} />
+            </label>
+
+            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'ईमेल' : 'Email'}
+              <input id="google-email" className={`${field} mt-1`} type="email" value={email} onChange={e => setEmail(e.target.value)} />
             </label>
 
             <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'WhatsApp नंबर' : 'WhatsApp Number'}</label>

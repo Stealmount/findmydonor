@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // This module is imported only by Express. Never import it from the browser.
@@ -11,21 +13,31 @@ export class SupabaseUnavailableError extends Error {
   }
 }
 
-export const serverSupabase: SupabaseClient | null = url && serviceRoleKey
-  ? createClient(url, serviceRoleKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-})
-  : null;
-
 export function getServerSupabase(): SupabaseClient {
-  if (!serverSupabase) {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceRoleKey) {
     throw new SupabaseUnavailableError('Supabase is not configured on this server.');
   }
-  return serverSupabase;
+  return createClient(url, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+export function getAnonSupabase(): SupabaseClient {
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new SupabaseUnavailableError('Supabase ANON config is not available.');
+  }
+  return createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 export function isSupabaseConfigured(): boolean {
-  return serverSupabase !== null;
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return Boolean(url && serviceRoleKey);
 }
 
 async function withRetry<T>(operation: string, task: () => Promise<T>): Promise<T> {
@@ -54,34 +66,96 @@ function isTestMode(): boolean {
 }
 
 export async function getCollection<T>(table: string): Promise<T[]> {
-  if (isTestMode()) {
+  if (isTestMode() && table !== 'users') {
     const tableMap = localMemoryStore.get(table);
     return tableMap ? Array.from(tableMap.values()) as T[] : [];
   }
+
+  if (table === 'users') {
+    const { data, error } = await withRetry(`read from users`, async () => await getServerSupabase()
+      .from('profiles')
+      .select('id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)')
+      .order('created_at', { ascending: false }));
+    if (error) throw error;
+    const mapped = (data || []).map((p: any) => ({
+      id: p.id,
+      phone: p.phone,
+      whatsapp_number: p.whatsapp_phone,
+      email: p.email,
+      full_name: p.full_name,
+      blood_type: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.blood_group : p.donor_profiles?.blood_group,
+      pincode: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.pincode : p.donor_profiles?.pincode,
+      availability_status: (Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.is_available : p.donor_profiles?.is_available) ? 'available' : 'unavailable',
+      account_status: p.trust_report_count >= 5 ? 'suspended' : 'active',
+      emergency_only: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.emergency_only : p.donor_profiles?.emergency_only,
+      cooldown_until: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.cooldown_until : p.donor_profiles?.cooldown_until
+    }));
+    return mapped as T[];
+  }
+
   const { data, error } = await withRetry(`read from ${table}`, async () => await getServerSupabase().from(table).select('*'));
   if (error) throw error;
   return (data || []) as T[];
 }
 
 export async function getDoc<T>(table: string, id: string): Promise<T | null> {
-  if (isTestMode()) {
+  if (isTestMode() && table !== 'users') {
     const tableMap = localMemoryStore.get(table);
     return tableMap ? (tableMap.get(id) || null) as T | null : null;
   }
+  
+  if (table === 'users') {
+    const { data, error } = await withRetry(`read doc from users`, async () => await getServerSupabase()
+      .from('profiles')
+      .select('id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)')
+      .eq('id', id)
+      .maybeSingle());
+    if (error) throw error;
+    if (!data) return null;
+    const p = data as any;
+    return {
+      id: p.id,
+      phone: p.phone,
+      whatsapp_number: p.whatsapp_phone,
+      email: p.email,
+      full_name: p.full_name,
+      blood_type: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.blood_group : p.donor_profiles?.blood_group,
+      pincode: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.pincode : p.donor_profiles?.pincode,
+      availability_status: (Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.is_available : p.donor_profiles?.is_available) ? 'available' : 'unavailable',
+      account_status: p.trust_report_count >= 5 ? 'suspended' : 'active',
+      emergency_only: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.emergency_only : p.donor_profiles?.emergency_only,
+      cooldown_until: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.cooldown_until : p.donor_profiles?.cooldown_until
+    } as T;
+  }
+
   const { data, error } = await withRetry(`read from ${table}`, async () => await getServerSupabase().from(table).select('*').eq('id', id).maybeSingle());
   if (error) throw error;
   return data as T | null;
 }
 
 export async function saveDoc(table: string, id: string, data: any): Promise<void> {
-  if (isTestMode()) {
+  if (isTestMode() && table !== 'users') {
     if (!localMemoryStore.has(table)) {
       localMemoryStore.set(table, new Map<string, any>());
     }
     localMemoryStore.get(table)!.set(id, { ...data, id });
     return;
   }
-  const { error } = await withRetry(`write to ${table}`, async () => await getServerSupabase().from(table).upsert({ ...data, id }));
+  
+  if (table === 'users') {
+    const supabase = getServerSupabase();
+    const updates: any = {};
+    if (data.cooldown_until !== undefined) updates.cooldown_until = data.cooldown_until;
+    if (data.availability_status !== undefined) updates.is_available = data.availability_status === 'available';
+    if (data.emergency_only !== undefined) updates.emergency_only = data.emergency_only;
+    
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('donor_profiles').update(updates).eq('profile_id', id);
+    }
+    return;
+  }
+
+  const { error } = await withRetry(`save to ${table}`, async () => await getServerSupabase().from(table).upsert({ ...data, id }));
   if (error) throw error;
 }
 
