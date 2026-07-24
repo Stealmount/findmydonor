@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Match, BloodRequest, AvailabilityStatus, NumberSharingPref, lookupPincode, DonationLog } from '../types';
-import { sendRealEmail } from '../lib/email';
-import { supabase } from '../lib/supabase';
+import { User, Match, BloodRequest, BloodType, AvailabilityStatus, NumberSharingPref, lookupPincode, DonationLog } from '../types';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { getCoordinates } from '../data/pincode_coords';
@@ -43,13 +41,6 @@ interface DonorDashboardProps {
 export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, onStateChange, onGoogleRegisterRedirect, onNavigateToRequest, onNavigate }: DonorDashboardProps) {
   const { t, language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
-  
-  // Login State
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-
   // Dashboard Data
   const [matches, setMatches] = useState<Match[]>([]);
   const [requests, setRequests] = useState<BloodRequest[]>([]);
@@ -70,6 +61,7 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
   const [editCity, setEditCity] = useState('');
   const [editAvail, setEditAvail] = useState('available' as AvailabilityStatus);
   const [editEmergency, setEditEmergency] = useState(false);
+  const [editBloodGroup, setEditBloodGroup] = useState<BloodType>('A+');
 
   const [locationSearch, setLocationSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -153,6 +145,8 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
       setEditCity(currentUser.city);
       setEditAvail(currentUser.availability_status);
       setEditEmergency(currentUser.emergency_only);
+      setEditBloodGroup(currentUser.blood_type);
+      setEditBloodGroup(currentUser.blood_type);
       setLocationSearch(currentUser.area ? `${currentUser.area} (${currentUser.pincode})` : currentUser.pincode);
     } catch (err) {
       console.error(err);
@@ -162,59 +156,6 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
   useEffect(() => {
     loadDashboardData();
   }, [currentUser]);
-
-  // Handle Simple Login
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    setLoginLoading(true);
-
-    try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
-        password,
-      });
-
-      if (authError) throw authError;
-      const uid = data.user?.id;
-      if (!uid) throw new Error("No user returned");
-
-      const authState = (await authenticatedApi('/api/auth/me', undefined, 'GET')) as any;
-      if (authState && authState.profile) {
-        onLoginSuccess(authState.profile);
-        return;
-      } else {
-        setLoginError('Authenticated successfully, but no corresponding donor profile document was found.');
-        return;
-      }
-    } catch (authErr: any) {
-      console.warn("Supabase Auth login failed:", authErr);
-      setLoginError(authErr.message || 'Login failed. Please try again.');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  // Handle Google Sign-In
-  const handleGoogleSignIn = async () => {
-    setLoginError('');
-    setLoginLoading(true);
-
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
-      // redirect
-    } catch (err: any) {
-      console.error("Google login failed:", err);
-      setLoginError(err.message || 'Google Sign-In failed. Please try again.');
-      setLoginLoading(false);
-    }
-  };
 
   // Handle Edit Pincode Change
   const handlePincodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,10 +176,19 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
     e.preventDefault();
     if (!currentUser) return;
 
+    // Client-side pincode guard — /complete validates server-side with /^\d{6}$/
+    // and returns a hard 400. The old PUT route silently fell back, so add a
+    // clear message here to avoid a confusing generic error.
+    if (!/^\d{6}$/.test(editPincode)) {
+      showToast(isHi ? 'मान्य 6-अंकीय पिनकोड दर्ज करें।' : 'Enter a valid 6-digit pincode.', 'error');
+      return;
+    }
+
     setSavingProfile(true);
     try {
       const updatedUser: User = {
         ...currentUser,
+        blood_type: editBloodGroup,
         pincode: editPincode,
         area: editArea,
         city: editCity,
@@ -247,17 +197,25 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
         updated_at: new Date().toISOString()
       };
 
-      await authenticatedApi('/api/donor-profile', {
+      await authenticatedApi('/api/donor-profile/complete', {
+        blood_group: editBloodGroup,
         pincode: editPincode,
         area: editArea,
         city: editCity,
-        availability_status: editAvail,
+        last_donation_date: currentUser.last_donation_date ?? null,
+        health_self_declaration: true,
         emergency_only: editEmergency,
-      }, 'PUT');
+        number_sharing_pref: currentUser.number_sharing_pref ?? 'on_approval',
+      }, 'PATCH');
       
+      // NOT optional — /complete ignores availability_status entirely and always
+      // recomputes from cooldown_until. This call is what actually applies the
+      // donor's manual available/unavailable toggle. Do not remove.
       try {
         await authenticatedApi('/api/donor-profile/availability', { isAvailable: editAvail === 'available' }, 'PATCH');
-      } catch { /* ignore availability sync fallback */ }
+      } catch (availErr) {
+        console.error('Availability sync failed:', availErr);
+      }
 
       onLoginSuccess(updatedUser); // Update local active user state
       showToast(isHi ? "रक्तदाता सेटिंग्स सफलतापूर्वक अपडेट की गईं।" : "Donor settings updated successfully.", 'success');
@@ -801,6 +759,21 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
           <div className="rounded-[32px] bg-gradient-to-b from-blood-600 to-blood-700 shadow-2xl p-6 sm:p-7 space-y-4">
             <h3 className="font-semibold text-[14px] tracking-wide text-white border-b border-white/15 pb-4">Profile & Availability</h3>
             <form onSubmit={handleUpdateProfile} className="space-y-4 text-xs">
+              {/* Blood Group */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold text-white/80 block uppercase tracking-wider">Blood Group</label>
+                <select
+                  id="sel-edit-blood-group"
+                  value={editBloodGroup}
+                  onChange={e => setEditBloodGroup(e.target.value as BloodType)}
+                  className="w-full px-4 py-3 bg-white/10 ring-1 ring-white/20 rounded-2xl focus:outline-none focus:ring-2 focus:ring-white/40 text-white font-semibold transition-all appearance-none"
+                >
+                  {(['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] as BloodType[]).map(bg => (
+                    <option key={bg} value={bg} className="text-ink-900">{bg}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[11px] font-semibold text-white/80 block uppercase tracking-wider">Availability Status</label>
                 <select
