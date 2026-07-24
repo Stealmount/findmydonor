@@ -81,7 +81,7 @@ function mapProfile(p: any) {
 }
 
 export async function getCollection<T>(table: string): Promise<T[]> {
-  if (isTestMode() && table !== 'users') {
+  if (isTestMode()) {
     const tableMap = localMemoryStore.get(table);
     return tableMap ? Array.from(tableMap.values()) as T[] : [];
   }
@@ -101,7 +101,7 @@ export async function getCollection<T>(table: string): Promise<T[]> {
 }
 
 export async function getDoc<T>(table: string, id: string): Promise<T | null> {
-  if (isTestMode() && table !== 'users') {
+  if (isTestMode()) {
     const tableMap = localMemoryStore.get(table);
     return tableMap ? (tableMap.get(id) || null) as T | null : null;
   }
@@ -123,7 +123,7 @@ export async function getDoc<T>(table: string, id: string): Promise<T | null> {
 }
 
 export async function saveDoc(table: string, id: string, data: any): Promise<void> {
-  if (isTestMode() && table !== 'users') {
+  if (isTestMode()) {
     if (!localMemoryStore.has(table)) {
       localMemoryStore.set(table, new Map<string, any>());
     }

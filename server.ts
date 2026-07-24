@@ -2570,6 +2570,11 @@ async function startServer() {
     });
   });
 
+  // ─── API catch-all: return 404 for unmatched /api/* routes ───────────────
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+  });
+
   // ─── Vite / Static ──────────────────────────────────────────────────────
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
