@@ -152,10 +152,6 @@ export async function saveDoc(table: string, id: string, data: any): Promise<voi
     if (data.area !== undefined) updates.area = data.area;
     if (data.city !== undefined) updates.city = data.city;
     if (data.blood_type !== undefined) updates.blood_group = data.blood_type;
-    if (data.pincode !== undefined) updates.pincode = data.pincode;
-    if (data.area !== undefined) updates.area = data.area;
-    if (data.city !== undefined) updates.city = data.city;
-    if (data.blood_type !== undefined) updates.blood_group = data.blood_type;
     
     if (Object.keys(updates).length > 0) {
       await supabase.from('donor_profiles').update(updates).eq('profile_id', id);
