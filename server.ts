@@ -1438,6 +1438,7 @@ async function startServer() {
   });
 
   app.post("/api/requests", rateLimitMiddleware(10, 60_000), async (req, res) => {
+  try {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
 
@@ -1453,6 +1454,7 @@ async function startServer() {
           created_at: linked.profile.consent_accepted_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
+        await saveLocalOrFirestoreDoc("requesters", requester.id, requester as unknown as Record<string, unknown>);
       }
     } catch { /* profiles table may not exist yet — fall through */ }
     if (!requester) {
@@ -1470,6 +1472,7 @@ async function startServer() {
           created_at: donorDoc.created_at || nowISO(),
           updated_at: nowISO()
         };
+        await saveLocalOrFirestoreDoc("requesters", requester.id, requester as unknown as Record<string, unknown>);
       }
     }
     if (!requester && req.body && isValidIndianPhone(req.body.requester_phone)) {
@@ -1518,8 +1521,8 @@ async function startServer() {
       return res.status(400).json({ error: "Component-specific matching requires blood-bank review. Use whole blood or PRBC for this pilot." });
     }
 
-    // Feature 5: Duplicate-request guard — same requester+hospital+blood within 10 min → return existing
-    {
+    // Feature 5: Duplicate-request guard — best-effort, skip on failure
+    try {
       const allReqs = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
       const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const dup = allReqs.find(r =>
@@ -1531,6 +1534,8 @@ async function startServer() {
       if (dup) {
         return res.status(200).json({ requestId: dup.id, trackingCode: dup.tracking_code, status: dup.status, duplicate: true });
       }
+    } catch (guardErr) {
+      console.warn("[Requests] Duplicate guard skipped — table may not exist:", guardErr);
     }
 
     const isDraft = body.status === 'draft';
@@ -1574,6 +1579,13 @@ async function startServer() {
       console.error("[Matching] Failed for request", id, "— request saved, matching skipped:", matchErr.message);
     }
     return res.status(201).json({ requestId: id, trackingCode: request.tracking_code, status: 'broadcasting', matched });
+  } catch (err: any) {
+    console.error("[Requests] POST /api/requests failed:", err?.message || err);
+    if (err?.name === 'SupabaseUnavailableError' || err?.code?.startsWith?.('42') || err?.code === 'PGRST116') {
+      return res.status(503).json({ error: "Database is temporarily unavailable. Please try again in a few seconds." });
+    }
+    return res.status(500).json({ error: "Unexpected server error." });
+  }
   });
 
   // ── Promote a draft to a live broadcast (triggers matching engine) ─────────

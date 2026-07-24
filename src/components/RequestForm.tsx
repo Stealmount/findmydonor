@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BloodRequest, BloodType, UrgencyLevel, lookupPincode, Requester, HOSPITAL_NETWORKS, BLOOD_COMPONENTS } from '../types';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
-import { Heart, Landmark, Send, CheckCircle, ShieldAlert, Lock, User as UserIcon, Mail, Phone, ArrowRight, Sparkles, MapPin, Search, Activity, Stethoscope, Eye, Megaphone, Save, ArrowLeft, Clock, AlertTriangle } from 'lucide-react';
+import { Heart, Landmark, Send, CheckCircle, ShieldAlert, Lock, User as UserIcon, Mail, Phone, ArrowRight, Sparkles, MapPin, Search, Activity, Stethoscope, Megaphone, Save, Clock, AlertTriangle } from 'lucide-react';
 import { DELHI_PINCODES, DelhiPincode } from '../data/pincodes';
 
 import { User } from '../types';
@@ -29,10 +29,10 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
     hospital_name: '',
     hospital_uhid: '',
     attending_doctor: '',
-    hospital_pincode: '',
-    hospital_area: '',
-    hospital_city: '',
-    urgency_level: '' as UrgencyLevel,
+    hospital_pincode: '110058',
+    hospital_area: 'Janakpuri',
+    hospital_city: 'Delhi',
+    urgency_level: 'urgent' as UrgencyLevel,
     requester_name: '',
     requester_email: '',
     requester_phone: '',
@@ -110,8 +110,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
   const [loading, setLoading] = useState(false);
   const [captchaChecked, setCaptchaChecked] = useState(false);
   const [error, setError] = useState('');
-  // Step progression: 'form' → fill details, 'confirm' → preview
-  const [step, setStep] = useState<'form' | 'confirm'>('form');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
 
   // Self-match detection: Warn user if their requester email/phone matches their logged-in donor profile
   const isSelfMatch = !!(
@@ -137,30 +136,75 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
     }
   };
 
-  // Step 1: Validate the form and move to confirmation preview
+  // Validate and broadcast directly (single-step flow)
   const handlePreview = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
 
     if (!captchaChecked) {
       setError('Please complete the verification checkbox to submit.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
-    if (!formData.patient_name || !formData.patient_age || !formData.patient_gender || !formData.blood_type_needed || !formData.component_needed || !formData.units_required || !formData.hospital_name || !formData.hospital_pincode || !formData.hospital_city || !formData.hospital_area || !formData.urgency_level) {
-      setError('Please fill in all mandatory fields (including gender, blood group, required component, units, urgency level, and hospital location).');
+
+    // ponytail: field-specific validation — collects missing fields, scrolls to first, names them all
+    const requiredFields: { key: string; id: string; label: string }[] = [
+      { key: 'patient_name', id: 'inp-patient-name', label: 'Patient Full Name' },
+      { key: 'patient_age', id: 'inp-patient-age', label: 'Patient Age' },
+      { key: 'patient_gender', id: 'sel-patient-gender', label: 'Gender' },
+      { key: 'blood_type_needed', id: 'sel-blood-needed', label: 'Blood Group' },
+      { key: 'component_needed', id: 'sel-component-needed', label: 'Required Component' },
+      { key: 'units_required', id: 'inp-units', label: 'Units Required' },
+      { key: 'hospital_name', id: 'sel-hospital-network', label: 'Hospital Network' },
+      { key: 'hospital_pincode', id: 'inp-hospital-pin', label: 'Pincode' },
+      { key: 'hospital_area', id: 'inp-hospital-area', label: 'Locality' },
+      { key: 'hospital_city', id: 'inp-hospital-city', label: 'City' },
+    ];
+
+    const missing = requiredFields.filter(f => !formData[f.key as keyof typeof formData]);
+    if (missing.length > 0) {
+      const errMap: Record<string, boolean> = {};
+      missing.forEach(f => { errMap[f.id] = true; });
+      setFieldErrors(errMap);
+      const names = missing.map(f => f.label).join(', ');
+      setError(`Please fill the following required fields: ${names}.`);
+      const firstEl = document.getElementById(missing[0].id);
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstEl.focus();
+      }
       return;
     }
+
     if (Number(formData.patient_age) >= 120 || Number(formData.patient_age) <= 0) {
       setError('Please enter a valid patient age between 1 and 120.');
+      setFieldErrors({ 'inp-patient-age': true });
+      const el = document.getElementById('inp-patient-age');
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
       return;
     }
     const cleanPhone = formData.requester_phone.replace(/\D/g, '');
     if (cleanPhone.length !== 10) {
       setError('Please enter a valid 10-digit mobile number for Contact Phone.');
+      setFieldErrors({ 'inp-req-phone': true });
+      const el = document.getElementById('inp-req-phone');
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
       return;
     }
 
-    setStep('confirm');
+    // Auth gate — must be logged in to broadcast
+    if (!loggedInRequester && !loggedInDonor) {
+      if (onNavigate) {
+        onNavigate('requester-register');
+      } else {
+        setError('Please sign up or sign in to broadcast blood requests.');
+      }
+      return;
+    }
+
+    // All valid — broadcast immediately (no confirm step)
+    handleBroadcast();
   };
 
   // Step 2a: User confirmed → broadcast to donors
@@ -176,7 +220,6 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
     } catch (err: any) {
       console.error(err);
       setError(`Failed to broadcast: ${err.message || JSON.stringify(err)}`);
-      setStep('form');
     } finally {
       setLoading(false);
     }
@@ -195,7 +238,6 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
     } catch (err: any) {
       console.error(err);
       setError(`Failed to save draft: ${err.message || JSON.stringify(err)}`);
-      setStep('form');
     } finally {
       setLoading(false);
     }
@@ -258,7 +300,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
         </p>
       </div>
 
-      <form id="form-blood-request" onSubmit={handlePreview} className="p-8 space-y-6">
+      <form id="form-blood-request" onSubmit={handlePreview} className="p-8 space-y-6" noValidate>
         {error && (
           <div id="req-error-alert" className="p-3.5 rounded-xl bg-blood-50 text-blood-700 border border-blood-200 text-xs font-semibold flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 flex-shrink-0" />
@@ -276,7 +318,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               required
               value={formData.patient_name}
               onChange={e => setFormData(prev => ({ ...prev, patient_name: e.target.value }))}
-              className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+              className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-patient-name'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
             />
           </div>
 
@@ -292,7 +334,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 required
                 value={formData.patient_age === '' as any ? '' : formData.patient_age}
                 onChange={e => setFormData(prev => ({ ...prev, patient_age: e.target.value === '' ? ('' as any) : parseInt(e.target.value) }))}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-patient-age'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               />
             </div>
 
@@ -303,7 +345,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 required
                 value={formData.patient_gender}
                 onChange={e => setFormData(prev => ({ ...prev, patient_gender: e.target.value as any }))}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['sel-patient-gender'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               >
                 <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Gender --'}</option>
                 <option value="Male">{isHi ? 'पुरुष' : 'Male'}</option>
@@ -321,7 +363,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 required
                 value={formData.blood_type_needed}
                 onChange={e => setFormData(prev => ({ ...prev, blood_type_needed: e.target.value as BloodType | 'ANY' }))}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-bold font-mono focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['sel-blood-needed'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-bold font-mono focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               >
                 <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Blood Group --'}</option>
                 {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(type => (
@@ -342,7 +384,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 required
                 value={formData.units_required === '' as any ? '' : formData.units_required}
                 onChange={e => setFormData(prev => ({ ...prev, units_required: e.target.value === '' ? ('' as any) : Number(e.target.value) }))}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-bold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-units'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-bold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               />
             </div>
           </div>
@@ -358,7 +400,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               required
               value={formData.component_needed}
               onChange={e => setFormData(prev => ({ ...prev, component_needed: e.target.value as any }))}
-              className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+              className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['sel-component-needed'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
             >
               <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Component --'}</option>
               {BLOOD_COMPONENTS.map(comp => (
@@ -375,7 +417,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               required
               value={formData.hospital_name}
               onChange={e => setFormData(prev => ({ ...prev, hospital_name: e.target.value }))}
-              className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+              className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['sel-hospital-network'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-semibold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
             >
               <option value="" disabled>{isHi ? '-- चयन करें --' : '-- Select Hospital / Network --'}</option>
               {HOSPITAL_NETWORKS.map(net => (
@@ -468,7 +510,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 required
                 value={formData.hospital_pincode}
                 onChange={handlePincodeChange}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-mono font-bold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-hospital-pin'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-mono font-bold focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               />
             </div>
 
@@ -480,7 +522,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 placeholder={isHi ? 'स्वतः सुझाव' : 'Auto-suggested'}
                 value={formData.hospital_area}
                 onChange={e => setFormData(prev => ({ ...prev, hospital_area: e.target.value }))}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-hospital-area'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               />
             </div>
 
@@ -492,7 +534,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                 placeholder="Auto-suggested"
                 value={formData.hospital_city}
                 onChange={e => setFormData(prev => ({ ...prev, hospital_city: e.target.value }))}
-                className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+                className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-hospital-city'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
               />
             </div>
           </div>
@@ -548,7 +590,7 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
               maxLength={10}
               value={formData.requester_phone}
               onChange={e => setFormData(prev => ({ ...prev, requester_phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-              className="w-full h-11 px-4 rounded-xl border border-ink-200 bg-white/80 text-sm text-ink-900 font-mono font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none"
+              className={`w-full h-11 px-4 rounded-xl border ${fieldErrors['inp-req-phone'] ? 'border-blood-500' : 'border-ink-200'} bg-white/80 text-sm text-ink-900 font-mono font-medium focus:border-blood-500 focus:ring-4 focus:ring-blood-500/10 transition-all outline-none`}
             />
           </div>
 
@@ -604,10 +646,10 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
                   type="checkbox"
                   checked={formData.showcase_opt_in}
                   onChange={e => setFormData(prev => ({ ...prev, showcase_opt_in: e.target.checked }))}
-                className="mt-0.5 accent-blood-600"
-              />
-              <span>{isHi ? 'इस अनुरोध को सार्वजनिक लाइव फ़ीड में केवल रक्त समूह, शहर, आपात स्तर और यूनिट काउंट के साथ दिखाएं।' : 'Show this request in the public live feed using only blood group, city, urgency, and unit count. No patient, hospital, phone, or tracking details are shared.'}</span>
-            </label>
+                  className="mt-0.5 accent-blood-600"
+                />
+                <span>{isHi ? 'इस अनुरोध को सार्वजनिक लाइव फ़ीड में केवल रक्त समूह, शहर, आपात स्तर और यूनिट काउंट के साथ दिखाएं।' : 'Show this request in the public live feed using only blood group, city, urgency, and unit count. No patient, hospital, phone, or tracking details are shared.'}</span>
+              </label>
               <label className="flex items-start gap-3 rounded-xl border border-blood-200 bg-blood-50/40 p-3 text-xs text-blood-900 cursor-pointer font-medium">
                 <input
                   id="inp-request-broadcast-opt-in"
@@ -639,159 +681,47 @@ export default function RequestForm({ onSuccess, loggedInRequester, loggedInDono
           </div>
         </div>
 
-        <button
-          id="btn-preview-request"
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 via-blood-700 to-blood-800 hover:from-blood-700 hover:to-blood-900 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-        >
-          <Eye className="w-4 h-4 text-white" />
-          <span>{isHi ? 'प्रसारण से पहले अनुरोध देखें' : 'Preview Request Before Broadcasting'}</span>
-        </button>
+        {error && (
+          <div className="p-3.5 mt-4 rounded-xl bg-blood-50 text-blood-700 border border-blood-200 text-xs font-semibold flex items-start gap-2">
+            <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span><strong>Validation Error:</strong> {error}</span>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            id="btn-broadcast-now"
+            type="submit"
+            disabled={loading}
+            className="flex-1 py-4 px-6 btn-glow bg-gradient-to-r from-blood-600 via-blood-700 to-blood-800 hover:from-blood-700 hover:to-blood-900 text-white rounded-xl font-extrabold text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Broadcasting...</span>
+            ) : (
+              <>
+                <Megaphone className="w-4 h-4 text-white" />
+                <span>{isHi ? 'अनुरोध अभी प्रसारित करें' : 'Broadcast Request Now'}</span>
+              </>
+            )}
+          </button>
+          <button
+            id="btn-save-draft"
+            type="button"
+            onClick={() => {
+              if (loggedInRequester || loggedInDonor) {
+                handleSaveDraft();
+              } else if (onNavigate) {
+                onNavigate('requester-register');
+              }
+            }}
+            disabled={loading}
+            className="sm:w-auto py-4 px-6 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-ink-700 font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" />
+            <span>{isHi ? 'ड्राफ्ट सहेजें' : 'Save as Draft'}</span>
+          </button>
+        </div>
       </form>
     </div>
   );
-
-  // ── Step 2: Confirmation Screen ─────────────────────────────────────────────
-  if (step === 'confirm') {
-    const urgencyColors: Record<string, string> = {
-      critical: 'bg-blood-600 text-white',
-      urgent: 'bg-amber-500 text-white',
-      planned: 'bg-emerald-600 text-white',
-    };
-    return (
-      <div id="request-confirm-container" className="max-w-2xl mx-auto rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg overflow-hidden my-6">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-ink-900 via-ink-950 to-black p-8 text-white text-center relative">
-          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/20 border border-amber-400/30">
-            <Eye className="w-6 h-6 text-amber-300" />
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">{isHi ? 'प्रसारण से पहले समीक्षा करें' : 'Review Before Broadcasting'}</h2>
-          <p className="text-ink-300 text-xs mt-1 max-w-md mx-auto">
-            {isHi ? 'सभी विवरण दोबारा जांचें। एक बार प्रसारित करने के बाद, मिले हुए रक्तदाताओं को तुरंत सूचित किया जाएगा।' : 'Double-check all details. Once you broadcast, matched donors will be notified immediately.'}
-          </p>
-        </div>
-
-        <div className="p-8 space-y-5">
-          {error && (
-            <div className="p-3.5 rounded-xl bg-blood-50 text-blood-700 border border-blood-200 text-xs font-semibold flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Summary Card */}
-          <div className="rounded-2xl border border-ink-200/80 overflow-hidden">
-            {/* Blood + Urgency header */}
-            <div className="flex items-center justify-between bg-ink-950 px-5 py-4">
-              <div className="flex items-center gap-3">
-                <span className="font-mono font-black text-3xl text-white tracking-tight">{formData.blood_type_needed}</span>
-                <div>
-                  <p className="text-xs text-ink-400 font-medium">Blood Group Needed</p>
-                  <p className="text-sm text-ink-200 font-semibold">{formData.units_required} unit(s) · {formData.component_needed}</p>
-                </div>
-              </div>
-              <span className={`text-[11px] font-bold uppercase tracking-widest px-3 py-1 rounded-full ${urgencyColors[formData.urgency_level]}`}>
-                {formData.urgency_level}
-              </span>
-            </div>
-
-            {/* Detail rows */}
-            <div className="divide-y divide-ink-100">
-              <div className="flex gap-3 items-start px-5 py-3.5">
-                <Landmark className="w-4 h-4 text-ink-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Hospital</p>
-                  <p className="text-sm font-semibold text-ink-900">{formData.hospital_name}</p>
-                  <p className="text-xs text-ink-500">{formData.hospital_area && `${formData.hospital_area}, `}{formData.hospital_city} — {formData.hospital_pincode}</p>
-                  {formData.attending_doctor && <p className="text-xs text-ink-400 mt-0.5">Dr. {formData.attending_doctor}</p>}
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start px-5 py-3.5">
-                <UserIcon className="w-4 h-4 text-ink-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Patient</p>
-                  <p className="text-sm font-semibold text-ink-900">{formData.patient_name}</p>
-                  <p className="text-xs text-ink-500">{formData.patient_age} yrs · {formData.patient_gender}</p>
-                </div>
-              </div>
-
-              <div className="flex gap-3 items-start px-5 py-3.5">
-                <Phone className="w-4 h-4 text-ink-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Requester Contact</p>
-                  <p className="text-sm font-semibold text-ink-900">{formData.requester_name || formData.patient_name}</p>
-                  <p className="text-xs text-ink-500">{formData.requester_phone}{formData.requester_email && ` · ${formData.requester_email}`}</p>
-                </div>
-              </div>
-
-              {formData.additional_notes && (
-                <div className="flex gap-3 items-start px-5 py-3.5">
-                  <Activity className="w-4 h-4 text-ink-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Notes</p>
-                    <p className="text-xs text-ink-700">{formData.additional_notes}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Privacy note */}
-          <div className="flex gap-2 items-start p-3.5 rounded-xl bg-ink-50 border border-ink-200 text-xs text-ink-600">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-            <p>Once you broadcast, matching donors nearby will receive a WhatsApp message. This action cannot be undone. Choose <strong>"Save as Draft"</strong> if you need more time.</p>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-1">
-            <button
-              id="btn-back-to-form"
-              type="button"
-              onClick={() => setStep('form')}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-ink-200 bg-white hover:bg-ink-50 text-ink-700 font-semibold text-sm transition-all cursor-pointer disabled:opacity-50"
-            >
-              <ArrowLeft className="w-4 h-4" /> Edit Details
-            </button>
-
-            <button
-              id="btn-save-draft"
-              type="button"
-              onClick={handleSaveDraft}
-              disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-ink-300 bg-ink-100 hover:bg-ink-200 text-ink-800 font-semibold text-sm transition-all cursor-pointer disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-ink-700 border-t-transparent rounded-full animate-spin" />Saving...</span>
-              ) : (<><Save className="w-4 h-4" /> Save as Draft</>)}
-            </button>
-
-            <button
-              id="btn-broadcast-now"
-              type="button"
-              onClick={() => {
-                if (loggedInRequester || loggedInDonor) {
-                  handleBroadcast();
-                } else {
-                  if (onNavigate) {
-                    onNavigate('requester-register');
-                  } else {
-                    setError('Please sign up or sign in to broadcast blood requests.');
-                  }
-                }
-              }}
-              disabled={loading}
-              className="flex-1 flex items-center justify-center gap-2 px-5 py-3 btn-glow bg-gradient-to-r from-blood-600 to-blood-700 hover:from-blood-500 hover:to-blood-600 text-white rounded-xl font-bold text-sm transition-all shadow-lg cursor-pointer disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Broadcasting...</span>
-              ) : (<><Megaphone className="w-4 h-4" /> {loggedInRequester || loggedInDonor ? 'Broadcast Now' : 'Sign Up to Broadcast'}</>)}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 }

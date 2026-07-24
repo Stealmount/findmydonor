@@ -1,23 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
-import { 
-  Heart, 
-  UserPlus, 
-  Search, 
-  BarChart2, 
-  HelpCircle, 
-  PlusCircle, 
-  User, 
-  ChevronRight, 
-  ShieldCheck, 
-  HeartHandshake, 
-  Clock, 
-  PhoneCall, 
-  ThumbsUp, 
-  ArrowRight,
-  Menu,
-  X
-} from 'lucide-react';
 import RequestForm from './components/RequestForm';
 import RequestTracking from './components/RequestTracking';
 import DonorDashboard from './components/DonorDashboard';
@@ -27,7 +9,6 @@ import NotificationSimulator from './components/NotificationSimulator';
 import { RaktdaanHome } from './components/home/RaktdaanHome';
 import { Navbar } from './components/home/Navbar';
 import { MobileBottomNav } from './components/home/MobileBottomNav';
-import { getDoc as getLocalOrFirestoreDoc } from './lib/db';
 import { supabase } from './lib/supabase';
 import { authenticatedApi } from './lib/api';
 import { HospitalRegistration } from './components/hospital/HospitalRegistration';
@@ -53,17 +34,31 @@ export default function App() {
   );
 }
 
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="w-8 h-8 border-2 border-blood-500/30 border-t-blood-500 rounded-full animate-spin" />
+    </div>
+  );
+}
+
 function AppContent() {
   const [activeView, setActiveView] = useState<ActiveView>('home');
   const [trackingCode, setTrackingCode] = useState('');
   const [loggedInUser, setLoggedInUser] = useState<DonorUser | null>(null);
   const [loggedInRequester, setLoggedInRequester] = useState<Requester | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [loggedInHospital, setLoggedInHospital] = useState<HospitalUser | null>(null);
   const [loggedInAdmin, setLoggedInAdmin] = useState<AdminUser | null>(null);
   const [prefilledGoogleUser, setPrefilledGoogleUser] = useState<{ uid: string; email: string; full_name: string } | null>(null);
   const [trackingRole, setTrackingRole] = useState<'donor' | 'requester'>('requester');
   const [trackingMatchId, setTrackingMatchId] = useState<string | undefined>();
   const lastResolvedUserIdRef = React.useRef<string | null>(null);
+
+  function navigateTo(view: ActiveView) {
+    setActiveView(view);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   async function handleAuthUser(authUser?: SupabaseAuthUser, forceRefresh = false) {
     if (authUser && (forceRefresh || authUser.id !== lastResolvedUserIdRef.current)) {
@@ -79,7 +74,7 @@ function AppContent() {
           }
         }
       } catch {
-        // silent fail
+        console.warn('[Auth] /api/auth/me failed, session may have expired');
         if (!forceRefresh) lastResolvedUserIdRef.current = null;
       }
     }
@@ -88,6 +83,7 @@ function AppContent() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) handleAuthUser(session.user);
+      setSessionLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) handleAuthUser(session.user);
@@ -117,15 +113,13 @@ function AppContent() {
 
   const handleRequestSuccess = (code: string) => {
     setTrackingCode(code);
-    setActiveView('tracking');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('tracking');
   };
 
   const handleDonorLoginSuccess = (donor: DonorUser) => {
     setLoggedInUser(donor);
     setPrefilledGoogleUser(null);
-    setActiveView('donor-dashboard');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('donor-dashboard');
   };
 
   const handleLogout = async () => {
@@ -137,14 +131,13 @@ function AppContent() {
     }
     setLoggedInUser(null);
     setLoggedInRequester(null);
-    setActiveView('home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('home');
   };
 
   // ── Standalone full-screen views (no Navbar) ──
   if (activeView === 'admin-login') {
     return <AdminLogin 
-      onLogin={(admin) => { setLoggedInAdmin(admin); setActiveView('admin-dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+      onLogin={(admin) => { setLoggedInAdmin(admin); navigateTo('admin-dashboard'); }} 
       onBack={() => setActiveView('home')} 
     />;
   }
@@ -158,7 +151,7 @@ function AppContent() {
 
   if (activeView === 'hospital-register') {
     return <HospitalRegistration 
-      onRegister={(hosp) => { setLoggedInHospital(hosp); setActiveView('hospital-dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+      onRegister={(hosp) => { setLoggedInHospital(hosp); navigateTo('hospital-dashboard'); }} 
       onBack={() => setActiveView('home')} 
     />;
   }
@@ -175,13 +168,13 @@ function AppContent() {
     return (
       <div className="relative pb-16 md:pb-0">
         <RaktdaanHome
-          onNavigate={(view) => { setActiveView(view); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onNavigate={(view) => navigateTo(view)}
           loggedInUser={loggedInUser}
           loggedInRequester={loggedInRequester}
         />
         <MobileBottomNav
           activeView={activeView}
-          onNavigate={(view) => { setActiveView(view); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onNavigate={(view) => navigateTo(view)}
           loggedInUser={loggedInUser}
           loggedInRequester={loggedInRequester}
         />
@@ -194,7 +187,7 @@ function AppContent() {
   return (
     <div className="min-h-screen ambient-bg flex flex-col font-sans text-ink-900 relative">
       <Navbar
-        onNavigate={(view) => { setActiveView(view); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onNavigate={(view) => navigateTo(view)}
         loggedInUser={loggedInUser}
         loggedInRequester={loggedInRequester}
       />
@@ -207,7 +200,7 @@ function AppContent() {
             loggedInRequester={loggedInRequester} 
             loggedInDonor={loggedInUser}
             onLoginSuccess={(requester) => setLoggedInRequester(requester)}
-            onNavigate={(view) => { setActiveView(view); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onNavigate={(view) => navigateTo(view)}
           />
         )}
 
@@ -219,30 +212,33 @@ function AppContent() {
           />
         )}
 
-        {activeView === 'requester-portal' && (
+        {activeView === 'requester-portal' && (sessionLoading ? (
+          <LoadingScreen />
+        ) : (
           <RequesterPortal
             currentRequester={loggedInRequester}
             onLoginSuccess={(requester) => { setLoggedInRequester(requester); setActiveView('requester-portal'); }}
             onLogout={handleLogout}
-            onNavigateToRequest={() => { setActiveView('request'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            onNavigateToRegister={() => { setActiveView('requester-register'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onNavigateToRequest={() => navigateTo('request')}
+            onNavigateToRegister={() => navigateTo('requester-register')}
           />
-        )}
+        ))}
 
-        {activeView === 'donor-dashboard' && (
+        {activeView === 'donor-dashboard' && (sessionLoading ? (
+          <LoadingScreen />
+        ) : (
           <DonorDashboard 
             currentUser={loggedInUser}
             onLoginSuccess={handleDonorLoginSuccess}
             onLogout={handleLogout}
             onGoogleRegisterRedirect={(googleData) => {
               setPrefilledGoogleUser(googleData);
-              setActiveView('donor-register');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              navigateTo('donor-register');
             }}
-            onNavigateToRequest={() => { setActiveView('request'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            onNavigate={(view) => { setActiveView(view as any); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onNavigateToRequest={() => navigateTo('request')}
+            onNavigate={(view) => navigateTo(view as ActiveView)}
           />
-        )}
+        ))}
 
         {(activeView === 'auth-signin' || activeView === 'auth-signup' || activeView === 'donor-register' || activeView === 'requester-register') && (
           <AuthHub
@@ -251,17 +247,15 @@ function AppContent() {
             onLoginSuccessDonor={(donor) => {
               setLoggedInUser(donor);
               setLoggedInRequester(null);
-              setActiveView('donor-dashboard');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              navigateTo('donor-dashboard');
             }}
             onLoginSuccessRequester={(requester) => {
               setLoggedInRequester(requester);
               setLoggedInUser(null);
-              setActiveView('requester-portal');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              navigateTo('requester-portal');
             }}
-            onSelectDonorSignUp={() => { setActiveView('donor-register'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            onSelectRequesterSignUp={() => { setActiveView('requester-register'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onSelectDonorSignUp={() => navigateTo('donor-register')}
+            onSelectRequesterSignUp={() => navigateTo('requester-register')}
           />
         )}
 
@@ -269,7 +263,7 @@ function AppContent() {
 
       <MobileBottomNav
         activeView={activeView}
-        onNavigate={(view) => { setActiveView(view); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onNavigate={(view) => navigateTo(view)}
         loggedInUser={loggedInUser}
         loggedInRequester={loggedInRequester}
       />

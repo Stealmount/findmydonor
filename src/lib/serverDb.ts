@@ -3,8 +3,8 @@ dotenv.config();
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // This module is imported only by Express. Never import it from the browser.
-const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Keep module-level for isTestMode() only.
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 
 export class SupabaseUnavailableError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -13,31 +13,26 @@ export class SupabaseUnavailableError extends Error {
   }
 }
 
+// Singleton client — createClient once, not per request.
+let _serverClient: SupabaseClient | null = null;
+
 export function getServerSupabase(): SupabaseClient {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  if (_serverClient) return _serverClient;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) {
+  if (!SUPABASE_URL || !serviceRoleKey) {
     throw new SupabaseUnavailableError('Supabase is not configured on this server.');
   }
-  return createClient(url, serviceRoleKey, {
+  _serverClient = createClient(SUPABASE_URL, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  return _serverClient;
 }
 
-export function getAnonSupabase(): SupabaseClient {
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new SupabaseUnavailableError('Supabase ANON config is not available.');
-  }
-  return createClient(url, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+// getAnonSupabase deleted — zero callers in codebase. Add back if needed.
 
 export function isSupabaseConfigured(): boolean {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  return Boolean(url && serviceRoleKey);
+  return Boolean(SUPABASE_URL && serviceRoleKey);
 }
 
 async function withRetry<T>(operation: string, task: () => Promise<T>): Promise<T> {
@@ -62,7 +57,27 @@ async function withRetry<T>(operation: string, task: () => Promise<T>): Promise<
 const localMemoryStore = new Map<string, Map<string, any>>();
 
 function isTestMode(): boolean {
-  return process.env.NODE_ENV === 'test' || url === 'https://stub.supabase.co';
+  return process.env.NODE_ENV === 'test' || SUPABASE_URL === 'https://stub.supabase.co';
+}
+
+const PROFILE_SELECT = 'id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)';
+
+/** Unwrap the isArray-or-not dance Supabase returns for FK joins. */
+function mapProfile(p: any) {
+  const dp = Array.isArray(p.donor_profiles) ? p.donor_profiles[0] : p.donor_profiles;
+  return {
+    id: p.id,
+    phone: p.phone,
+    whatsapp_number: p.whatsapp_phone,
+    email: p.email,
+    full_name: p.full_name,
+    blood_type: dp?.blood_group,
+    pincode: dp?.pincode,
+    availability_status: dp?.is_available ? 'available' : 'unavailable',
+    account_status: p.trust_report_count >= 5 ? 'suspended' : 'active',
+    emergency_only: dp?.emergency_only,
+    cooldown_until: dp?.cooldown_until,
+  };
 }
 
 export async function getCollection<T>(table: string): Promise<T[]> {
@@ -74,23 +89,10 @@ export async function getCollection<T>(table: string): Promise<T[]> {
   if (table === 'users') {
     const { data, error } = await withRetry(`read from users`, async () => await getServerSupabase()
       .from('profiles')
-      .select('id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)')
+      .select(PROFILE_SELECT)
       .order('created_at', { ascending: false }));
     if (error) throw error;
-    const mapped = (data || []).map((p: any) => ({
-      id: p.id,
-      phone: p.phone,
-      whatsapp_number: p.whatsapp_phone,
-      email: p.email,
-      full_name: p.full_name,
-      blood_type: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.blood_group : p.donor_profiles?.blood_group,
-      pincode: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.pincode : p.donor_profiles?.pincode,
-      availability_status: (Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.is_available : p.donor_profiles?.is_available) ? 'available' : 'unavailable',
-      account_status: p.trust_report_count >= 5 ? 'suspended' : 'active',
-      emergency_only: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.emergency_only : p.donor_profiles?.emergency_only,
-      cooldown_until: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.cooldown_until : p.donor_profiles?.cooldown_until
-    }));
-    return mapped as T[];
+    return (data || []).map(mapProfile) as T[];
   }
 
   const { data, error } = await withRetry(`read from ${table}`, async () => await getServerSupabase().from(table).select('*'));
@@ -107,25 +109,12 @@ export async function getDoc<T>(table: string, id: string): Promise<T | null> {
   if (table === 'users') {
     const { data, error } = await withRetry(`read doc from users`, async () => await getServerSupabase()
       .from('profiles')
-      .select('id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)')
+      .select(PROFILE_SELECT)
       .eq('id', id)
       .maybeSingle());
     if (error) throw error;
     if (!data) return null;
-    const p = data as any;
-    return {
-      id: p.id,
-      phone: p.phone,
-      whatsapp_number: p.whatsapp_phone,
-      email: p.email,
-      full_name: p.full_name,
-      blood_type: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.blood_group : p.donor_profiles?.blood_group,
-      pincode: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.pincode : p.donor_profiles?.pincode,
-      availability_status: (Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.is_available : p.donor_profiles?.is_available) ? 'available' : 'unavailable',
-      account_status: p.trust_report_count >= 5 ? 'suspended' : 'active',
-      emergency_only: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.emergency_only : p.donor_profiles?.emergency_only,
-      cooldown_until: Array.isArray(p.donor_profiles) ? p.donor_profiles[0]?.cooldown_until : p.donor_profiles?.cooldown_until
-    } as T;
+    return mapProfile(data) as T;
   }
 
   const { data, error } = await withRetry(`read from ${table}`, async () => await getServerSupabase().from(table).select('*').eq('id', id).maybeSingle());
@@ -154,7 +143,10 @@ export async function saveDoc(table: string, id: string, data: any): Promise<voi
     if (data.blood_type !== undefined) updates.blood_group = data.blood_type;
     
     if (Object.keys(updates).length > 0) {
-      await supabase.from('donor_profiles').update(updates).eq('profile_id', id);
+      await withRetry(`save to users`, async () => {
+        const { error } = await supabase.from('donor_profiles').update(updates).eq('profile_id', id);
+        if (error) throw error;
+      });
     }
     return;
   }

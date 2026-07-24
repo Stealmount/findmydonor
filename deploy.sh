@@ -32,18 +32,8 @@ if ! command -v pm2 &>/dev/null; then
 fi
 echo "[✓] PM2 $(pm2 --version)"
 
-# ── 2. Pull / clone the repository ───────────────────────
-if [ -d "$APP_DIR/.git" ]; then
-  echo "[Git] Pulling latest $BRANCH…"
-  cd "$APP_DIR"
-  git fetch origin
-  git reset --hard "origin/$BRANCH"
-else
-  echo "[Git] Cloning repo into $APP_DIR…"
-  mkdir -p "$APP_DIR"
-  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
-  cd "$APP_DIR"
-fi
+# ── 2. Git logic removed for SCP deployment ────────────────
+cd "$APP_DIR"
 
 # ── 3. Write production .env (only if it doesn't exist) ──
 ENV_FILE="$APP_DIR/.env"
