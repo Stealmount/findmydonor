@@ -720,14 +720,15 @@ async function startServer() {
     let recipientAllowed = recipient === "admin@raktdaan.org" || recipient === authUser.email.toLowerCase();
     if (!recipientAllowed) {
       const supabase = getServerSupabase();
-      const [donorLookup, requesterLookup] = await Promise.all([
-        supabase.from("users").select("id").eq("email", recipient).limit(1),
-        supabase.from("requesters").select("id").eq("email", recipient).limit(1),
-      ]);
-      if (donorLookup.error || requesterLookup.error) {
+      const { data: profileMatch, error: profileErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", recipient)
+        .limit(1);
+      if (profileErr) {
         return res.status(503).json({ error: "Unable to validate email recipient." });
       }
-      recipientAllowed = Boolean(donorLookup.data?.length || requesterLookup.data?.length);
+      recipientAllowed = Boolean(profileMatch?.length);
     }
     if (!recipientAllowed) {
       return res.status(403).json({ error: "Email recipient is not registered." });
