@@ -675,7 +675,7 @@ async function startServer() {
     let supabaseStatus = "down";
     if (isSupabaseConfigured()) {
       try {
-        const { error } = await getServerSupabase().from("users").select("id").limit(1);
+        const { error } = await getServerSupabase().from("profiles").select("id").limit(1);
         supabaseStatus = error ? "degraded" : "up";
       } catch {
         supabaseStatus = "down";
