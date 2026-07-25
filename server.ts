@@ -1448,16 +1448,22 @@ async function startServer() {
     try {
       const linked = await getLinkedProfile(authUser.id);
       if (linked?.profile.whatsapp_verified && linked.profile.can_request) {
-        requester = {
+        const candidate: Requester = {
           id: linked.profile.id, full_name: linked.profile.full_name,
           email: linked.profile.email || authUser.email || "", phone: linked.profile.phone,
           whatsapp_number: linked.profile.whatsapp_phone,
           created_at: linked.profile.consent_accepted_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
-        await saveLocalOrFirestoreDoc("requesters", requester.id, requester as unknown as Record<string, unknown>);
+        // ponytail: only promote candidate to requester after save succeeds — prevents FK violation
+        try {
+          await saveLocalOrFirestoreDoc("requesters", candidate.id, candidate as unknown as Record<string, unknown>);
+          requester = candidate;
+        } catch (saveErr) {
+          console.warn("[Requests] Failed to save requester from profiles — falling back:", saveErr);
+        }
       }
-    } catch { /* profiles table may not exist yet — fall through */ }
+    } catch (e) { console.warn("[Requests] Profile lookup failed:", e); }
     if (!requester) {
       requester = await getLocalOrFirestoreDoc<Requester>("requesters", authUser.id);
     }
@@ -1657,7 +1663,7 @@ async function startServer() {
           updated_at: new Date().toISOString(),
         };
       }
-    } catch { /* fall through */ }
+    } catch (e) { console.warn("[Dashboard] Profile lookup failed:", e); }
     if (!requester) {
       requester = await getLocalOrFirestoreDoc<Requester>("requesters", authUser.id);
     }
@@ -1680,7 +1686,7 @@ async function startServer() {
     try {
       const linked = await getLinkedProfile(authUser.id);
       if (linked?.profile?.id) donorId = linked.profile.id;
-    } catch { /* fall through */ }
+    } catch (e) { console.warn("[DonorMatches] Profile lookup failed:", e); }
 
     const [allMatches, allRequests, allLogs] = await Promise.all([
       getLocalOrFirestoreCollection<Match>("matches"),
@@ -1701,7 +1707,7 @@ async function startServer() {
     try {
       const linked = await getLinkedProfile(authUser.id);
       if (linked?.profile?.id) requesterId = linked.profile.id;
-    } catch { /* fall through */ }
+    } catch (e) { console.warn("[RequesterReqs] Profile lookup failed:", e); }
 
     const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
     const requests = allRequests.filter((request) => request.requester_id === requesterId || request.requester_id === authUser.id);
