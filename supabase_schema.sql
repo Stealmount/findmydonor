@@ -1,6 +1,7 @@
 -- ============================================================
 -- Blood Connect — Supabase PostgreSQL Schema
 -- Run this in: Supabase Dashboard → SQL Editor
+-- ⚠️  SUPERSEDED: users & requesters tables below are DEAD. All signups now write to profiles + donor_profiles (see supabase_auth_profile_migration.sql). Do NOT add new queries against users/requesters.
 -- ============================================================
 
 -- Enable UUID extension
