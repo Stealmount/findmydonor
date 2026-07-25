@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, BloodRequest, Match, NotificationLog, DonationLog, BloodType, RequestStatus } from '../types';
-import { seedInitialDonors } from '../lib/db';
+
 import { authenticatedApi } from '../lib/api';
 import { 
   Users, 
@@ -204,13 +204,11 @@ export default function AdminPanel({ onStateChange }: AdminPanelProps) {
     }
   };
 
-  // Seed compatible database
+  // Seed compatible database (legacy seeder removed — donors now live in profiles+donor_profiles)
   const handleSeedDatabase = async () => {
-    if (!window.confirm("Seed initial compatible donors, logs, and mock alerts into database?")) return;
-    await seedInitialDonors();
+    if (!window.confirm("Legacy seeder removed. Refresh admin data?")) return;
     await loadAdminData();
     if (onStateChange) onStateChange();
-    alert("Pre-seeded database populated successfully.");
   };
 
   // CALCULATION OF ANALYTICS METRICS (Section 11.2)
