@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Copy, Check, ShieldCheck, Zap, Smartphone, ArrowRight, ArrowLeft, Info, Sparkles, QrCode } from 'lucide-react';
+import { Heart, Copy, Check, ShieldCheck, Zap, Smartphone, ArrowRight, ArrowLeft, Info, QrCode } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface SupportPageProps {
@@ -21,14 +21,6 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
 
   const upiPayUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${currentAmount}&cu=INR&tn=${encodeURIComponent('Support Emergency Blood Network')}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiPayUrl)}`;
-
-  const getImpactText = (amt: number) => {
-    if (amt <= 50) return isHi ? "⚡ 200 Emergency WhatsApp broadcasts" : "⚡ Funds 200 Emergency WhatsApp broadcasts";
-    if (amt <= 100) return isHi ? "🩸 1 Month high-speed server hosting & matching" : "🩸 Funds 1 Month high-speed server hosting & matching";
-    if (amt <= 250) return isHi ? "🏥 500 Patient alert notifications" : "🏥 Funds 500 Emergency patient alerts";
-    if (amt <= 500) return isHi ? "🛡️ Full 1-Year security gateway & database" : "🛡️ Funds 1-Year security gateway & database";
-    return isHi ? "💖 Master community donor network sponsor" : "💖 Master community donor network sponsor";
-  };
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(upiId);
@@ -62,7 +54,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
         <div className="flex items-center justify-between border-b border-gray-200 pb-4">
           <button
             onClick={() => onNavigate('home')}
-            className="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1.5"
+            className="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             {isHi ? "Mukhya Prashth" : "Back to Home"}
@@ -83,12 +75,12 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
           </h1>
           <p className="text-sm text-gray-600 max-w-2xl leading-relaxed">
             {isHi 
-              ? "FindMyDonor 100% free hai. Aapka sahyog emergency server hosting aur WhatsApp alert gateways ko uninterrupted zinda rakhta hai." 
-              : "FindMyDonor is 100% free for all patients. Your support directly funds server hosting and instant WhatsApp emergency alert gateways."}
+              ? "FindMyDonor 100% free aur non-profit hai. Aapka koi bhi sahyog emergency server hosting aur WhatsApp alerts ko zinda rakhne mein seedha madad karta hai." 
+              : "FindMyDonor is 100% free and non-profit. Any contribution — big or small — directly helps keep emergency server hosting & WhatsApp alerts running for families in need."}
           </p>
         </div>
 
-        {/* Short, Punchy, Emotional Quote Banner */}
+        {/* Short, Warm, Genuine Quote Banner */}
         <div className="bg-rose-50/80 border border-rose-100 p-6 rounded-2xl text-rose-950 space-y-2 shadow-sm">
           <p className="text-base sm:text-lg font-serif italic text-rose-900 leading-relaxed">
             &ldquo;{isHi 
@@ -114,7 +106,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
         {/* Contribution Card Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
           
-          {/* Left: Amount Selection & Impact */}
+          {/* Left: Amount Selection */}
           <div className="md:col-span-7 bg-white border border-gray-200 shadow-sm rounded-2xl p-6 space-y-5 flex flex-col justify-between">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -134,7 +126,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
                       setSelectedAmount(amt);
                       setCustomAmount('');
                     }}
-                    className={`py-2.5 rounded-xl font-bold text-xs transition-all border ${
+                    className={`py-2.5 rounded-xl font-bold text-xs transition-all border cursor-pointer ${
                       selectedAmount === amt
                         ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
                         : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
@@ -156,10 +148,11 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 px-3 text-gray-900 text-xs focus:outline-none focus:border-rose-500 focus:bg-white placeholder:text-gray-400"
               />
 
-              {/* Dynamic Impact Pill */}
-              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-xs font-medium flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{getImpactText(currentAmount)}</span>
+              {/* Warm Open Community Ask Note */}
+              <div className="p-3.5 rounded-xl bg-rose-50/50 border border-rose-100 text-rose-900 text-xs leading-relaxed font-medium">
+                {isHi 
+                  ? "❤️ Koi bhi rashi chunein — har chhota sa sahyog emergency alerts aur server ko bina kisi swarth ke chalaye rakhne mein hamari madad karta hai."
+                  : "❤️ Choose any amount — every contribution directly supports server hosting and emergency WhatsApp alerts for families in distress."}
               </div>
 
               {/* Official UPI ID Box */}
