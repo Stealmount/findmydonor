@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Copy, Check, ShieldCheck, Zap, Sparkles, Smartphone, ArrowRight, Gift, Lock } from 'lucide-react';
+import { Heart, Copy, Check, ShieldCheck, Zap, Smartphone, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface SupportPageProps {
@@ -28,53 +28,64 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-10 px-4 sm:px-6 lg:px-8 relative font-sans">
-      <div className="max-w-3xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gray-50 text-gray-900 pt-24 pb-20 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-gray-200 pb-4">
           <button
             onClick={() => onNavigate('home')}
-            className="text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors"
+            className="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1.5"
           >
-            ← {isHi ? "Mukhya Prashth" : "Back Home"}
+            <ArrowLeft className="w-4 h-4" />
+            {isHi ? "Mukhya Prashth" : "Back to Home"}
           </button>
-          <span className="text-xs font-medium text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200 flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5" /> 100% Free Community Mission
           </span>
         </div>
 
-        {/* Short, Punchy, Emotional Quote Header */}
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold uppercase tracking-wider">
-            <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500 animate-pulse" />
-            {isHi ? "Sahyog & Sewa" : "Support Our Cause"}
-          </div>
-
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+        {/* Header Section */}
+        <div className="space-y-3 text-center sm:text-left">
+          <p className="text-xs font-semibold uppercase tracking-widest text-rose-600 flex items-center justify-center sm:justify-start gap-1.5">
+            <Heart className="w-3.5 h-3.5 fill-rose-600 text-rose-600 animate-pulse" />
+            {isHi ? "Sahyog & Sewa" : "Support Our Non-Profit Mission"}
+          </p>
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             {isHi ? "Donors Khoon Dete Hain. Aap Network Chalate Hain." : "Donors Give Blood. You Power the Bridge."}
           </h1>
-
-          {/* Short & Powerful Quote */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-950 border border-rose-500/20 text-center max-w-xl mx-auto">
-            <p className="text-base sm:text-lg font-serif italic text-rose-100">
-              &ldquo;{isHi 
-                ? "Khoon donor deta hai, par uski pukaar aage aap pahunchate hain. Aapka ek chhota sa sahyog kisi ki jaan bachane waala bridge zinda rakhta hai." 
-                : "You don't need to be a doctor to save a life — keeping the bridge alive between a donor and a patient is the highest form of humanity."}&rdquo;
-            </p>
-          </div>
+          <p className="text-sm text-gray-600 max-w-2xl">
+            {isHi 
+              ? "FindMyDonor 100% free hai. Aapka sahyog emergency server hosting aur WhatsApp alert gateways ko uninterrupted zinda rakhta hai." 
+              : "FindMyDonor is 100% free for all patients. Your support directly funds server hosting and instant WhatsApp emergency alert gateways."}
+          </p>
         </div>
 
-        {/* Contribution Card */}
+        {/* Short, Punchy, Emotional Quote Banner */}
+        <div className="bg-rose-50/80 border border-rose-100 p-6 rounded-2xl text-rose-950 space-y-2 shadow-sm">
+          <p className="text-base sm:text-lg font-serif italic text-rose-900 leading-relaxed">
+            &ldquo;{isHi 
+              ? "Khoon donor deta hai, par uski pukaar aage aap pahunchate hain. Aapka ek chhota sa sahyog kisi ki jaan bachane waala bridge zinda rakhta hai." 
+              : "You don't need to be a doctor to save a life — keeping the bridge alive between a donor and a patient is the highest form of humanity."}&rdquo;
+          </p>
+          <p className="text-xs font-semibold text-rose-700">
+            — FindMyDonor Community Infrastructure Initiative
+          </p>
+        </div>
+
+        {/* Contribution Card Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
           
           {/* Left: Amount Selection */}
-          <div className="md:col-span-7 rounded-2xl p-6 bg-slate-900/60 border border-white/10 space-y-5 flex flex-col justify-between">
+          <div className="md:col-span-7 bg-white border border-gray-200 shadow-sm rounded-2xl p-6 space-y-5 flex flex-col justify-between">
             <div className="space-y-4">
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                {isHi ? "Sahyog Rashi Chunein" : "Select Contribution Amount"}
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  {isHi ? "Sahyog Rashi Chunein" : "Select Contribution Amount"}
+                </h2>
+                <span className="text-xs font-semibold text-gray-500">INR (₹)</span>
+              </div>
 
               <div className="grid grid-cols-5 gap-2">
                 {amounts.map((amt) => (
@@ -87,8 +98,8 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
                     }}
                     className={`py-2.5 rounded-xl font-bold text-xs transition-all border ${
                       selectedAmount === amt
-                        ? 'bg-rose-600 text-white border-rose-400 shadow-md shadow-rose-600/30'
-                        : 'bg-slate-950 text-slate-300 border-white/10 hover:border-white/20'
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                     }`}
                   >
                     ₹{amt}
@@ -104,23 +115,23 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
                   setCustomAmount(e.target.value);
                   setSelectedAmount(null);
                 }}
-                className="w-full bg-slate-950 border border-white/10 rounded-xl py-2.5 px-3 text-white text-xs focus:outline-none focus:border-rose-500 placeholder:text-slate-600"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 px-3 text-gray-900 text-xs focus:outline-none focus:border-rose-500 focus:bg-white placeholder:text-gray-400"
               />
 
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-white/10 space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <span>BHIM / Universal UPI ID</span>
-                  <span className="text-emerald-400 font-medium">100% Direct Bank</span>
+              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Official BHIM / Universal UPI ID</span>
+                  <span className="text-emerald-700 font-semibold">Verified Bank Transfer</span>
                 </div>
-                <div className="flex items-center justify-between bg-slate-900 p-2.5 rounded-lg border border-white/5">
-                  <code className="text-sm font-mono font-bold text-rose-300">{upiId}</code>
+                <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
+                  <code className="text-sm font-mono font-bold text-gray-900">{upiId}</code>
                   <button
                     type="button"
                     onClick={handleCopyUpi}
-                    className="px-2.5 py-1 rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-xs font-semibold transition-all flex items-center gap-1 border border-rose-500/30"
+                    className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition-all flex items-center gap-1.5 ring-1 ring-rose-200"
                   >
-                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    {copied ? "Copied" : "Copy"}
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? "Copied" : "Copy UPI ID"}
                   </button>
                 </div>
               </div>
@@ -128,46 +139,46 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
 
             <a
               href={upiPayUrl}
-              className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-4"
             >
               <Smartphone className="w-4 h-4" />
-              {isHi ? `UPI App Se Pay Karein (₹${currentAmount})` : `Pay ₹${currentAmount} via UPI App`}
-              <ArrowRight className="w-3.5 h-3.5" />
+              {isHi ? `UPI App Se Pay Karein (₹${currentAmount})` : `Pay ₹${currentAmount} via UPI App (GPay/PhonePe)`}
+              <ArrowRight className="w-4 h-4" />
             </a>
           </div>
 
           {/* Right: Official BHIM QR Code */}
-          <div className="md:col-span-5 rounded-2xl p-6 bg-slate-900/60 border border-white/10 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="md:col-span-5 bg-white border border-gray-200 shadow-sm rounded-2xl p-6 text-center flex flex-col items-center justify-center space-y-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-white">Scan & Pay via BHIM / GPay / PhonePe</h3>
-              <p className="text-[11px] text-slate-400">0% Commission • 100% Server Support</p>
+              <h3 className="text-sm font-bold text-gray-900">Scan & Pay via Any UPI App</h3>
+              <p className="text-xs text-gray-500">BHIM • GPay • PhonePe • Paytm • CRED</p>
             </div>
 
-            <div className="p-3 rounded-xl bg-white shadow-xl border border-slate-200">
+            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-md">
               <img
                 src="/bhim-qr.png"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = qrCodeUrl;
                 }}
                 alt="FindMyDonor BHIM UPI QR Code"
-                className="w-44 h-44 object-contain rounded-md"
+                className="w-48 h-48 object-contain rounded-md"
               />
             </div>
-            <p className="text-[11px] font-mono text-slate-400">UPI: <span className="text-rose-300 font-bold">{upiId}</span></p>
+            <p className="text-xs font-mono text-gray-600">UPI ID: <span className="text-gray-900 font-bold">{upiId}</span></p>
           </div>
         </div>
 
-        {/* Clean Transparency Note */}
-        <div className="p-5 rounded-2xl bg-slate-900/40 border border-white/10 text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-slate-300 font-medium">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            {isHi ? "100% Non-Profit Transparency: All funds go directly to hosting & WhatsApp emergency alert gateways." : "100% Non-Profit Transparency: Every rupee directly funds server hosting & WhatsApp emergency alert gateways."}
+        {/* Clean Transparency Card */}
+        <div className="p-5 rounded-2xl bg-white border border-gray-200 shadow-sm text-xs text-gray-600 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-gray-700 font-medium">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            {isHi ? "100% Financial Integrity: Every rupee directly funds server hosting & emergency WhatsApp alerts." : "100% Financial Integrity: Every rupee directly funds server hosting & emergency WhatsApp alerts."}
           </span>
           <button
             onClick={() => onNavigate('request')}
-            className="text-rose-400 hover:text-rose-300 font-bold shrink-0 flex items-center gap-1"
+            className="text-rose-600 hover:text-rose-700 font-bold shrink-0 flex items-center gap-1"
           >
-            {isHi ? "Need Blood? Request Here →" : "Need Emergency Blood? Request Here →"}
+            {isHi ? "Need Emergency Blood? Request Here →" : "Need Emergency Blood? Request Here →"}
           </button>
         </div>
 

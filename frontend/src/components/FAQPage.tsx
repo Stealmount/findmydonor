@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, Search, Heart, ShieldCheck, Zap, MessageSquare, ArrowLeft, PhoneCall } from 'lucide-react';
+import { HelpCircle, ChevronDown, Search, ShieldCheck, ArrowLeft, PhoneCall } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface FAQPageProps {
@@ -38,7 +38,8 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
       questionHi: "Emergency WhatsApp donor alert kaise kaam karta hai?",
       answer: "When a patient submits a request, our matching engine checks nearby registered donors in the same pincode and blood group. Eligible donors receive a WhatsApp message detailing the hospital name and required units. Replying YES shares contact details directly.",
       answerHi: "Jab koi marez request submit karta hai, humare engine dwara aaspas ke verified donors ko WhatsApp message jata hai jisme hospital naam aur blood group hota hai. YES reply karte hi contact share hota hai."
-    },    {
+    },
+    {
       id: 'faq-3',
       category: 'donors',
       question: "What is the safety cooldown period between blood donations?",
@@ -91,41 +92,34 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-12 px-4 sm:px-6 lg:px-8 font-sans relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-rose-600/10 blur-[150px] pointer-events-none rounded-full" />
-
-      <div className="max-w-4xl mx-auto relative z-10 space-y-10">
+    <div className="min-h-screen bg-gray-50 text-gray-900 pt-24 pb-20 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="max-w-4xl mx-auto space-y-6">
         
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex items-center justify-between border-b border-gray-200 pb-4">
           <button
             onClick={() => onNavigate ? onNavigate('home') : (window.location.href = '/')}
-            className="text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-white transition-colors flex items-center gap-1.5"
+            className="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1.5"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
             {isHi ? "Mukhya Prashth" : "Back to Home"}
           </button>
-          <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200 flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5" />
             {isHi ? "24x7 Help Center" : "24x7 Community Help Center"}
           </span>
         </div>
 
-        {/* Human Header */}
-        <div className="text-center space-y-4 max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold uppercase tracking-wider">
+        {/* Page Header */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-rose-600 flex items-center gap-1.5">
             <HelpCircle className="w-3.5 h-3.5" />
             {isHi ? "Sawaal Aur Jawaab" : "Clear Answers for Real Humans"}
-          </div>
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
-            {isHi ? (
-              <>Koshish Yahi Ki Aapka <br /><span className="bg-gradient-to-r from-rose-400 to-amber-300 bg-clip-text text-transparent">Har Sawaal Hal Ho Jaye.</span></>
-            ) : (
-              <>Frequently Asked Questions. <br /><span className="bg-gradient-to-r from-rose-400 to-amber-300 bg-clip-text text-transparent">Simple, Honest Answers.</span></>
-            )}
+          </p>
+          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 tracking-tight">
+            {isHi ? "Koshish Yahi Ki Aapka Har Sawaal Hal Ho Jaye." : "Frequently Asked Questions. Simple, Honest Answers."}
           </h1>
-          <p className="text-sm sm:text-base text-slate-300">
+          <p className="text-sm text-gray-600 max-w-3xl leading-relaxed">
             {isHi
               ? "Emergency mein time sabse zaroori hota hai. Yahan donor, patient aur privacy se jude sabhi sawaalon ke spasht jawaab hain."
               : "During medical emergencies, clarity saves lives. Here are honest, direct answers to common questions about donation, requests, and privacy."}
@@ -134,18 +128,18 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
 
         {/* Search Bar & Category Filters */}
         <div className="space-y-4">
-          <div className="relative max-w-xl mx-auto">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+          <div className="relative max-w-xl">
+            <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder={isHi ? "Sawaal khojien (e.g. cooldown, whatsapp, free, privacy)..." : "Search questions (e.g. cooldown, whatsapp, free, privacy)..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900/80 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-sm text-white focus:outline-none focus:border-rose-500 transition-colors placeholder:text-slate-500"
+              className="w-full bg-white border border-gray-200 shadow-sm rounded-xl py-3 pl-11 pr-4 text-sm text-gray-900 focus:outline-none focus:border-rose-500 transition-colors placeholder:text-gray-400"
             />
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             {[
               { id: 'all', label: isHi ? 'Sabhi Sawaal' : 'All Questions' },
               { id: 'donors', label: isHi ? '🩸 Donors Ke Liye' : '🩸 For Donors' },
@@ -157,8 +151,8 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
                 onClick={() => setActiveCategory(tab.id as any)}
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
                   activeCategory === tab.id
-                    ? 'bg-rose-600 text-white border-rose-400 shadow-md shadow-rose-600/20'
-                    : 'bg-slate-900/60 text-slate-400 border-white/10 hover:border-white/20 hover:text-white'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
                 }`}
               >
                 {tab.label}
@@ -167,10 +161,10 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
           </div>
         </div>
 
-        {/* Clean Interactive Accordion List */}
+        {/* Accordion List */}
         <div className="space-y-3">
           {filteredFaqs.length === 0 ? (
-            <div className="text-center py-12 p-6 rounded-2xl bg-slate-900/40 border border-white/10 text-slate-400 text-sm">
+            <div className="text-center py-12 p-6 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm">
               {isHi ? "Koi sawaal nahi mila. Kripya doosra keyword type karein." : "No matching questions found. Try another search term."}
             </div>
           ) : (
@@ -179,28 +173,26 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
               return (
                 <div
                   key={faq.id}
-                  className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
-                    isOpen
-                      ? 'bg-slate-900/90 border-rose-500/30 shadow-lg shadow-rose-950/20'
-                      : 'bg-slate-900/40 border-white/10 hover:border-white/20'
+                  className={`bg-white border transition-all duration-200 rounded-xl shadow-sm overflow-hidden ${
+                    isOpen ? 'border-rose-300 ring-1 ring-rose-200' : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <button
                     onClick={() => setOpenId(isOpen ? null : faq.id)}
                     className="w-full p-5 text-left flex items-center justify-between gap-4 cursor-pointer"
                   >
-                    <span className="font-bold text-sm sm:text-base text-white leading-snug">
+                    <span className="font-bold text-sm sm:text-base text-gray-900 leading-snug">
                       {isHi ? faq.questionHi : faq.question}
                     </span>
                     <div className={`p-1.5 rounded-lg border transition-transform duration-200 shrink-0 ${
-                      isOpen ? 'bg-rose-500/20 text-rose-300 border-rose-500/30 rotate-180' : 'bg-slate-950 text-slate-400 border-white/10'
+                      isOpen ? 'bg-rose-50 text-rose-700 border-rose-200 rotate-180' : 'bg-gray-50 text-gray-400 border-gray-200'
                     }`}>
                       <ChevronDown className="w-4 h-4" />
                     </div>
                   </button>
 
                   {isOpen && (
-                    <div className="px-5 pb-5 pt-1 text-xs sm:text-sm text-slate-300 border-t border-white/5 leading-relaxed">
+                    <div className="px-5 pb-5 pt-1 text-xs sm:text-sm text-gray-600 border-t border-gray-100 leading-relaxed">
                       {isHi ? faq.answerHi : faq.answer}
                     </div>
                   )}
@@ -210,20 +202,20 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
           )}
         </div>
 
-        {/* Human Emergency Contact Box */}
-        <div className="p-6 rounded-2xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-slate-950 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+        {/* Contact Footer */}
+        <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center justify-center sm:justify-start gap-2">
-              <PhoneCall className="w-4 h-4 text-rose-400" />
+            <h3 className="text-sm font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
+              <PhoneCall className="w-4 h-4 text-rose-600" />
               {isHi ? "Emergency Blood Request Post Karein" : "Still Have an Urgent Blood Question?"}
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-gray-500">
               {isHi ? "Agar aapse kisi ko emergency khoon ki zaroorat hai, toh turant request submit karein." : "If someone needs blood immediately, post an emergency request to alert nearby donors."}
             </p>
           </div>
           <button
             onClick={() => onNavigate ? onNavigate('request') : (window.location.href = '/?view=request')}
-            className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 transition-all shrink-0 shadow-lg shadow-rose-600/20"
+            className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-2 transition-all shrink-0 shadow-sm"
           >
             {isHi ? "Request Blood Now →" : "Request Blood Now →"}
           </button>
