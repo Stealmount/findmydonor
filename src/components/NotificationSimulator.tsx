@@ -9,9 +9,10 @@ import { useLanguage } from '../lib/LanguageContext';
 interface NotificationSimulatorProps {
   onStateChange?: () => void;
   onNavigate?: (view: string) => void;
+  showSimulatorButton?: boolean;
 }
 
-export default function NotificationSimulator({ onStateChange, onNavigate }: NotificationSimulatorProps) {
+export default function NotificationSimulator({ onStateChange, onNavigate, showSimulatorButton = false }: NotificationSimulatorProps) {
   const { language } = useLanguage();
   const isHi = language === 'HI';
   const [isOpen, setIsOpen] = useState(false);
@@ -87,7 +88,7 @@ export default function NotificationSimulator({ onStateChange, onNavigate }: Not
     <>
       {/* Floating Bottom-Right Action Bar */}
       <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
-        {/* Main Floating Support Us Button */}
+        {/* Public Floating Support Us Button */}
         <button
           onClick={() => {
             if (onNavigate) {
@@ -104,19 +105,21 @@ export default function NotificationSimulator({ onStateChange, onNavigate }: Not
           <span className="text-xs font-extrabold tracking-tight">{isHi ? 'Support Us ❤️' : 'Support Us ❤️'}</span>
         </button>
 
-        {/* Compact Simulator Trigger Pill */}
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          title={isHi ? "लाइव सिमुलेटर कंसोल" : "Live Simulator Console"}
-          className="flex items-center gap-1.5 px-3 py-3 rounded-full bg-ink-900/95 hover:bg-black text-white shadow-lg border border-ink-700/80 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer"
-        >
-          <Sparkles className="w-4 h-4 text-amber-400" />
-          {notifications.length > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blood-600 px-1 text-[10px] font-bold text-white">
-              {notifications.length}
-            </span>
-          )}
-        </button>
+        {/* Admin-Only Simulator Trigger Pill */}
+        {showSimulatorButton && (
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            title={isHi ? "लाइव सिमुलेटर कंसोल" : "Live Simulator Console"}
+            className="flex items-center gap-1.5 px-3 py-3 rounded-full bg-ink-900/95 hover:bg-black text-white shadow-lg border border-ink-700/80 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            {notifications.length > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blood-600 px-1 text-[10px] font-bold text-white">
+                {notifications.length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Modern Slide-Over Simulator Panel */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AdminUser, BloodRequest, User } from '../../types';
+import NotificationSimulator from '../NotificationSimulator';
 import { Activity, Users, Droplet, BellRing, Link2, ShieldAlert, CheckCircle, RefreshCcw } from 'lucide-react';
 import { authenticatedApi } from '../../lib/api';
 import { useLanguage } from '../../lib/LanguageContext';
@@ -292,6 +293,7 @@ export function AdminDashboard({ admin, onLogout }: AdminDashboardProps) {
           </motion.div>
         )}
       </main>
+      <NotificationSimulator showSimulatorButton={true} />
     </div>
   );
 }
