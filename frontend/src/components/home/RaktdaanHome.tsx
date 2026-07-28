@@ -13,6 +13,7 @@ import { Footer } from "./Footer";
 import { User as DonorUser, Requester } from "../../types";
 import { LiveFeed } from "./LiveFeed";
 import { Leaderboard } from "./Leaderboard";
+import { DirectoriesHubSection } from "./DirectoriesHubSection";
 
 interface RaktdaanHomeProps {
   onNavigate: (view: any) => void;
@@ -42,6 +43,7 @@ export function RaktdaanHome({
         </div>
         <Features />
         <Showcase />
+        <DirectoriesHubSection onNavigate={onNavigate} />
         <Benefits />
         <Impact />
         <FAQ />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Droplet, Heart, Search, User, ShieldCheck, ArrowUpRight, Menu, X, Globe, HeartHandshake } from 'lucide-react';
+import { Droplet, Heart, Search, User, ShieldCheck, ArrowUpRight, Menu, X, Globe, HeartHandshake, Building2 } from 'lucide-react';
 import { User as DonorUser, Requester } from "../../types";
 import { useLanguage } from '../../lib/LanguageContext';
 
@@ -68,12 +68,14 @@ export function Navbar({ onNavigate, loggedInUser, loggedInRequester }: NavbarPr
             <Search className="w-3.5 h-3.5 text-ink-400" />
             {t.nav.trackMatch}
           </button>
+
           
           <button
-            onClick={() => onNavigate('hospital-register' as any)}
-            className="rounded-full px-3 py-1.5 text-xs xl:text-[13.5px] font-semibold text-ink-600 transition-colors hover:text-ink-900 hover:bg-ink-100/60 cursor-pointer whitespace-nowrap"
+            onClick={() => onNavigate('blood-banks' as any)}
+            className="rounded-full px-3 py-1.5 text-xs xl:text-[13.5px] font-bold text-blood-600 border border-blood-500/20 bg-blood-50/50 hover:bg-blood-100/80 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
           >
-            {language === 'HI' ? 'अस्पतालों के लिए' : 'For hospitals'}
+            <Building2 className="w-3.5 h-3.5 text-blood-600" />
+            {language === 'HI' ? 'ब्लड बैंक स्टॉक' : 'Blood Banks & Stock'}
           </button>
 
           {!loggedInUser && !loggedInRequester ? (
@@ -131,13 +133,7 @@ export function Navbar({ onNavigate, loggedInUser, loggedInRequester }: NavbarPr
             </button>
           </div>
 
-          <button
-            onClick={() => onNavigate('request')}
-            className="btn-glow hidden md:inline-flex group items-center gap-1.5 rounded-full bg-ink-900 px-4 py-2 text-[13.5px] font-medium text-white shadow-[0_8px_20px_-4px_rgba(13,10,10,0.3)] hover:bg-black cursor-pointer transition-all"
-          >
-            {t.nav.requestBloodBtn}
-            <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </button>
+
 
           <button
             onClick={() => setOpen((s) => !s)}
@@ -207,12 +203,14 @@ export function Navbar({ onNavigate, loggedInUser, loggedInRequester }: NavbarPr
                 <Search className="w-4 h-4 text-ink-400" />
               </button>
 
+
+
               <button
-                onClick={() => { setOpen(false); onNavigate('hospital-register' as any); }}
-                className="w-full text-left rounded-xl px-3.5 py-3 min-h-[44px] text-sm font-semibold text-ink-800 hover:bg-ink-100/80 active:scale-[0.99] transition flex items-center justify-between"
+                onClick={() => { setOpen(false); onNavigate('blood-banks' as any); }}
+                className="w-full text-left rounded-xl px-3.5 py-3 min-h-[44px] text-sm font-bold text-blood-600 bg-blood-50 hover:bg-blood-100 active:scale-[0.99] transition flex items-center justify-between"
               >
-                <span>{language === 'HI' ? 'अस्पतालों के लिए' : 'For hospitals'}</span>
-                <HeartHandshake className="w-4 h-4 text-ink-400" />
+                <span>{language === 'HI' ? 'ब्लड बैंक डायरेक्टरी & लाइव स्टॉक' : 'Blood Banks & Live Stock'}</span>
+                <Building2 className="w-4 h-4 text-blood-600" />
               </button>
 
               {!loggedInUser && !loggedInRequester ? (

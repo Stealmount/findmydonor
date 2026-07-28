@@ -35,10 +35,10 @@ const columns = [
     links: [
       { label: "How it works", view: "home" },
       { label: "Request blood", view: "request" },
+      { label: "Blood Banks & Stock Directory", view: "blood-banks" },
       { label: "For donors", view: "donor-register" },
       { label: "For hospitals", view: "hospital-register" },
       { label: "Track request", view: "tracking" },
-      { label: "Community forum", view: "home" },
     ],
   },
   {
@@ -54,21 +54,22 @@ const columns = [
   {
     title: "Resources",
     links: [
-      { label: "Blood type guide", view: "home" },
+      { label: "Blood type guide", view: "blood-compatibility" },
       { label: "Hospital playbook", view: "hospital-register" },
-      { label: "Donor safety guidelines", view: "donor-register" },
+      { label: "Donor safety & eligibility guides", view: "guides" },
+      { label: "Support Our Mission ❤️", view: "support" },
       { label: "Live match tracking", view: "tracking" },
-      { label: "Help center", view: "home" },
+      { label: "Help center", view: "faq" },
     ],
   },
   {
     title: "Legal & Privacy",
     links: [
-      { label: "Privacy policy", view: "home" },
-      { label: "Terms of service", view: "home" },
+      { label: "Privacy policy", view: "privacy" },
+      { label: "Terms of service", view: "terms" },
+      { label: "FAQ / Help center", view: "faq" },
       { label: "Donor data protection", view: "donor-register" },
-      { label: "HIPAA compliance", view: "hospital-register" },
-      { label: "DigiLocker verification", view: "donor-register" }
+      { label: "HIPAA compliance", view: "hospital-register" }
     ],
   },
 ];
@@ -120,10 +121,10 @@ export function Footer({ onNavigate }: FooterProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => onNavigate?.('request')}
-                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-4 py-2.5 text-[12.5px] font-semibold text-white hover:bg-white/15 cursor-pointer"
+                  onClick={() => onNavigate?.('blood-banks')}
+                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-blood-600 px-4 py-2.5 text-[12.5px] font-bold text-white hover:bg-blood-500 cursor-pointer shadow-lg shadow-blood-600/30"
                 >
-                  Google Play
+                  Explore Blood Banks
                   <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </button>
               </div>

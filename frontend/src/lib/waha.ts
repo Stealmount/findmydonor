@@ -285,3 +285,16 @@ ${trackingUrl}`;
 export function buildDonorDeclineAckMessage(): string {
   return `Understood. We've updated your status and alerted the next eligible donor. Thank you for responding quickly! 🙏`;
 }
+
+/**
+ * WhatsApp referral message template auto-sent after a donation is logged.
+ */
+export function buildDonorReferralMessage(donorName: string): string {
+  const firstName = donorName.split(' ')[0];
+  return `Hi *${firstName}*! Thank you for donating blood and saving a life today on FindMyDonor™! ❤️
+
+Help us reach more patients in emergency by sharing FindMyDonor with your friends & family:
+
+"I just donated blood via FindMyDonor™! Join our emergency volunteer donor network here: https://findmydonor.online" 🩸`;
+}
+

@@ -4,6 +4,55 @@
 
 export type BloodType = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-';
 
+export type BloodComponent = 'whole_blood' | 'prbc' | 'ffp' | 'platelets_sdp';
+
+export interface BloodBankStock {
+  blood_type: BloodType;
+  component: BloodComponent;
+  available_units: number;
+  last_updated_at: string;
+}
+
+export interface BloodBank {
+  id: string;
+  eraktkosh_id: string;
+  eraktkosh_url?: string;
+  name: string;
+  category: 'government' | 'private' | 'charitable' | 'red_cross';
+  address: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+  latitude: number;
+  longitude: number;
+  phone: string;
+  email?: string;
+  has_component_facility: boolean;
+  operating_hours: string;
+  stock: BloodBankStock[];
+  last_synced_at: string;
+}
+
+export interface DonationCamp {
+  id: string;
+  title: string;
+  organizer_name: string;
+  venue_address: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+  camp_date: string;
+  start_time: string;
+  end_time: string;
+  contact_number: string;
+  latitude: number;
+  longitude: number;
+}
+
 export type DonationFrequency = 'first_time' | 'occasional' | 'regular';
 
 export type AvailabilityStatus = 'available' | 'available_with_notice' | 'unavailable';
@@ -39,6 +88,7 @@ export interface User {
   pincode: string; // 6-digit numeric
   area: string;
   city: string;
+  district?: string;
   state?: string; // For Tier 4 state-wide matching
   availability_status: AvailabilityStatus;
   donor_locked_until?: string | null; // ISO string — reservation lock held by a pending match

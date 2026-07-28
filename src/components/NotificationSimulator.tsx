@@ -85,26 +85,30 @@ export default function NotificationSimulator({ onStateChange, onNavigate }: Not
 
   return (
     <>
-      {/* Floating Bottom-Right Action Bar: Support Us + Simulator */}
+      {/* Floating Bottom-Right Action Bar */}
       <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
-        {/* Prominent Floating Support Us Button */}
-        {onNavigate && (
-          <button
-            onClick={() => onNavigate('support')}
-            className="flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white shadow-xl shadow-rose-600/30 border border-rose-400/40 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer group"
-          >
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white group-hover:scale-110 transition-transform">
-              <Heart className="w-3.5 h-3.5 fill-white text-white animate-pulse" />
-            </div>
-            <span className="text-xs font-bold tracking-tight">{isHi ? 'Support Us ❤️' : 'Support Us ❤️'}</span>
-          </button>
-        )}
+        {/* Main Floating Support Us Button */}
+        <button
+          onClick={() => {
+            if (onNavigate) {
+              onNavigate('support');
+            } else {
+              window.location.href = '/?view=support';
+            }
+          }}
+          className="flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white shadow-xl shadow-rose-600/40 border border-rose-400/50 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer group"
+        >
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white group-hover:scale-110 transition-transform">
+            <Heart className="w-3.5 h-3.5 fill-white text-white animate-pulse" />
+          </div>
+          <span className="text-xs font-extrabold tracking-tight">{isHi ? 'Support Us ❤️' : 'Support Us ❤️'}</span>
+        </button>
 
         {/* Compact Simulator Trigger Pill */}
         <button
-          onClick={() => setIsOpen(true)}
+          onClick={() => setIsOpen(!isOpen)}
           title={isHi ? "लाइव सिमुलेटर कंसोल" : "Live Simulator Console"}
-          className="flex items-center gap-1.5 px-3 py-3 rounded-full bg-ink-900/90 hover:bg-black text-white shadow-lg border border-ink-700/80 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer opacity-80 hover:opacity-100"
+          className="flex items-center gap-1.5 px-3 py-3 rounded-full bg-ink-900/95 hover:bg-black text-white shadow-lg border border-ink-700/80 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer"
         >
           <Sparkles className="w-4 h-4 text-amber-400" />
           {notifications.length > 0 && (
