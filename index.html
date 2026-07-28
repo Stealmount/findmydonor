@@ -62,10 +62,10 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('[PWA] ServiceWorker registered:', reg.scope))
-            .catch(err => console.warn('[PWA] ServiceWorker failed:', err));
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (let reg of registrations) {
+            reg.update();
+          }
         });
       }
     </script>
