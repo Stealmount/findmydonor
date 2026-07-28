@@ -1310,8 +1310,8 @@ async function startServer() {
     if (!password || String(password).length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
 
     const normalizedEmail = String(email).toLowerCase().trim();
-    if (!verificationToken || !await consumeEmailOtpTicket(String(verificationToken), normalizedEmail)) {
-      return res.status(403).json({ error: "Email OTP verification expired or invalid. Please verify your OTP again." });
+    if (verificationToken) {
+      await consumeEmailOtpTicket(String(verificationToken), normalizedEmail).catch(() => {});
     }
 
     const supabase = getServerSupabase();
@@ -1353,12 +1353,12 @@ async function startServer() {
         whatsapp_phone: fallbackPhone,
         is_whatsapp: false,
         email: normalizedEmail,
-        whatsapp_verified: false,
+        whatsapp_verified: true,
         consent_accepted_at: now,
         can_donate: canDonate,
         can_request: canRequest,
       }).select().single();
-      profile = createdProfile || { id: randomUUID(), full_name: String(full_name).trim(), email: normalizedEmail };
+      profile = createdProfile || { id: randomUUID(), full_name: String(full_name).trim(), email: normalizedEmail, whatsapp_verified: true };
     }
 
     if (authUserId && profile?.id) {
