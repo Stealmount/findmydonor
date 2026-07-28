@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Heart, Copy, Check, ShieldCheck, Zap, Smartphone, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Heart, Copy, Check, ShieldCheck, Zap, Smartphone, ArrowRight, ArrowLeft, Info, Sparkles, QrCode } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface SupportPageProps {
@@ -14,6 +14,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
   const [copied, setCopied] = useState(false);
   const [selectedAmount, setSelectedAmount] = useState<number | null>(100);
   const [customAmount, setCustomAmount] = useState<string>('');
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
   const amounts = [50, 100, 250, 500, 1000];
   const currentAmount = selectedAmount !== null ? selectedAmount : (parseInt(customAmount, 10) || 100);
@@ -21,10 +22,36 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
   const upiPayUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${currentAmount}&cu=INR&tn=${encodeURIComponent('Support Emergency Blood Network')}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiPayUrl)}`;
 
+  const getImpactText = (amt: number) => {
+    if (amt <= 50) return isHi ? "⚡ 200 Emergency WhatsApp broadcasts" : "⚡ Funds 200 Emergency WhatsApp broadcasts";
+    if (amt <= 100) return isHi ? "🩸 1 Month high-speed server hosting & matching" : "🩸 Funds 1 Month high-speed server hosting & matching";
+    if (amt <= 250) return isHi ? "🏥 500 Patient alert notifications" : "🏥 Funds 500 Emergency patient alerts";
+    if (amt <= 500) return isHi ? "🛡️ Full 1-Year security gateway & database" : "🛡️ Funds 1-Year security gateway & database";
+    return isHi ? "💖 Master community donor network sponsor" : "💖 Master community donor network sponsor";
+  };
+
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(upiId);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handlePayClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      window.location.href = upiPayUrl;
+    } else {
+      // Desktop Fallback
+      handleCopyUpi();
+      setNoticeMessage(
+        isHi 
+          ? "UPI ID (8076971891@upi) Copy ho gaya hai! Apne mobile phone par GPay/PhonePe khol kar paste karein ya daayein taraf wale QR Code ko scan karein."
+          : "UPI ID (8076971891@upi) copied to clipboard! Please open GPay/PhonePe on your mobile phone or scan the QR Code."
+      );
+      setTimeout(() => setNoticeMessage(null), 8000);
+    }
   };
 
   return (
@@ -41,7 +68,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
             {isHi ? "Mukhya Prashth" : "Back to Home"}
           </button>
           <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" /> 100% Free Community Mission
+            <ShieldCheck className="w-3.5 h-3.5" /> 100% Free Non-Profit Mission
           </span>
         </div>
 
@@ -54,7 +81,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
           <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             {isHi ? "Donors Khoon Dete Hain. Aap Network Chalate Hain." : "Donors Give Blood. You Power the Bridge."}
           </h1>
-          <p className="text-sm text-gray-600 max-w-2xl">
+          <p className="text-sm text-gray-600 max-w-2xl leading-relaxed">
             {isHi 
               ? "FindMyDonor 100% free hai. Aapka sahyog emergency server hosting aur WhatsApp alert gateways ko uninterrupted zinda rakhta hai." 
               : "FindMyDonor is 100% free for all patients. Your support directly funds server hosting and instant WhatsApp emergency alert gateways."}
@@ -73,10 +100,21 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
           </p>
         </div>
 
+        {/* Dynamic Desktop Notice Banner */}
+        {noticeMessage && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl text-xs flex items-start gap-3 shadow-sm animate-fadeIn">
+            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">{isHi ? "Mobile UPI Instructions" : "Desktop Notice"}</p>
+              <p className="leading-relaxed">{noticeMessage}</p>
+            </div>
+          </div>
+        )}
+
         {/* Contribution Card Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
           
-          {/* Left: Amount Selection */}
+          {/* Left: Amount Selection & Impact */}
           <div className="md:col-span-7 bg-white border border-gray-200 shadow-sm rounded-2xl p-6 space-y-5 flex flex-col justify-between">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -118,17 +156,24 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 px-3 text-gray-900 text-xs focus:outline-none focus:border-rose-500 focus:bg-white placeholder:text-gray-400"
               />
 
+              {/* Dynamic Impact Pill */}
+              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-xs font-medium flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{getImpactText(currentAmount)}</span>
+              </div>
+
+              {/* Official UPI ID Box */}
               <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>Official BHIM / Universal UPI ID</span>
-                  <span className="text-emerald-700 font-semibold">Verified Bank Transfer</span>
+                  <span className="text-emerald-700 font-semibold">Direct Bank Transfer</span>
                 </div>
                 <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
                   <code className="text-sm font-mono font-bold text-gray-900">{upiId}</code>
                   <button
                     type="button"
                     onClick={handleCopyUpi}
-                    className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition-all flex items-center gap-1.5 ring-1 ring-rose-200"
+                    className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition-all flex items-center gap-1.5 ring-1 ring-rose-200 cursor-pointer"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                     {copied ? "Copied" : "Copy UPI ID"}
@@ -137,24 +182,34 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
               </div>
             </div>
 
-            <a
-              href={upiPayUrl}
-              className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-4"
-            >
-              <Smartphone className="w-4 h-4" />
-              {isHi ? `UPI App Se Pay Karein (₹${currentAmount})` : `Pay ₹${currentAmount} via UPI App (GPay/PhonePe)`}
-              <ArrowRight className="w-4 h-4" />
-            </a>
+            {/* Smart Pay Button */}
+            <div className="space-y-2 mt-4">
+              <button
+                type="button"
+                onClick={handlePayClick}
+                className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4" />
+                {isHi ? `UPI App Se Pay Karein (₹${currentAmount})` : `Pay ₹${currentAmount} via UPI App (GPay/PhonePe)`}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <p className="text-[11px] text-gray-500 text-center">
+                {isHi ? "📱 Mobile par seedha GPay/PhonePe khulega. 💻 Desktop par ID automatic copy ho jayegi." : "📱 On mobile, opens GPay/PhonePe directly. 💻 On desktop, copies UPI ID automatically."}
+              </p>
+            </div>
           </div>
 
           {/* Right: Official BHIM QR Code */}
           <div className="md:col-span-5 bg-white border border-gray-200 shadow-sm rounded-2xl p-6 text-center flex flex-col items-center justify-center space-y-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-gray-900">Scan & Pay via Any UPI App</h3>
+              <h3 className="text-sm font-bold text-gray-900 flex items-center justify-center gap-1.5">
+                <QrCode className="w-4 h-4 text-rose-600" />
+                Scan & Pay via Any UPI App
+              </h3>
               <p className="text-xs text-gray-500">BHIM • GPay • PhonePe • Paytm • CRED</p>
             </div>
 
-            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-md">
+            <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-md transition-all hover:scale-105">
               <img
                 src="/bhim-qr.png"
                 onError={(e) => {
@@ -176,7 +231,7 @@ export function SupportPage({ onNavigate }: SupportPageProps) {
           </span>
           <button
             onClick={() => onNavigate('request')}
-            className="text-rose-600 hover:text-rose-700 font-bold shrink-0 flex items-center gap-1"
+            className="text-rose-600 hover:text-rose-700 font-bold shrink-0 flex items-center gap-1 cursor-pointer"
           >
             {isHi ? "Need Emergency Blood? Request Here →" : "Need Emergency Blood? Request Here →"}
           </button>
