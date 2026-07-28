@@ -11,7 +11,7 @@ function getWahaConfig() {
   return {
     url: process.env.WAHA_BASE_URL,
     key: process.env.WAHA_API_KEY || '',
-    session: process.env.WAHA_SESSION || 'default',
+    session: process.env.WAHA_SESSION || 'session_01',
   };
 }
 
