@@ -367,7 +367,7 @@ function AppContent() {
         loggedInRequester={loggedInRequester}
       />
 
-      <NotificationSimulator />
+      <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
     </div>
   );
 }

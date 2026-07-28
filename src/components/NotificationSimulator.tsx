@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { authenticatedApi } from '../lib/api';
 import { sendRealEmail } from '../lib/email';
 import { Match, BloodRequest, User } from '../types';
-import { MessageSquare, Mail, AlertTriangle, Check, X, Bell, Sparkles, Trash2, Clock, ShieldAlert, Lock, PartyPopper } from 'lucide-react';
+import { MessageSquare, Mail, AlertTriangle, Check, X, Bell, Sparkles, Trash2, Clock, ShieldAlert, Lock, PartyPopper, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface NotificationSimulatorProps {
   onStateChange?: () => void;
+  onNavigate?: (view: string) => void;
 }
 
-export default function NotificationSimulator({ onStateChange }: NotificationSimulatorProps) {
+export default function NotificationSimulator({ onStateChange, onNavigate }: NotificationSimulatorProps) {
   const { language } = useLanguage();
   const isHi = language === 'HI';
   const [isOpen, setIsOpen] = useState(false);
@@ -84,21 +85,35 @@ export default function NotificationSimulator({ onStateChange }: NotificationSim
 
   return (
     <>
-      {/* Sleek Floating FindMyDonor™ Simulator Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-full bg-ink-900/95 hover:bg-black text-white shadow-premium-lg border border-ink-700 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer group"
-      >
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blood-600/20 text-blood-400 group-hover:bg-blood-600 group-hover:text-white transition-colors">
-          <Sparkles className="w-4 h-4" />
-        </div>
-        <span className="text-xs font-semibold tracking-tight">{isHi ? 'लाइव सिमुलेटर' : 'Live Simulator'}</span>
-        {notifications.length > 0 && (
-          <span className="flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-blood-600 px-1.5 text-[11px] font-bold text-white shadow-sm">
-            {notifications.length}
-          </span>
+      {/* Floating Bottom-Right Action Bar: Support Us + Simulator */}
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
+        {/* Prominent Floating Support Us Button */}
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('support')}
+            className="flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white shadow-xl shadow-rose-600/30 border border-rose-400/40 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer group"
+          >
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white group-hover:scale-110 transition-transform">
+              <Heart className="w-3.5 h-3.5 fill-white text-white animate-pulse" />
+            </div>
+            <span className="text-xs font-bold tracking-tight">{isHi ? 'Support Us ❤️' : 'Support Us ❤️'}</span>
+          </button>
         )}
-      </button>
+
+        {/* Compact Simulator Trigger Pill */}
+        <button
+          onClick={() => setIsOpen(true)}
+          title={isHi ? "लाइव सिमुलेटर कंसोल" : "Live Simulator Console"}
+          className="flex items-center gap-1.5 px-3 py-3 rounded-full bg-ink-900/90 hover:bg-black text-white shadow-lg border border-ink-700/80 backdrop-blur-xl transition-all transform hover:scale-105 cursor-pointer opacity-80 hover:opacity-100"
+        >
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          {notifications.length > 0 && (
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-blood-600 px-1 text-[10px] font-bold text-white">
+              {notifications.length}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* Modern Slide-Over Simulator Panel */}
       <AnimatePresence>
