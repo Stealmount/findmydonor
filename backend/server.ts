@@ -1149,11 +1149,9 @@ async function startServer() {
     const normalized = normalizePhone(String(phone || ""));
     if (!isValidIndianPhone(normalized)) return res.status(400).json({ error: "Enter a valid Indian WhatsApp number (e.g. 91XXXXXXXXXX)." });
 
-    if (!verificationToken) {
-      return res.status(400).json({ error: "WhatsApp OTP verification is required to sign up." });
-    }
-    if (!await consumeOtpTicket(String(verificationToken), normalized, "signup")) {
-      return res.status(403).json({ error: "WhatsApp verification expired or invalid. Please verify your OTP again." });
+    // Direct Phone Signup — OTP skipped per user requirement
+    if (verificationToken) {
+      await consumeOtpTicket(String(verificationToken), normalized, "signup").catch(() => {});
     }
 
     // Synthetic email so Supabase email provider handles auth; avoids conflict with future real email login.

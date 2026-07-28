@@ -146,26 +146,41 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     } finally { setLoading(false); }
   };
 
-  // ─── Step 1: Send WhatsApp OTP for Sign Up ─────────────────────────────
+  // ─── Direct WhatsApp / Phone Sign Up (NO OTP) ───────────────────────────
   const handleSendOtpForSignUp = async (event: React.FormEvent) => {
     event.preventDefault(); setError(''); setInfoMessage(''); setDevBypassNotice(''); setLoading(true);
     try {
       const formattedPhone = `91${phone.replace(/\D/g, '')}`;
-      const response = await fetch('/api/wa/send-otp', {
+      const signupRes = await fetch('/api/auth/phone-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formattedPhone, purpose: 'signup' }),
+        body: JSON.stringify({
+          phone: formattedPhone,
+          password,
+          full_name: fullName.trim(),
+          email: email.trim() || undefined,
+          intent,
+        }),
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Unable to send WhatsApp OTP.');
+      const signupPayload = await signupRes.json().catch(() => ({}));
+      if (!signupRes.ok) throw new Error(signupPayload.error || 'Unable to create account.');
 
-      setSignupStep('otp');
-      setInfoMessage(isHi ? `WhatsApp +91 ${phone} पर 6-अंकीय OTP भेजा गया है।` : `6-digit OTP sent to WhatsApp +91 ${phone}.`);
-      if (payload.devBypass) {
-        setDevBypassNotice(payload.message || (isHi ? 'DEV MODE: OTP "000000" दर्ज करें।' : 'DEV MODE: Enter OTP "000000".'));
+      // Set session in Supabase client
+      if (signupPayload.session) {
+        await supabase.auth.setSession({
+          access_token: signupPayload.session.access_token,
+          refresh_token: signupPayload.session.refresh_token,
+        });
+      }
+
+      if (signupPayload.nextStep === 'donor-profile') {
+        setSignupStep('donor-profile');
+        setInfoMessage(isHi ? 'खाता बनाया गया! अंतिम चरण — डोनर प्रोफ़ाइल पूरा करें।' : 'Account created! Last step — complete your donor profile.');
+      } else {
+        await resolveSignedInState();
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to send WhatsApp OTP.');
+      setError(caught instanceof Error ? caught.message : 'Unable to create account.');
     } finally { setLoading(false); }
   };
 
