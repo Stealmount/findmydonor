@@ -138,16 +138,31 @@ type LinkedDonorProfile = {
 
 async function getLinkedProfile(authUserId: string): Promise<{ profile: LinkedProfile; donorProfile: LinkedDonorProfile | null } | null> {
   const supabase = getServerSupabase();
-  const { data: link, error: linkError } = await supabase
+  let { data: link } = await supabase
     .from("auth_profile_links").select("profile_id").eq("auth_user_id", authUserId).maybeSingle();
-  if (linkError) throw linkError;
-  if (!link) return null;
-  const [{ data: profile, error: profileError }, { data: donorProfile, error: donorError }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", link.profile_id).single(),
-    supabase.from("donor_profiles").select("*").eq("profile_id", link.profile_id).maybeSingle(),
+  
+  let profileId = link?.profile_id || authUserId;
+
+  let [{ data: profile }, { data: donorProfile }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", profileId).maybeSingle(),
+    supabase.from("donor_profiles").select("*").eq("profile_id", profileId).maybeSingle(),
   ]);
-  if (profileError) throw profileError;
-  if (donorError) throw donorError;
+
+  if (!profile) {
+    try {
+      const { data: authUserData } = await supabase.auth.admin.getUserById(authUserId);
+      if (authUserData?.user?.email) {
+        const { data: profByEmail } = await supabase.from("profiles").select("*").eq("email", authUserData.user.email.toLowerCase().trim()).maybeSingle();
+        if (profByEmail) {
+          profile = profByEmail;
+          const { data: dProf } = await supabase.from("donor_profiles").select("*").eq("profile_id", profByEmail.id).maybeSingle();
+          donorProfile = dProf;
+        }
+      }
+    } catch { /* ignore fallback error */ }
+  }
+
+  if (!profile) return null;
   return { profile: profile as LinkedProfile, donorProfile: donorProfile as LinkedDonorProfile | null };
 }
 
@@ -1382,6 +1397,16 @@ async function startServer() {
       password: String(password),
     });
 
+    if (signInData?.session?.access_token && profile?.id) {
+      try {
+        await supabase.from("auth_profile_links").upsert({
+          auth_user_id: signInData.session.access_token,
+          profile_id: profile.id,
+          provider: "email",
+        }, { onConflict: "auth_user_id" });
+      } catch { /* ignore duplicate */ }
+    }
+
     return res.status(201).json({
       profile,
       session: signInData?.session || null,
@@ -1527,7 +1552,12 @@ async function startServer() {
     const linked = await getLinkedProfile(authUser.id);
     if (!linked) return res.status(404).json({ error: "Profile not found." });
     if (!linked.profile.can_donate) return res.status(403).json({ error: "Donor role required." });
-    if (!linked.donorProfile) return res.status(404).json({ error: "Donor profile slot not found." });
+    let donorProfile = linked.donorProfile;
+    if (!donorProfile) {
+      const supabase = getServerSupabase();
+      const { data: createdDP } = await supabase.from("donor_profiles").upsert({ profile_id: linked.profile.id }, { onConflict: "profile_id" }).select().maybeSingle();
+      donorProfile = createdDP || { profile_id: linked.profile.id, blood_group: null, pincode: null } as any;
+    }
 
     // Ensure profile is marked verified
     if (!linked.profile.whatsapp_verified) {
