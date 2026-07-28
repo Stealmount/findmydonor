@@ -3,7 +3,7 @@ import { Droplet, ArrowUpRight } from "lucide-react";
 import { useLanguage } from "../../lib/LanguageContext";
 
 interface FooterProps {
-  onNavigate: (view: 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'admin') => void;
+  onNavigate: (view: any) => void;
 }
 
 const Twitter = (props: React.SVGProps<SVGSVGElement>) => (
@@ -41,8 +41,8 @@ export function Footer({ onNavigate }: FooterProps) {
       items: [
         { label: t.footer.col1Request, action: () => onNavigate('request') },
         { label: t.footer.col1Track, action: () => onNavigate('tracking') },
-        { label: t.footer.col1SignIn, action: () => onNavigate('auth-signin' as any) },
-        { label: t.footer.col1SignUp, action: () => onNavigate('auth-signup' as any) },
+        { label: t.footer.col1SignIn, action: () => onNavigate('auth-signin') },
+        { label: t.footer.col1SignUp, action: () => onNavigate('auth-signup') },
       ],
     },
     {
@@ -51,16 +51,16 @@ export function Footer({ onNavigate }: FooterProps) {
         { label: t.footer.col2HowItWorks, action: () => { window.location.hash = "how-it-works"; } },
         { label: t.footer.col2Features, action: () => { window.location.hash = "features"; } },
         { label: t.footer.col2Impact, action: () => { window.location.hash = "impact"; } },
-        { label: t.footer.col2Faq, action: () => { window.location.hash = "faq"; } },
+        { label: t.footer.col2Faq, action: () => onNavigate('faq') },
       ],
     },
     {
-      title: t.footer.col3Title,
+      title: "Legal & Policy",
       items: [
-        { label: "For Hospitals (Beta)", action: () => onNavigate('hospital-register' as any) },
-        { label: t.footer.col3Admin, action: () => onNavigate('admin') },
-        { label: t.footer.col3SafetyPolicy, action: () => { window.location.hash = "top"; } },
-        { label: t.footer.col3MatchingRules, action: () => { window.location.hash = "top"; } },
+        { label: "Privacy Policy", action: () => onNavigate('privacy') },
+        { label: "Terms of Service", action: () => onNavigate('terms') },
+        { label: "Frequently Asked Questions", action: () => onNavigate('faq') },
+        { label: "For Hospitals (Beta)", action: () => onNavigate('hospital-register') },
       ],
     },
   ];

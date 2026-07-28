@@ -1,53 +1,63 @@
-# Lahu (RaktDaan) — Real-Time Blood Donation Network
+# 🩸 FindMyDonor™ (RaktDaan) — National Live Blood Matching & SOS Network
 
-Connects blood requesters with nearby verified donors. Donors receive SOS alerts via WhatsApp and email, and can accept or decline with a reply.
+**FindMyDonor™** is an emergency volunteer blood donation platform that connects patients in urgent need of blood with compatible, nearby volunteer donors via real-time pincode matching and WhatsApp SOS alerts.
 
-## Stack
+---
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, Vite 6, Tailwind CSS 4, Leaflet maps |
-| Backend | Express (`server.ts`, run with tsx), server-side matching engine |
-| Database & Auth | Supabase (Postgres + Auth) |
-| Cache | Redis via ioredis (falls back to in-memory LRU when unavailable) |
-| WhatsApp | WAHA HTTP API (self-hosted, see `docker-compose.yml`) |
-| Email | Resend |
+## 📂 Project Directory Structure Overview
 
-## Local setup
+To make the codebase easy to understand for any developer or reviewer, the project is organized into 5 core architectural modules:
 
-**Prerequisites:** Node.js 20+, a Supabase project. Redis and WAHA are optional (the app degrades gracefully without them).
+```text
+c:\project\lahu\
+├── 🎨 frontend/      → UI components, React views, TailwindCSS, Framer Motion
+├── ⚙️ backend/       → Express API server (server.ts), matching engine, WAHA integration
+├── 🗄️ database/      → Supabase PostgreSQL schemas, RLS policies, SQL migration scripts
+├── 💻 vm/            → Production VM (Ubuntu 22.04), PM2 configuration, Nginx, SSH commands
+└── 🧠 skills/        → Project rules (AGENTS.md), agent skills, data protection safety
+```
 
-1. Install dependencies:
-   ```
-   npm install
-   ```
-2. Copy `.env.example` to `.env` and fill in values. Critical:
-   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server only — never expose to the browser)
-   - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (browser-safe)
+---
 
-   Optional: `REDIS_URL`, `WAHA_BASE_URL`/`WAHA_API_KEY`/`WAHA_DASHBOARD_PASSWORD`, `RESEND_API_KEY`.
-3. Apply the database schema in the Supabase SQL editor: `supabase_schema.sql` (or `supabase_core_migration.sql` for the minimal core).
-4. (Optional) Start WhatsApp gateway:
-   ```
-   docker compose up -d
-   ```
-5. Run the dev server (Express + Vite middleware on one port):
-   ```
-   npm run dev
-   ```
-   App: http://localhost:5000 — health check: http://localhost:5000/api/health
+## 🗺️ Module Navigation & Guides
 
-## Scripts
+### 1. [🎨 Frontend Architecture (`/frontend`)](file:///c:/project/lahu/frontend/README.md)
+* **Stack**: React, TypeScript, Vite, TailwindCSS, Framer Motion.
+* **Key Components**: `RequestForm.tsx`, `RequestTracking.tsx`, `DonorDashboard.tsx`, `RequesterPortal.tsx`.
+* **Design System**: Glassmorphic dark/light UI, custom color tokens, smooth micro-animations.
 
-| Script | Purpose |
-|---|---|
-| `npm run dev` | Dev server with Vite HMR |
-| `npm run build` | Production build (client + bundled server) |
-| `npm start` | Run the production bundle |
-| `npm test` | Matching-engine test suite (no DB/network needed) |
-| `npm run lint` | TypeScript typecheck |
-| `npm run clean` | Remove build output |
+### 2. [⚙️ Backend Architecture (`/backend`)](file:///c:/project/lahu/backend/README.md)
+* **Stack**: Node.js, Express, `@supabase/supabase-js`, `esbuild`, PM2.
+* **Core Services**: Phone signup OTP auth, blood request lifecycle, matching engine (`matching.ts`), WAHA WhatsApp integration (`waha.ts`), pincode Haversine distance engine (`geo.ts`).
 
-## Utility scripts
+### 3. [🗄️ Database Architecture (`/database`)](file:///c:/project/lahu/database/README.md)
+* **Engine**: Supabase PostgreSQL with Row Level Security (RLS).
+* **Core Tables**: `profiles`, `donor_profiles`, `blood_requests`, `matches`, `notifications`, `users`.
+* **SQL Migrations**: Schema, auth profile migration, RLS policies, cleanup scripts.
 
-- `scripts/clear_supabase.ts` — wipes all data tables in FK-safe order. **Destructive**; requires the service-role key in `.env`. Run with `npx tsx scripts/clear_supabase.ts`.
+### 4. [💻 Production VM & Deployment (`/vm`)](file:///c:/project/lahu/vm/README.md)
+* **Domain**: [findmydonor.online](https://findmydonor.online)
+* **Host**: Oracle Cloud Ubuntu Server (`145.241.154.187`).
+* **Process Manager**: PM2 running `findmydonor-backend` (Port 5000) & `findmydonor-admin` (Port 5001).
+
+### 5. [🧠 Agent Skills & Rules (`/skills`)](file:///c:/project/lahu/skills/README.md)
+* **Custom Rules**: `.agents/AGENTS.md` (Visual parity, TypeScript rigor, community non-commercial stance).
+* **Data Loss Prevention**: `accidental-data-loss-prevention` requiring explicit user authorization for database mutations.
+
+---
+
+## ⚡ Quick Start & Development
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start development server (Frontend + Backend)
+npm run dev
+
+# 3. Run matching engine unit tests (29 scenarios)
+npm run test:matching
+
+# 4. Build production bundle
+npm run build
+```

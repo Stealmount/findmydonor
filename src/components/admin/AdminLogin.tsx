@@ -17,8 +17,8 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Dummy authentication for UI showcase
-    if (accessKey === 'RAKT-ADMIN-2026') {
+    const validKeys = ['FMD-ADMIN-2026'];
+    if (validKeys.includes(accessKey.trim())) {
       const admin: AdminUser = {
         id: 'admin_1',
         username: 'SuperAdmin',

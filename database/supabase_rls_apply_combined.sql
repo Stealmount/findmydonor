@@ -134,7 +134,7 @@ ALTER TABLE forum_posts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Anyone can view active forum posts" ON forum_posts;
 CREATE POLICY "Anyone can view active forum posts"
   ON forum_posts FOR SELECT
-  USING (status = 'active' OR status IS NULL);
+  USING (is_flagged = FALSE OR is_flagged IS NULL);
 
 DROP POLICY IF EXISTS "Authenticated users can insert forum posts" ON forum_posts;
 CREATE POLICY "Authenticated users can insert forum posts"
@@ -146,3 +146,44 @@ CREATE POLICY "Authors can update their own forum posts"
   ON forum_posts FOR UPDATE
   USING (author_id = auth.uid()::text)
   WITH CHECK (author_id = auth.uid()::text);
+
+-- ═══════════════════════════════════════════════════════════
+-- PART 2: Auth/Profile migration RLS (from supabase_auth_profile_migration.sql lines 213-246)
+-- ═══════════════════════════════════════════════════════════
+
+BEGIN;
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth_profile_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE donor_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE request_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Profile owner read" ON profiles;
+CREATE POLICY "Profile owner read" ON profiles FOR SELECT USING (
+  EXISTS (SELECT 1 FROM auth_profile_links l WHERE l.profile_id = profiles.id AND l.auth_user_id = auth.uid())
+);
+DROP POLICY IF EXISTS "Profile owner update" ON profiles;
+CREATE POLICY "Profile owner update" ON profiles FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM auth_profile_links l WHERE l.profile_id = profiles.id AND l.auth_user_id = auth.uid())
+);
+DROP POLICY IF EXISTS "Owner read auth links" ON auth_profile_links;
+CREATE POLICY "Owner read auth links" ON auth_profile_links FOR SELECT USING (auth_user_id = auth.uid());
+DROP POLICY IF EXISTS "Donor owner read" ON donor_profiles;
+CREATE POLICY "Donor owner read" ON donor_profiles FOR SELECT USING (
+  EXISTS (SELECT 1 FROM auth_profile_links l WHERE l.profile_id = donor_profiles.profile_id AND l.auth_user_id = auth.uid())
+);
+DROP POLICY IF EXISTS "Donor owner update" ON donor_profiles;
+CREATE POLICY "Donor owner update" ON donor_profiles FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM auth_profile_links l WHERE l.profile_id = donor_profiles.profile_id AND l.auth_user_id = auth.uid())
+);
+DROP POLICY IF EXISTS "Reporter read own reports" ON request_reports;
+CREATE POLICY "Reporter read own reports" ON request_reports FOR SELECT USING (
+  EXISTS (SELECT 1 FROM auth_profile_links l WHERE l.profile_id = request_reports.reporter_profile_id AND l.auth_user_id = auth.uid())
+);
+
+DROP TRIGGER IF EXISTS set_updated_at_profiles ON profiles;
+CREATE TRIGGER set_updated_at_profiles BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS set_updated_at_donor_profiles ON donor_profiles;
+CREATE TRIGGER set_updated_at_donor_profiles BEFORE UPDATE ON donor_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMIT;

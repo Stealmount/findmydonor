@@ -22,6 +22,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   // Signup steps: 'main' = enter details, 'otp' = enter 6-digit OTP, 'donor-profile' = donor info, 'google-phone' = Google user adds phone
   const [signupStep, setSignupStep] = useState<'main' | 'otp' | 'google-phone' | 'donor-profile'>('main');
+  const [signupChannel, setSignupChannel] = useState<'phone' | 'email'>('phone');
   const [intent, setIntent] = useState<SignupIntent>(initialIntent);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -50,7 +51,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     // Check if returning from Google OAuth redirect
     void supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        const isGoogle = user.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('raktdaan_oauth_pending'));
+        const isGoogle = user.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('findmydonor_oauth_pending'));
         if (isGoogle) {
           setFullName(String(user.user_metadata?.full_name || user.user_metadata?.name || ''));
           setEmail(user.email || '');
@@ -65,7 +66,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     if (!state || !state.authUser) return false;
 
     const { data: { user } } = await supabase.auth.getUser();
-    const isGoogle = state.authUser.provider === 'google' || user?.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('raktdaan_oauth_pending'));
+    const isGoogle = state.authUser.provider === 'google' || user?.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('findmydonor_oauth_pending'));
     if (isGoogle && user) {
       setFullName(String(user.user_metadata?.full_name || user.user_metadata?.name || ''));
       setEmail(user.email || '');
@@ -74,13 +75,13 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     if (!state.profile) {
       // No profile yet — Google users need to add WhatsApp number
       setMode('signup');
-      const pending = sessionStorage.getItem('raktdaan_oauth_pending');
+      const pending = sessionStorage.getItem('findmydonor_oauth_pending');
       if (pending) {
         try {
           const saved = JSON.parse(pending) as { intent: typeof intent };
           if (saved.intent) setIntent(saved.intent);
         } catch { /* ignore */ }
-        sessionStorage.removeItem('raktdaan_oauth_pending');
+        sessionStorage.removeItem('findmydonor_oauth_pending');
       }
       if (isGoogle) {
         setSignupStep('google-phone');
@@ -220,18 +221,84 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
     } finally { setLoading(false); }
   };
 
+  // ─── Step 1 (Email): Send Email OTP via Resend ───────────────────────
+  const handleSendEmailOtpForSignUp = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setInfoMessage(''); setLoading(true);
+    try {
+      const response = await fetch('/api/email/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Unable to send Email OTP.');
+
+      setSignupStep('otp');
+      setInfoMessage(isHi ? `Email ${email} पर 6-अंकीय OTP कोड भेजा गया है।` : `6-digit OTP code sent to Email ${email}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to send Email OTP.');
+    } finally { setLoading(false); }
+  };
+
+  // ─── Step 2 (Email): Verify Email OTP & Create Account ─────────────────
+  const handleVerifyEmailOtpAndSignUp = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setLoading(true);
+    try {
+      const verifyRes = await fetch('/api/email/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), otp: otpInput.trim() }),
+      });
+      const verifyPayload = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) throw new Error(verifyPayload.error || 'Invalid Email OTP.');
+
+      const { verificationToken } = verifyPayload;
+      if (!verificationToken) throw new Error('Email verification failed. Try again.');
+
+      const signupRes = await fetch('/api/auth/email-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          full_name: fullName.trim(),
+          intent,
+          verificationToken,
+        }),
+      });
+      const signupPayload = await signupRes.json().catch(() => ({}));
+      if (!signupRes.ok) throw new Error(signupPayload.error || 'Unable to create account.');
+
+      if (signupPayload.session) {
+        await supabase.auth.setSession({
+          access_token: signupPayload.session.access_token,
+          refresh_token: signupPayload.session.refresh_token,
+        });
+      }
+
+      if (signupPayload.nextStep === 'donor-profile') {
+        setSignupStep('donor-profile');
+        setInfoMessage(isHi ? 'Email सत्यापित! अंतिम चरण — डोनर प्रोफ़ाइल पूरा करें।' : 'Email verified! Last step — complete your donor profile.');
+      } else {
+        await resolveSignedInState();
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Email OTP verification failed.');
+    } finally { setLoading(false); }
+  };
+
   // ─── Google OAuth ──────────────────────────────────────────────────────
   const handleGoogle = async () => {
     setError(''); setLoading(true);
-    sessionStorage.setItem('raktdaan_oauth_pending', JSON.stringify({ intent }));
+    sessionStorage.setItem('findmydonor_oauth_pending', JSON.stringify({ intent }));
     try {
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: `${window.location.origin}` },
       });
       if (authError) throw authError;
     } catch (caught) {
-      sessionStorage.removeItem('raktdaan_oauth_pending');
+      sessionStorage.removeItem('findmydonor_oauth_pending');
       setError(caught instanceof Error ? caught.message : 'Google authentication failed.');
       setLoading(false);
     }
@@ -346,7 +413,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
 
         {/* ─── SIGN UP STEP 1: ENTER DETAILS ──────────────────── */}
         {mode === 'signup' && signupStep === 'main' && (
-          <motion.form key="signup" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={card} onSubmit={handleSendOtpForSignUp}>
+          <motion.form key="signup" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={card} onSubmit={signupChannel === 'email' ? handleSendEmailOtpForSignUp : handleSendOtpForSignUp}>
             <button id="signup-google" type="button" onClick={handleGoogle} className={btnGoogle}>
               <span className="flex items-center justify-center gap-2">
                 <svg className="h-5 w-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
@@ -355,19 +422,37 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
             </button>
             <div className="my-5 flex items-center gap-3"><hr className="flex-1 border-ink-200" /><span className="text-[10px] font-bold text-ink-400">{isHi ? 'या' : 'OR'}</span><hr className="flex-1 border-ink-200" /></div>
 
+            {/* Verification Channel Selector */}
+            <div className="mb-4 flex rounded-xl border border-ink-200 bg-ink-50 p-1">
+              <button type="button" onClick={() => setSignupChannel('phone')} className={`flex-1 rounded-lg py-2 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${signupChannel === 'phone' ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'}`}>
+                <Phone className="h-3.5 w-3.5" /> WhatsApp OTP
+              </button>
+              <button type="button" onClick={() => setSignupChannel('email')} className={`flex-1 rounded-lg py-2 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${signupChannel === 'email' ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'}`}>
+                <Mail className="h-3.5 w-3.5 text-blood-600" /> Email OTP (Resend)
+              </button>
+            </div>
+
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'पूरा नाम' : 'Full name'}
               <input id="signup-name" className={`${field} mt-1`} required value={fullName} onChange={e => setFullName(e.target.value)} />
             </label>
 
-            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'ईमेल (वैकल्पिक)' : 'Email (optional)'}
-              <input id="signup-email" className={`${field} mt-1`} type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
-            </label>
+            {signupChannel === 'email' ? (
+              <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'ईमेल पता' : 'Email Address'}
+                <input id="signup-email" className={`${field} mt-1`} required type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+              </label>
+            ) : (
+              <>
+                <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'ईमेल (वैकल्पिक)' : 'Email (optional)'}
+                  <input id="signup-email" className={`${field} mt-1`} type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+                </label>
 
-            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'WhatsApp नंबर' : 'WhatsApp Number'}</label>
-            <div className="mt-1 flex gap-2">
-              <div className="flex h-[46px] items-center rounded-xl border border-ink-200 bg-ink-50 px-3 text-sm font-bold text-ink-600 select-none">91</div>
-              <input id="signup-phone" className={field} required inputMode="numeric" maxLength={10} placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} />
-            </div>
+                <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'WhatsApp नंबर' : 'WhatsApp Number'}</label>
+                <div className="mt-1 flex gap-2">
+                  <div className="flex h-[46px] items-center rounded-xl border border-ink-200 bg-ink-50 px-3 text-sm font-bold text-ink-600 select-none">91</div>
+                  <input id="signup-phone" className={field} required inputMode="numeric" maxLength={10} placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} />
+                </div>
+              </>
+            )}
 
             <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'पासवर्ड (कम से कम 8 अक्षर)' : 'Password (min 8 characters)'}
               <input id="signup-password" className={`${field} mt-1`} required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} />
@@ -383,30 +468,30 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
               ))}
             </div>
 
-            <button id="signup-submit" disabled={loading || phone.length !== 10 || password.length < 8 || !fullName.trim()} className={btnPrimary}>
-              {loading ? (isHi ? 'OTP भेजा जा रहा है…' : 'Sending OTP…') : <>{isHi ? 'WhatsApp OTP प्राप्त करें' : 'Get WhatsApp OTP'} <ArrowRight className="h-4 w-4" /></>}
+            <button id="signup-submit" disabled={loading || (signupChannel === 'phone' ? phone.length !== 10 : !email.includes('@')) || password.length < 8 || !fullName.trim()} className={btnPrimary}>
+              {loading ? (isHi ? 'OTP भेजा जा रहा है…' : 'Sending OTP…') : <>{signupChannel === 'email' ? (isHi ? 'Email OTP प्राप्त करें' : 'Get Email OTP') : (isHi ? 'WhatsApp OTP प्राप्त करें' : 'Get WhatsApp OTP')} <ArrowRight className="h-4 w-4" /></>}
             </button>
           </motion.form>
         )}
 
         {/* ─── SIGN UP STEP 2: VERIFY OTP ─────────────────────── */}
         {mode === 'signup' && signupStep === 'otp' && (
-          <motion.form key="signup-otp" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={card} onSubmit={handleVerifyOtpAndSignUp}>
+          <motion.form key="signup-otp" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={card} onSubmit={signupChannel === 'email' ? handleVerifyEmailOtpAndSignUp : handleVerifyOtpAndSignUp}>
             <div className="mb-4 flex items-center justify-between rounded-xl bg-ink-50 p-3.5 border border-ink-200">
               <div className="flex items-center gap-2.5 text-xs text-ink-700 font-semibold">
-                <Phone className="h-4 w-4 text-blood-600 shrink-0" />
-                <span>+91 {phone}</span>
+                {signupChannel === 'email' ? <Mail className="h-4 w-4 text-blood-600 shrink-0" /> : <Phone className="h-4 w-4 text-blood-600 shrink-0" />}
+                <span>{signupChannel === 'email' ? email : `+91 ${phone}`}</span>
               </div>
               <button
                 type="button"
                 onClick={() => { setSignupStep('main'); setError(''); setInfoMessage(''); }}
                 className="text-xs font-bold text-blood-600 hover:text-blood-700 underline cursor-pointer"
               >
-                {isHi ? 'नंबर बदलें' : 'Change'}
+                {isHi ? 'बदलें' : 'Change'}
               </button>
             </div>
 
-            {devBypassNotice && (
+            {devBypassNotice && signupChannel === 'phone' && (
               <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-3.5 text-xs font-semibold text-amber-900 flex items-center gap-2.5">
                 <Lock className="h-4 w-4 shrink-0 text-amber-600" />
                 <span>{devBypassNotice}</span>
@@ -414,7 +499,7 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
             )}
 
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-600">
-              {isHi ? '6-अंकीय WhatsApp OTP' : '6-Digit WhatsApp OTP'}
+              {signupChannel === 'email' ? (isHi ? '6-अंकीय Email OTP (Resend)' : '6-Digit Email OTP (via Resend)') : (isHi ? '6-अंकीय WhatsApp OTP' : '6-Digit WhatsApp OTP')}
               <input
                 id="signup-otp"
                 className={`${field} mt-1 text-center font-mono text-xl tracking-widest`}

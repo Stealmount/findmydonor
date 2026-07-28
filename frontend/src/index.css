@@ -1,0 +1,423 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Outfit:wght@400;600;800;900&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,700&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Hind:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", sans-serif;
+  --font-serif: "Fraunces", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom palette matching the Bold Typography theme */
+  --color-brand-bg: #EBEBE8;
+  --color-brand-dark: #111111;
+  --color-brand-red: #D45D2A;
+  --color-brand-card: #F4F4F1;
+  --color-brand-gray: #D1D1CB;
+  --color-brand-light: #F7F7F5;
+
+  /* Raktdaan Sleek Frontend Theme Palette */
+  --color-ink-50: #f8f7f7;
+  --color-ink-100: #eeecec;
+  --color-ink-200: #d9d5d4;
+  --color-ink-300: #b8b0af;
+  --color-ink-400: #8a7e7c;
+  --color-ink-500: #5d5250;
+  --color-ink-600: #3d3534;
+  --color-ink-700: #2a2423;
+  --color-ink-800: #1a1514;
+  --color-ink-900: #0d0a0a;
+
+  --color-blood-50: #fff1f2;
+  --color-blood-100: #ffe1e3;
+  --color-blood-200: #ffc6cb;
+  --color-blood-300: #ff9aa3;
+  --color-blood-400: #ff6573;
+  --color-blood-500: #f43f57;
+  --color-blood-600: #e02545;
+  --color-blood-700: #bc1c39;
+  --color-blood-800: #9c1a35;
+  --color-blood-900: #831932;
+}
+
+:root {
+  --background: #fafaf9;
+  --foreground: #0d0a0a;
+  --muted: #5d5250;
+  --border: rgba(13, 10, 10, 0.08);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f4f3f1;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #f43f57, #9c1a35);
+  border-radius: 10px;
+  border: 2px solid #f4f3f1;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #e02545, #831932);
+}
+
+::selection {
+  background: #f43f57;
+  color: white;
+}
+
+/* Ambient gradient background */
+.ambient-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(244, 63, 87, 0.08), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(244, 63, 87, 0.06), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(244, 63, 87, 0.05), transparent 50%),
+    linear-gradient(180deg, #fafaf9 0%, #ffffff 100%);
+}
+
+.ambient-bg-dark {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(244, 63, 87, 0.20), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(244, 63, 87, 0.15), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(244, 63, 87, 0.10), transparent 50%),
+    linear-gradient(180deg, #0d0a0a 0%, #1a1514 100%);
+}
+
+/* Grid pattern */
+.grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(13, 10, 10, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(13, 10, 10, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.grid-pattern-dark {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 80%);
+}
+
+/* Noise texture */
+.noise {
+  position: relative;
+}
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/* Premium gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #f43f57 0%, #bc1c39 40%, #831932 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.gradient-text-light {
+  background: linear-gradient(180deg, #ffffff 0%, #ffc6cb 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.glass-dark {
+  background: rgba(13, 10, 10, 0.5);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Pulse ring animation */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.pulse-ring::before,
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #f43f57;
+  animation: pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+.pulse-ring::after {
+  animation-delay: 1.25s;
+}
+
+/* Float animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(1deg); }
+}
+.animate-float { animation: float 6s ease-in-out infinite; }
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  33% { transform: translateY(-10px) translateX(4px); }
+  66% { transform: translateY(6px) translateX(-4px); }
+}
+.animate-float-slow { animation: float-slow 12s ease-in-out infinite; }
+
+/* Heart beat */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.15); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.1); }
+  70% { transform: scale(1); }
+}
+.animate-heartbeat { animation: heartbeat 1.4s ease-in-out infinite; }
+
+/* Shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Drop in for blood drop */
+@keyframes drop-pulse {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.05); }
+}
+.animate-drop { animation: drop-pulse 2.5s ease-in-out infinite; }
+
+/* Marquee */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 30s linear infinite; }
+
+/* Premium button glow */
+.btn-glow {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-glow::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(135deg, #f43f57, #bc1c39, #f43f57);
+  border-radius: inherit;
+  opacity: 0;
+  filter: blur(16px);
+  transition: opacity 0.4s;
+  z-index: -1;
+}
+.btn-glow:hover::before { opacity: 0.7; }
+.btn-glow:hover { transform: translateY(-2px); }
+
+/* Section divider fade */
+.section-fade-top {
+  mask-image: linear-gradient(180deg, transparent 0%, black 12%);
+}
+
+/* Hide scrollbar on marquee */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Subtle border */
+.subtle-border {
+  border: 1px solid rgba(13, 10, 10, 0.06);
+}
+.subtle-border-dark {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Card hover lift */
+.card-lift {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s;
+}
+.card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 48px -12px rgba(244, 63, 87, 0.18);
+}
+
+/* Premium shadow */
+.shadow-premium {
+  box-shadow:
+    0 1px 2px rgba(13, 10, 10, 0.04),
+    0 8px 24px -4px rgba(13, 10, 10, 0.06),
+    0 24px 48px -12px rgba(244, 63, 87, 0.10);
+}
+.shadow-premium-lg {
+  box-shadow:
+    0 1px 2px rgba(13, 10, 10, 0.04),
+    0 12px 32px -8px rgba(13, 10, 10, 0.08),
+    0 32px 64px -16px rgba(244, 63, 87, 0.18);
+}
+
+/* Glow blob */
+.glow-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Blood drop SVG custom */
+.blood-drop-gradient {
+  background: linear-gradient(180deg, #ff6573 0%, #e02545 50%, #9c1a35 100%);
+}
+
+/* Marquee fade */
+.marquee-mask {
+  mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, black 10%, black 90%, transparent);
+}
+
+/* Existing Brutalist / Nordic helpers preserved for legacy components */
+.nordic-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #111111;
+  opacity: 0.6;
+}
+
+.nordic-label-wide {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4em;
+  color: #111111;
+  opacity: 0.4;
+}
+
+.btn-brutalist {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  background-color: #111111;
+  color: #FFFFFF;
+  border: 2px solid #111111;
+  transition: all 0.15s ease-in-out;
+}
+.btn-brutalist:hover {
+  background-color: #D45D2A;
+  border-color: #D45D2A;
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px 0px #111111;
+}
+
+.btn-brutalist-red {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  background-color: #D45D2A;
+  color: #FFFFFF;
+  border: 2px solid #111111;
+  transition: all 0.15s ease-in-out;
+}
+.btn-brutalist-red:hover {
+  background-color: #111111;
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px 0px #D45D2A;
+}
+
+.card-brutalist {
+  background-color: #FFFFFF;
+  border: 3px solid #111111;
+  box-shadow: 6px 6px 0px 0px rgba(17, 17, 17, 0.15);
+  border-radius: 0px !important;
+}
+
+.btn-brutalist-secondary {
+  position: relative;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  background-color: transparent;
+  color: #111111;
+  border: 2px solid #111111;
+  transition: all 0.15s ease-in-out;
+}
+.btn-brutalist-secondary:hover {
+  background-color: #111111;
+  color: #FFFFFF;
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0px 0px #D45D2A;
+}
+
+.card-brutalist-accent {
+  background-color: #F4F4F1;
+  border: 3px solid #111111;
+  box-shadow: 6px 6px 0px 0px #D45D2A;
+  border-radius: 0px !important;
+}
+
+/* Hindi Devanagari Typography Symmetry & Alignment Fix */
+[data-lang="HI"] {
+  font-family: "Noto Sans Devanagari", "Hind", "Inter", sans-serif !important;
+}
+
+[data-lang="HI"] h1,
+[data-lang="HI"] h2,
+[data-lang="HI"] h3,
+[data-lang="HI"] h4,
+[data-lang="HI"] .font-serif,
+[data-lang="HI"] .tracking-tight,
+[data-lang="HI"] .tracking-tighter {
+  font-family: "Noto Sans Devanagari", "Hind", sans-serif !important;
+  letter-spacing: 0 !important;
+  line-height: 1.45 !important;
+  font-style: normal !important;
+}
+
+[data-lang="HI"] p,
+[data-lang="HI"] span,
+[data-lang="HI"] div,
+[data-lang="HI"] button,
+[data-lang="HI"] input {
+  font-family: "Noto Sans Devanagari", "Hind", "Inter", sans-serif;
+  letter-spacing: normal !important;
+}
+
+

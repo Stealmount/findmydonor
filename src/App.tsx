@@ -15,12 +15,34 @@ import { HospitalRegistration } from './components/hospital/HospitalRegistration
 import { HospitalDashboard } from './components/hospital/HospitalDashboard';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
-import { User as DonorUser, Requester, HospitalUser, AdminUser, AuthState } from './types';
+import { BloodBankDirectory } from './components/BloodBankDirectory';
+import { User as DonorUser, Requester, Profile, HospitalUser, AdminUser, AuthState } from './types';
+
+// Explicit mapper: Profile (from /api/auth/me) → Requester (frontend state).
+// Any future Requester field not present on Profile will be a compile-time error here.
+function profileToRequester(profile: Profile): Requester {
+  return {
+    id: profile.id,
+    full_name: profile.full_name,
+    email: profile.email ?? '',
+    phone: profile.phone,
+    whatsapp_number: profile.whatsapp_phone,
+    created_at: profile.consent_accepted_at ?? profile.created_at,
+    updated_at: profile.updated_at,
+  };
+}
+import { PrivacyPolicy } from './components/PrivacyPolicy';
+import { TermsOfService } from './components/TermsOfService';
+import { FAQPage } from './components/FAQPage';
+import { CityDonorDirectory } from './components/CityDonorDirectory';
+import { BloodCompatibilityPage } from './components/BloodCompatibilityPage';
+import { GuidesPage } from './components/GuidesPage';
+import { SupportPage } from './components/SupportPage';
 import { LanguageProvider } from './lib/LanguageContext';
 
-type ActiveView = 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'requester-register' | 'auth-signin' | 'auth-signup' | 'admin' | 'admin-login' | 'admin-dashboard' | 'hospital-register' | 'hospital-dashboard';
+type ActiveView = 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'requester-register' | 'auth-signin' | 'auth-signup' | 'admin' | 'admin-login' | 'admin-dashboard' | 'hospital-register' | 'hospital-dashboard' | 'blood-banks' | 'privacy' | 'terms' | 'faq' | 'donors' | 'blood-compatibility' | 'guides' | 'support';
 
-const ACTIVE_VIEWS: readonly ActiveView[] = ['home', 'request', 'tracking', 'donor-register', 'donor-dashboard', 'requester-portal', 'requester-register', 'auth-signin', 'auth-signup', 'admin', 'admin-login', 'admin-dashboard', 'hospital-register', 'hospital-dashboard'];
+const ACTIVE_VIEWS: readonly ActiveView[] = ['home', 'request', 'tracking', 'donor-register', 'donor-dashboard', 'requester-portal', 'requester-register', 'auth-signin', 'auth-signup', 'admin', 'admin-login', 'admin-dashboard', 'hospital-register', 'hospital-dashboard', 'blood-banks', 'privacy', 'terms', 'faq', 'donors', 'blood-compatibility', 'guides', 'support'];
 
 function isActiveView(value: string): value is ActiveView {
   return ACTIVE_VIEWS.includes(value as ActiveView);
@@ -55,7 +77,17 @@ function AppContent() {
   const [trackingMatchId, setTrackingMatchId] = useState<string | undefined>();
   const lastResolvedUserIdRef = React.useRef<string | null>(null);
 
-  function navigateTo(view: ActiveView) {
+  function navigateTo(view: ActiveView, pushHistory = true, customCode?: string) {
+    const code = customCode || trackingCode;
+    const targetUrl = (view === 'home' || (view as string) === 'landing')
+      ? '/'
+      : view === 'tracking' && code
+      ? `/track/${code}`
+      : `/?view=${view}`;
+
+    if (pushHistory) {
+      window.history.pushState({ view, trackingCode: code }, '', targetUrl);
+    }
     setActiveView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -70,7 +102,7 @@ function AppContent() {
             setLoggedInUser(authState.profile as unknown as DonorUser);
           }
           if (authState.profile.can_request || authState.profile.can_donate) {
-            setLoggedInRequester(authState.profile as unknown as Requester);
+            setLoggedInRequester(profileToRequester(authState.profile));
           }
         }
       } catch {
@@ -92,23 +124,56 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const pathMatch = window.location.pathname.match(/^\/track\/([A-Z0-9-]+)/i);
-    if (pathMatch) {
-      setTrackingCode(pathMatch[1]);
-      setTrackingRole((params.get('role') as 'donor' | 'requester') || 'requester');
-      setTrackingMatchId(params.get('matchId') || undefined);
-      setActiveView('tracking');
-    } else {
-      const code = params.get('code');
-      const view = params.get('view');
-      if (code) {
+    const syncFromUrl = (replaceState = false) => {
+      const params = new URLSearchParams(window.location.search);
+      const pathMatch = window.location.pathname.match(/^\/track\/([A-Z0-9-]+)/i);
+      let initialView: ActiveView = 'home';
+      let code = '';
+
+      if (pathMatch) {
+        code = pathMatch[1];
         setTrackingCode(code);
-        setActiveView('tracking');
-      } else if (view && isActiveView(view)) {
-        setActiveView(view);
+        setTrackingRole((params.get('role') as 'donor' | 'requester') || 'requester');
+        setTrackingMatchId(params.get('matchId') || undefined);
+        initialView = 'tracking';
+      } else {
+        const queryCode = params.get('code');
+        const viewParam = params.get('view');
+        if (queryCode) {
+          code = queryCode;
+          setTrackingCode(code);
+          initialView = 'tracking';
+        } else if (viewParam && isActiveView(viewParam)) {
+          initialView = viewParam as ActiveView;
+        }
       }
-    }
+
+      setActiveView(initialView);
+      const targetUrl = (initialView === 'home' || (initialView as string) === 'landing')
+        ? '/'
+        : initialView === 'tracking' && code
+        ? `/track/${code}`
+        : `/?view=${initialView}`;
+
+      if (replaceState) {
+        window.history.replaceState({ view: initialView, trackingCode: code }, '', targetUrl);
+      }
+    };
+
+    syncFromUrl(true);
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.view && isActiveView(event.state.view)) {
+        setActiveView(event.state.view as ActiveView);
+        if (event.state.trackingCode) setTrackingCode(event.state.trackingCode);
+      } else {
+        syncFromUrl(false);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const handleRequestSuccess = (code: string) => {
@@ -202,6 +267,40 @@ function AppContent() {
             onLoginSuccess={(requester) => setLoggedInRequester(requester)}
             onNavigate={(view) => navigateTo(view)}
           />
+        )}
+
+        {activeView === 'blood-banks' && (
+          <BloodBankDirectory
+            onNavigate={(view, pushHistory, code) => navigateTo(view as ActiveView, pushHistory, code)}
+          />
+        )}
+
+        {activeView === 'privacy' && (
+          <PrivacyPolicy onNavigate={(view) => navigateTo(view)} />
+        )}
+
+        {activeView === 'terms' && (
+          <TermsOfService onNavigate={(view) => navigateTo(view)} />
+        )}
+
+        {activeView === 'faq' && (
+          <FAQPage onNavigate={(view) => navigateTo(view)} />
+        )}
+
+        {activeView === 'donors' && (
+          <CityDonorDirectory onNavigate={(view, pushHistory, code) => navigateTo(view as ActiveView, pushHistory, code)} />
+        )}
+
+        {activeView === 'blood-compatibility' && (
+          <BloodCompatibilityPage onNavigate={(view) => navigateTo(view)} />
+        )}
+
+        {activeView === 'guides' && (
+          <GuidesPage onNavigate={(view) => navigateTo(view)} />
+        )}
+
+        {activeView === 'support' && (
+          <SupportPage onNavigate={(view) => navigateTo(view as ActiveView)} />
         )}
 
         {activeView === 'tracking' && (
