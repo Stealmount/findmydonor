@@ -276,15 +276,15 @@ function AppContent() {
         )}
 
         {activeView === 'privacy' && (
-          <PrivacyPolicy onNavigate={(view) => navigateTo(view)} />
+          <PrivacyPolicy onNavigate={(view) => navigateTo(view as ActiveView)} />
         )}
 
         {activeView === 'terms' && (
-          <TermsOfService onNavigate={(view) => navigateTo(view)} />
+          <TermsOfService onNavigate={(view) => navigateTo(view as ActiveView)} />
         )}
 
         {activeView === 'faq' && (
-          <FAQPage onNavigate={(view) => navigateTo(view)} />
+          <FAQPage onNavigate={(view) => navigateTo(view as ActiveView)} />
         )}
 
         {activeView === 'donors' && (
