@@ -13,7 +13,7 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
-import { randomInt, randomUUID } from "node:crypto";
+import { randomInt, randomUUID, randomBytes, timingSafeEqual } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createServer as createViteServer } from "vite";
 import { Resend } from "resend";
@@ -76,23 +76,38 @@ function isValidIndianPhone(phone: string): boolean {
 function buildSyntheticEmail(phone: string): string {
   return `phone+${phone}@raktdaan.local`;
 }
+export async function isAccountDeleted(authId: string): Promise<boolean> {
+  const cacheKey = `acct_deleted:${authId}`;
+  const cached = await cacheGet<boolean>(cacheKey);
+  if (cached !== null) return cached;
+  const user = await getLocalOrFirestoreDoc<User>("users", authId);
+  const deleted = user?.account_status === "deleted";
+  await cacheSet(cacheKey, deleted, 300); // 5-minute TTL
+  return deleted;
+}
 
 async function getAuthenticatedUser(req: express.Request) {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) return null;
+  
+  let authUser: any = null;
   if (token === "test-valid-token" && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
-    return { id: "test-user-id", email: "test@example.com" } as any;
+    authUser = { id: "test-user-id", email: "test@example.com" };
+  } else if (token === "test-admin-token" && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
+    authUser = { id: "test-admin-id", email: "admin@raktdaan.org" };
+  } else {
+    try {
+      const { data, error } = await getServerSupabase().auth.getUser(token);
+      if (!error && data.user) authUser = data.user;
+    } catch (error) {
+      console.warn("[Auth] Supabase unavailable:", error);
+    }
   }
-  if (token === "test-admin-token" && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
-    return { id: "test-admin-id", email: "admin@raktdaan.org" } as any;
-  }
-  try {
-    const { data, error } = await getServerSupabase().auth.getUser(token);
-    return error ? null : data.user;
-  } catch (error) {
-    console.warn("[Auth] Supabase unavailable:", error);
-    return null;
-  }
+
+  if (!authUser) return null;
+  if (await isAccountDeleted(authUser.id)) return null;
+
+  return authUser;
 }
 
 async function consumeOtpTicket(ticket: string, phone: string, expectedPurpose: "signup" | "sos"): Promise<boolean> {
@@ -533,7 +548,8 @@ async function notifyDonor(
   donor: User
 ): Promise<NotifyResult> {
   const whatsappPhone = donor.whatsapp_number || donor.phone;
-  const sosMessage    = buildDonorSosMessage(request, donor, match.id);
+  // Pass the capability token so the donor's WhatsApp link uses matchToken= (S-1 fix).
+  const sosMessage    = buildDonorSosMessage(request, donor, match.id, match.public_token);
   const waOk          = await sendWhatsApp(whatsappPhone, sosMessage);
 
   let emailOk = false;
@@ -587,7 +603,15 @@ async function notifyDonor(
   return { donorId: donor.id, whatsapp: waOk, email: emailOk };
 }
 
-// ─── Resend email helper (server-side) ───────────────────────────────────────
+// Module-level singleton — avoid re-creating the HTTP client on every send
+let _resendClient: Resend | null = null;
+function getResendClient(): Resend | null {
+  if (_resendClient) return _resendClient;
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return null;
+  _resendClient = new Resend(apiKey);
+  return _resendClient;
+}
 
 async function sendEmailViaResend(
   to: string,
@@ -595,10 +619,9 @@ async function sendEmailViaResend(
   html: string,
   text: string
 ): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) { console.warn("[Email] RESEND_API_KEY not set — skipped."); return false; }
+  const resend = getResendClient();
+  if (!resend) { console.warn("[Email] RESEND_API_KEY not set — skipped."); return false; }
   try {
-    const resend = new Resend(apiKey);
     const sender = process.env.RESEND_SENDER_EMAIL || "FindMyDonor <official@findmydonor.online>";
     const fromAddress = sender.includes("<") ? sender : `FindMyDonor <${sender}>`;
     const { error } = await resend.emails.send({
@@ -650,6 +673,12 @@ setInterval(() => {
     if (now > v.resetAt) rateLimitMap.delete(k);
   }
 }, 60_000);
+
+/** Constant-time string comparison — prevents timing attacks on token/secret validation. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 // ─── Structured logging (Feature 6) ─────────────────────────────────────────
 const requestContext = new AsyncLocalStorage<{ requestId: string }>();
@@ -2061,29 +2090,18 @@ async function startServer() {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
     const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-    if (!match) return res.status(404).json({ error: "Match not found" });
-    const updatedMatch: Match = {
-      ...match,
-      donor_response: 'approved',
-      donor_response_at: nowISO(),
-      contact_shared_at: nowISO(),
-    };
-    await saveLocalOrFirestoreDoc("matches", match.id, updatedMatch);
-    return res.json({ success: true, match: updatedMatch });
+    if (!match || match.donor_id !== authUser.id) return res.status(404).json({ error: "Match not found or unauthorized" });
+    const result = await approveMatchById(req.params.matchId, req.body?.responseTimestamp);
+    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? result.data : { error: result.error });
   });
 
   app.post("/api/matches/:matchId/decline", async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
     if (!authUser) return res.status(401).json({ error: "Sign in is required." });
     const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-    if (!match) return res.status(404).json({ error: "Match not found" });
-    const updatedMatch: Match = {
-      ...match,
-      donor_response: 'declined',
-      donor_response_at: nowISO(),
-    };
-    await saveLocalOrFirestoreDoc("matches", match.id, updatedMatch);
-    return res.json({ success: true, match: updatedMatch });
+    if (!match || match.donor_id !== authUser.id) return res.status(404).json({ error: "Match not found or unauthorized" });
+    const result = await declineMatchById(req.params.matchId, req.body?.responseTimestamp);
+    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { success: true } : { error: result.error });
   });
 
   app.get("/api/requester/requests", async (req, res) => {
@@ -2112,37 +2130,7 @@ async function startServer() {
     return res.json({ requests, matches, donors });
   });
 
-  app.post("/api/matches/:matchId/respond", async (req, res) => {
-    const authUser = await getAuthenticatedUser(req);
-    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
-    const decision = req.body?.decision;
-    if (!["approved", "declined"].includes(decision)) return res.status(400).json({ error: "Invalid response." });
-    const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-    if (!match || match.donor_id !== authUser.id) return res.status(404).json({ error: "Match not found." });
-    if (match.donor_response !== "pending") return res.status(409).json({ error: "This match has already been resolved." });
-    const request = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", match.request_id);
-    const donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
-    if (!request || !donor) return res.status(404).json({ error: "Request or donor profile not found." });
-
-    const now = nowISO();
-    await saveLocalOrFirestoreDoc("matches", match.id, {
-      ...match, donor_response: decision, donor_response_at: now, contact_shared_at: decision === "approved" ? now : null,
-    });
-    // Release reservation lock so other requests can consider this donor again on decline
-    if (decision === "declined") {
-      await releaseDonorLock(donor.id);
-    }
-    if (decision === "approved") {
-      await saveLocalOrFirestoreDoc("blood_requests", request.id, { ...request, status: "partially_matched", updated_at: now });
-      await sendWhatsApp(request.requester_phone, buildRequesterConfirmMessage(request, donor.full_name));
-      await sendWhatsApp(donor.whatsapp_number || donor.phone, buildDonorConfirmedDetailsMessage(request, donor));
-    } else {
-      await createNextDonorMatch(request, match.id);
-    }
-    await cacheInvalidatePrefix("pending_matches_");
-    await cacheInvalidatePrefix("req_status_");
-    return res.json({ success: true });
-  });
+  // (Duplicate manual /respond route removed in favor of /approve and /decline)
 
   // ─── NEW: POST /api/notify-match ────────────────────────────────────────
   // Called from client RequestForm after matching engine runs.
@@ -2235,6 +2223,7 @@ async function startServer() {
           outcome_confirmed_at: null,
           created_at:           nowISO(),
           distance_km:          donor.distance_km,
+          public_token:         randomBytes(16).toString("hex"),
         };
         await saveLocalOrFirestoreDoc("matches", matchId, match);
         return { match, donor };
@@ -2499,6 +2488,8 @@ async function startServer() {
 
   // ─── Mark notification sent ─────────────────────────────────────────────
   app.post("/api/matches/:matchId/notification-sent", async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Authentication required" });
     const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
     if (!match) return res.status(404).json({ error: "Match not found" });
     await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
@@ -2542,12 +2533,7 @@ async function startServer() {
     await cacheInvalidatePrefix("req_status_");
     return { ok: true, data: {
       success: true,
-      requesterPhone: request.requester_phone,
-      requesterName:  request.requester_name,
-      donorPhone:     donor.whatsapp_number || donor.phone,
-      donorName:      donor.full_name,
-      hospitalName:   request.hospital_name,
-      hospitalArea:   request.hospital_area,
+      // PII stripped — donor/requester coordination is handled by WhatsApp messages
     }};
   }
 
@@ -2565,31 +2551,43 @@ async function startServer() {
     return { ok: true };
   }
 
-  app.post("/api/matches/:matchId/approve", async (req, res) => {
-    const result = await approveMatchById(req.params.matchId, req.body?.responseTimestamp);
-    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? result.data : { error: result.error });
-  });
+  // (Unauthenticated duplicate /approve and /decline routes removed for security)
 
-  // ─── Decline match ──────────────────────────────────────────────────────
-  app.post("/api/matches/:matchId/decline", async (req, res) => {
-    const result = await declineMatchById(req.params.matchId, req.body?.responseTimestamp);
-    return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { success: true } : { error: result.error });
-  });
-
-  // ─── Public donor response — matchId UUID is the capability token, no JWT required ──
-  app.post("/api/matches/:matchId/respond-public", async (req, res) => {
-    const { response } = req.body;
+  // ─── Public donor response — requires opaque capability token (not raw matchId) ──
+  // Route param is the token itself; we scan for the match by public_token.
+  app.post("/api/matches/respond-public", rateLimitMiddleware(10, 60_000), async (req, res) => {
+    const { response, token } = req.body;
+    if (!token || typeof token !== "string" || token.length < 10)
+      return res.status(403).json({ error: "Missing capability token" });
     if (!["approved", "declined"].includes(String(response)))
       return res.status(400).json({ error: "response must be 'approved' or 'declined'" });
+
+    // Scan all matches to find the one whose public_token matches.
+    // We use timingSafeEqualStr on every candidate to avoid timing attacks.
+    const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
+    let match: Match | null = null;
+    for (const m of allMatches) {
+      if (m.public_token && timingSafeEqualStr(token, m.public_token)) {
+        match = m;
+        break;
+      }
+    }
+
+    if (!match) return res.status(403).json({ error: "Invalid or expired capability token" });
+    if (match.donor_response !== "pending")
+      return res.status(409).json({ error: "Already resolved" });
+
     const result = response === "approved"
-      ? await approveMatchById(req.params.matchId)
-      : await declineMatchById(req.params.matchId);
+      ? await approveMatchById(match.id)
+      : await declineMatchById(match.id);
     return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { ok: true } : { error: result.error });
   });
 
 
   // ─── Reminder sent ──────────────────────────────────────────────────────
   app.post("/api/matches/:matchId/reminder-sent", async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Authentication required" });
     const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
     if (!match) return res.status(404).json({ error: "Match not found" });
     await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
@@ -2601,6 +2599,8 @@ async function startServer() {
 
   // ─── Timeout match ──────────────────────────────────────────────────────
   app.post("/api/matches/:matchId/timeout", async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Authentication required" });
     const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
     if (!match) return res.status(404).json({ error: "Match not found" });
     await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
@@ -2668,6 +2668,8 @@ async function startServer() {
 
   // ─── Donation not completed ─────────────────────────────────────────────
   app.post("/api/matches/:matchId/donation-not-completed", async (req, res) => {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) return res.status(401).json({ error: "Authentication required" });
     const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
     if (!match) return res.status(404).json({ error: "Match not found" });
     await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
@@ -3099,24 +3101,51 @@ async function startServer() {
     const request = all.find(r => r.tracking_code.toUpperCase() === req.params.trackingCode.toUpperCase().trim() || r.id === req.params.trackingCode);
     if (!request) return res.status(404).json({ error: "No active blood request found with this tracking code. Please verify the code and try again." });
     const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
-    const matches = allMatches.filter(m => m.request_id === request.id);
+    const rawMatches = allMatches.filter(m => m.request_id === request.id);
     const allDonors = await getLocalOrFirestoreCollection<User>("users");
-    const donors = matches.map(m => {
+
+    // Lazy backfill — mint public_token for any legacy match that lacks one
+    for (const m of rawMatches) {
+      if (!m.public_token) {
+        m.public_token = randomBytes(16).toString("hex");
+        await saveLocalOrFirestoreDoc("matches", m.id, { ...m });
+      }
+    }
+
+    // Safe public projection — strip raw match UUID and donor UUID.
+    // matchToken is the opaque capability token; frontend joins donors[] by matchToken.
+    const matches = rawMatches.map(m => {
       const d = allDonors.find(u => u.id === m.donor_id);
-      return d ? { id: d.id, blood_type: d.blood_type, area: d.area, city: d.city } : null;
-    }).filter(Boolean);
+      return {
+        matchToken:           m.public_token,
+        blood_type:           d?.blood_type,
+        area:                 d?.area,
+        city:                 d?.city,
+        distance_km:          m.distance_km,
+        status:               m.donor_response,
+        unit_slot:            m.unit_slot ?? null,
+        // Approved donors' contact info: kept for requester coordination (functional requirement)
+        ...(m.donor_response === "approved" ? {
+          donor_name:  d?.full_name,
+          donor_phone: d?.whatsapp_number || d?.phone,
+        } : {}),
+      };
+    });
+
     // Mask requester PII — tracking code is public but contact info is not
     const safeRequest = {
       ...request,
-      requester_name: undefined,
+      requester_name:  undefined,
       requester_email: undefined,
       requester_phone: undefined,
-      patient_name: undefined,
-      patient_age: undefined,
-      patient_gender: undefined,
+      requester_id:    undefined,
+      patient_name:    undefined,
+      patient_age:     undefined,
+      patient_gender:  undefined,
     };
-    return res.json({ request: safeRequest, matches, donors });
+    return res.json({ request: safeRequest, matches });
   });
+
 
   app.patch("/api/requests/:trackingCode/cancel", async (req, res) => {
     const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
@@ -3213,8 +3242,22 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[Server] running on ${process.env.APP_URL || `http://145.241.154.187:${PORT}`} in ${process.env.NODE_ENV || "development"} mode`);
+
+    // Graceful shutdown: drain in-flight requests on SIGTERM (PM2 restart/deploy)
+    process.on("SIGTERM", () => {
+      console.log("[Shutdown] SIGTERM received. Closing HTTP server...");
+      server.close(() => {
+        console.log("[Shutdown] HTTP server closed. Exiting.");
+        process.exit(0);
+      });
+      // Force exit after 8 seconds if connections don't drain
+      setTimeout(() => {
+        console.error("[Shutdown] Forced exit after timeout.");
+        process.exit(1);
+      }, 8000);
+    });
 
     // Auto-heal profiles: ensure all profiles have whatsapp_verified = true so no user is blocked by HTTP 403
     void (async () => {
@@ -3267,6 +3310,7 @@ async function createNextDonorMatch(request: BloodRequest, excludedDonorId?: str
     created_at:           nowISO(),
     distance_km:          next.distance_km,
     is_exact_match:       next.is_exact_match,
+    public_token:         randomBytes(16).toString("hex"),
   };
 
 

@@ -23,5 +23,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["node_modules", "raktdaan", "dist"]
+  "exclude": ["node_modules", "raktdaan", "dist", "scratch"]
 }

@@ -162,7 +162,7 @@ export default function DonorBadges({ donationCount }: DonorBadgesProps) {
                 }`}
               >
                 <div className={`p-1.5 rounded-xl bg-white border border-ink-200/50`}>
-                  {React.cloneElement(tier.icon as React.ReactElement, { className: 'w-6 h-6' })}
+                  {React.cloneElement(tier.icon as React.ReactElement<{ className?: string }>, { className: 'w-6 h-6' })}
                 </div>
                 <div>
                   <h5 className="font-bold text-xs flex items-center gap-1.5">

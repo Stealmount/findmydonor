@@ -652,7 +652,7 @@ export default function RequesterPortal({
                                   <span className="font-semibold text-[11.5px] text-ink-900 flex items-center gap-1.5">
                                     {isApproved ? donor.full_name : (isHi ? `रक्तदाता #${idx + 1}` : `Donor #${idx + 1}`)}
                                     {donor.aadhaar_verified && isApproved && (
-                                      <Shield className="w-3.5 h-3.5 text-emerald-500 fill-emerald-500/20" title="DigiLocker Verified" />
+                                      <span title="DigiLocker Verified"><Shield className="w-3.5 h-3.5 text-emerald-500 fill-emerald-500/20" /></span>
                                     )}
                                   </span>
                                   <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-white border border-ink-200 text-ink-700">

@@ -75,8 +75,15 @@ export function CityDonorDirectory({ initialZone, initialBloodGroup, onNavigate 
     return () => { isMounted = false; };
   }, [selectedZone, selectedBloodGroup]);
 
-  // Compatibility data for selected blood group
-  const compatibility = selectedBloodGroup !== 'ALL' ? BLOOD_COMPATIBILITY_MATRIX[selectedBloodGroup] : null;
+  // Compatibility data for selected blood group (derived from BLOOD_COMPATIBILITY_MATRIX)
+  const compatibility = selectedBloodGroup !== 'ALL'
+    ? {
+        canReceiveFrom: BLOOD_COMPATIBILITY_MATRIX[selectedBloodGroup],
+        canGiveTo: (Object.keys(BLOOD_COMPATIBILITY_MATRIX) as BloodType[]).filter(recipient =>
+          BLOOD_COMPATIBILITY_MATRIX[recipient].includes(selectedBloodGroup)
+        ),
+      }
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 py-12 px-4 sm:px-6 lg:px-8">

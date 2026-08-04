@@ -59,7 +59,7 @@ export type AvailabilityStatus = 'available' | 'available_with_notice' | 'unavai
 
 export type NumberSharingPref = 'on_approval' | 'never';
 
-export type AccountStatus = 'active' | 'cooldown' | 'inactive' | 'banned';
+export type AccountStatus = 'active' | 'cooldown' | 'inactive' | 'banned' | 'deleted';
 
 export type UrgencyLevel = 'critical' | 'urgent' | 'planned';
 
@@ -100,6 +100,7 @@ export interface User {
   age?: number; // 18 - 65 yrs per NBTC / RaktDaan clinical criteria
   gender?: 'Male' | 'Female' | 'Other';
   weight_kg?: number; // min 45kg per Indian clinical blood donation protocol
+  address_text?: string; // free-form address from donor registration
   hospital_affiliation?: string; // e.g. AIIMS, Apollo, Fortis, Max, RaktDaan Network
   medical_clearance?: boolean; // self-declared clinical eligibility
   profile_complete?: boolean; // migration compatibility: required once donor_profiles is active
@@ -137,6 +138,7 @@ export interface AuthProfileLink {
 export interface DonorProfile {
   profile_id: string;
   blood_group: BloodType | null;
+  weight_kg?: number | null;
   latitude: number | null;
   longitude: number | null;
   address_text: string | null;
@@ -159,6 +161,7 @@ export interface AuthState {
   authUser: { id: string; email: string | null; provider: string | null };
   profile: Profile | null;
   donorProfile: DonorProfile | null;
+  accountStatus?: string | null; // 'active' | 'cooldown' | 'banned' | 'deleted' | null
   nextStep: OnboardingStep;
 }
 
@@ -176,6 +179,7 @@ export interface RequesterUser {
   pincode: string;
   area: string;
   city: string;
+  account_status?: AccountStatus; // 'deleted' = soft-deleted by admin
   created_at: string; // ISO String
   updated_at: string; // ISO String
 }
@@ -209,6 +213,8 @@ export interface BloodRequest {
   component_needed?: 'Whole Blood (WB)' | 'Packed Red Blood Cells (PRBC)' | 'Single Donor Platelets (SDP)' | 'Random Donor Platelets (RDP)' | 'Fresh Frozen Plasma (FFP)' | 'Cryoprecipitate';
   hospital_uhid?: string; // UHID / IPD / Ward No
   attending_doctor?: string; // Dr. Name
+  units_confirmed?: number; // How many donors said YES (0 to units_required)
+  requester_email_verified?: boolean; // Email verified (OTP or Gmail fast-track)
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -395,26 +401,39 @@ export interface Requester {
   email: string;
   phone: string;
   whatsapp_number?: string;
+  account_status?: AccountStatus; // 'deleted' = soft-deleted by admin
   created_at: string;
   updated_at: string;
 }
 
 export interface Match {
-  id: string; // doc ID
-  request_id: string; // FK to blood_requests
-  donor_id: string; // FK to users
-  match_rank: number; // 1 = closest pincode match, higher = farther
-  notification_channel: 'whatsapp' | 'dashboard' | 'both';
-  notification_sent_at: string | null; // ISO String
-  reminder_sent_at: string | null; // ISO String
+  /** Opaque capability token (public_token from backend). Raw 'id' is never sent to public clients. */
+  matchToken?: string;
+  /** @deprecated Raw match UUID no longer returned by public tracking API. May exist on admin/authenticated endpoints. */
+  id?: string;
+  request_id?: string; // FK to blood_requests — not returned in public tracking projection
+  /** @deprecated Not returned in public tracking API (S-1 security fix). */
+  donor_id?: string;
+  match_rank?: number;
+  notification_channel?: 'whatsapp' | 'dashboard' | 'both';
+  notification_sent_at?: string | null;
+  reminder_sent_at?: string | null;
   donor_response: MatchStatus;
-  donor_response_at: string | null; // ISO String
-  contact_shared_at: string | null; // ISO String
-  outcome: MatchOutcome;
-  outcome_confirmed_at: string | null; // ISO String
-  created_at: string; // ISO String
-  distance_km?: number; // Distance in kilometers from hospital
-  is_exact_match?: boolean; // true = donor blood type exactly matches request; false = compatible but not exact
+  donor_response_at?: string | null;
+  contact_shared_at?: string | null;
+  outcome?: MatchOutcome;
+  outcome_confirmed_at?: string | null;
+  created_at?: string;
+  distance_km?: number;
+  is_exact_match?: boolean;
+  unit_slot?: number | null;
+  // Inline donor fields returned by the public tracking projection
+  blood_type?: string;
+  area?: string;
+  city?: string;
+  // Only present when status === 'approved'
+  donor_name?: string;
+  donor_phone?: string;
 }
 
 export interface NotificationLog {
@@ -492,16 +511,43 @@ export function lookupPincode(pincode: string): { area: string; city: string; di
   return null;
 }
 
+export type InstitutionType = 'hospital' | 'blood_bank' | 'ngo' | 'other';
+
 export interface HospitalUser {
   id: string; // doc ID
-  hospital_name: string;
-  registration_number: string;
+  institution_type: InstitutionType;
+  hospital_name: string; // Also used as blood bank name or NGO name
+  registration_number: string; // Clinical reg / License / Darpan ID
   admin_name: string;
   email: string;
   phone: string;
   pincode: string;
   city: string;
   status: 'pending' | 'verified' | 'rejected';
+  license_number?: string; // Blood bank license
+  has_component_facility?: boolean; // Blood bank component separation
+  ngo_focus_area?: string; // e.g. 'blood_donation', 'thalassemia', 'general'
+  created_at: string;
+  updated_at: string;
+}
+
+// Maps 1:1 to the `institutions` Supabase table (supabase_institutions_migration.sql).
+// Used by the registration API response and AdminPanel approvals queue.
+export interface Institution {
+  id: string;
+  type: InstitutionType;
+  org_name: string;
+  registration_number: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  address?: string;
+  city: string;
+  pincode: string;
+  verification_status: 'pending' | 'verified' | 'rejected';
+  reviewed_by?: string;
+  reviewed_at?: string;
+  rejection_reason?: string;
   created_at: string;
   updated_at: string;
 }

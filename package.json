@@ -14,11 +14,11 @@
     "preview": "vite preview",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('server.js',{force:true})\"",
     "lint": "tsc --noEmit",
-    "test": "tsx --test backend/tests/auth.test.ts backend/tests/matching.test.ts backend/tests/simulator.test.ts backend/tests/hospital.test.ts backend/tests/admin.test.ts",
-    "test:auth": "tsx --test backend/tests/auth.test.ts",
-    "test:matching": "tsx --test backend/tests/matching.test.ts",
-    "test:security": "tsx --test backend/tests/security.test.ts",
-    "test:all": "tsx --test backend/tests/*.test.ts"
+    "test": "tsx --test --test-force-exit backend/tests/auth.test.ts backend/tests/matching.test.ts backend/tests/simulator.test.ts backend/tests/hospital.test.ts backend/tests/admin.test.ts",
+    "test:auth": "tsx --test --test-force-exit backend/tests/auth.test.ts",
+    "test:matching": "tsx --test --test-force-exit backend/tests/matching.test.ts",
+    "test:security": "tsx --test --test-force-exit backend/tests/security.test.ts",
+    "test:all": "tsx --test --test-force-exit backend/tests/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -44,6 +44,8 @@
     "@types/canvas-confetti": "^1.9.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",

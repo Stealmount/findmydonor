@@ -4,6 +4,7 @@ import RequestForm from './components/RequestForm';
 import RequestTracking from './components/RequestTracking';
 import DonorDashboard from './components/DonorDashboard';
 import RequesterPortal from './components/RequesterPortal';
+import ErrorBoundary from './components/ErrorBoundary';
 import { AuthHub } from './components/AuthHub';
 import NotificationSimulator from './components/NotificationSimulator';
 import { RaktdaanHome } from './components/home/RaktdaanHome';
@@ -16,7 +17,7 @@ import { HospitalDashboard } from './components/hospital/HospitalDashboard';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { BloodBankDirectory } from './components/BloodBankDirectory';
-import { User as DonorUser, Requester, Profile, HospitalUser, AdminUser, AuthState } from './types';
+import { User as DonorUser, Requester, Profile, HospitalUser, Institution, AdminUser, AuthState } from './types';
 
 // Explicit mapper: Profile (from /api/auth/me) → Requester (frontend state).
 // Any future Requester field not present on Profile will be a compile-time error here.
@@ -72,9 +73,14 @@ function AppContent() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [loggedInHospital, setLoggedInHospital] = useState<HospitalUser | null>(null);
   const [loggedInAdmin, setLoggedInAdmin] = useState<AdminUser | null>(null);
+  // Canonical institution row from /api/auth/me (never mutated). loggedInHospital is the
+  // derived view-model used by HospitalDashboard; status flows through both.
+  const [loggedInInstitution, setLoggedInInstitution] = useState<Institution | null>(null);
   const [prefilledGoogleUser, setPrefilledGoogleUser] = useState<{ uid: string; email: string; full_name: string } | null>(null);
   const [trackingRole, setTrackingRole] = useState<'donor' | 'requester'>('requester');
-  const [trackingMatchId, setTrackingMatchId] = useState<string | undefined>();
+  // S-1: use opaque capability token from ?matchToken= query param.
+  // Legacy ?matchId= is kept as a fallback for old WhatsApp links in the wild.
+  const [trackingMatchToken, setTrackingMatchToken] = useState<string | undefined>();
   const lastResolvedUserIdRef = React.useRef<string | null>(null);
 
   function navigateTo(view: ActiveView, pushHistory = true, customCode?: string) {
@@ -92,11 +98,43 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // Institution row → HospitalUser view-model (shared by /api/auth/me handling
+  // and the AuthHub institution sign-in callback).
+  function institutionToHospitalUser(inst: Institution): HospitalUser {
+    return {
+      id: inst.id,
+      institution_type: inst.type,
+      hospital_name: inst.org_name,
+      registration_number: inst.registration_number,
+      admin_name: inst.contact_person,
+      email: inst.email,
+      phone: inst.phone,
+      pincode: inst.pincode,
+      city: inst.city,
+      status: inst.verification_status,
+      created_at: inst.created_at,
+      updated_at: inst.updated_at,
+    };
+  }
+
   async function handleAuthUser(authUser?: SupabaseAuthUser, forceRefresh = false) {
     if (authUser && (forceRefresh || authUser.id !== lastResolvedUserIdRef.current)) {
       try {
         lastResolvedUserIdRef.current = authUser.id;
-        const authState = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET');
+        const authState = await authenticatedApi<AuthState & { institution?: Institution | null }>('/api/auth/me', undefined, 'GET');
+
+        // Institution admin detection (Option A)
+        if (authState.institution) {
+          setLoggedInInstitution(authState.institution);
+          // Build a minimal HospitalUser from the Institution row so existing
+          // HospitalDashboard props continue to work without a Phase 3 refactor.
+          setLoggedInHospital(institutionToHospitalUser(authState.institution));
+          // Navigate for ALL statuses — HospitalDashboard renders its own pending/rejected
+          // holding screens (L87-88); 'verified' shows the live dashboard.
+          navigateTo('hospital-dashboard');
+          return; // don't also set as donor/requester
+        }
+
         if (authState.profile) {
           if (authState.profile.can_donate) {
             setLoggedInUser(authState.profile as unknown as DonorUser);
@@ -134,7 +172,8 @@ function AppContent() {
         code = pathMatch[1];
         setTrackingCode(code);
         setTrackingRole((params.get('role') as 'donor' | 'requester') || 'requester');
-        setTrackingMatchId(params.get('matchId') || undefined);
+        // Prefer capability token; fall back to raw matchId for old links.
+        setTrackingMatchToken(params.get('matchToken') || params.get('matchId') || undefined);
         initialView = 'tracking';
       } else {
         const queryCode = params.get('code');
@@ -196,36 +235,63 @@ function AppContent() {
     }
     setLoggedInUser(null);
     setLoggedInRequester(null);
+    setLoggedInHospital(null);
+    setLoggedInInstitution(null);
+    setLoggedInAdmin(null);
     navigateTo('home');
   };
 
   // ── Standalone full-screen views (no Navbar) ──
   if (activeView === 'admin-login') {
-    return <AdminLogin 
-      onLogin={(admin) => { setLoggedInAdmin(admin); navigateTo('admin-dashboard'); }} 
-      onBack={() => setActiveView('home')} 
-    />;
+    return (
+      <>
+        <AdminLogin 
+          onLogin={(admin) => { setLoggedInAdmin(admin); navigateTo('admin-dashboard'); }} 
+          onBack={() => setActiveView('home')} 
+        />
+        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
+      </>
+    );
   }
 
   if (activeView === 'admin-dashboard' && loggedInAdmin) {
-    return <AdminDashboard 
-      admin={loggedInAdmin} 
-      onLogout={() => { setLoggedInAdmin(null); setActiveView('home'); }} 
-    />;
+    return (
+      <>
+        <ErrorBoundary fallbackMessage="The admin dashboard hit an unexpected error. Your data is safe.">
+          <AdminDashboard 
+            admin={loggedInAdmin} 
+            onLogout={() => { setLoggedInAdmin(null); setActiveView('home'); }} 
+          />
+        </ErrorBoundary>
+        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
+      </>
+    );
   }
 
   if (activeView === 'hospital-register') {
-    return <HospitalRegistration 
-      onRegister={(hosp) => { setLoggedInHospital(hosp); navigateTo('hospital-dashboard'); }} 
-      onBack={() => setActiveView('home')} 
-    />;
+    return (
+      <>
+        <HospitalRegistration 
+          onRegister={(hosp) => { setLoggedInHospital(hosp); navigateTo('hospital-dashboard'); }} 
+          onBack={() => setActiveView('home')} 
+        />
+        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
+      </>
+    );
   }
 
   if (activeView === 'hospital-dashboard' && loggedInHospital) {
-    return <HospitalDashboard 
-      hospital={loggedInHospital} 
-      onLogout={() => { setLoggedInHospital(null); setActiveView('home'); }} 
-    />;
+    return (
+      <>
+        <ErrorBoundary fallbackMessage="The hospital dashboard hit an unexpected error. Your data is safe.">
+          <HospitalDashboard 
+            hospital={loggedInHospital} 
+            onLogout={() => { setLoggedInHospital(null); setActiveView('home'); }} 
+          />
+        </ErrorBoundary>
+        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
+      </>
+    );
   }
 
   // ── Home (special: no Navbar, own layout) ──
@@ -260,13 +326,15 @@ function AppContent() {
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-16">
 
         {activeView === 'request' && (
-          <RequestForm 
-            onSuccess={handleRequestSuccess} 
-            loggedInRequester={loggedInRequester} 
-            loggedInDonor={loggedInUser}
-            onLoginSuccess={(requester) => setLoggedInRequester(requester)}
-            onNavigate={(view) => navigateTo(view)}
-          />
+          <ErrorBoundary fallbackMessage="The request form hit an unexpected error. Please try again.">
+            <RequestForm 
+              onSuccess={handleRequestSuccess} 
+              loggedInRequester={loggedInRequester} 
+              loggedInDonor={loggedInUser}
+              onLoginSuccess={(requester) => setLoggedInRequester(requester)}
+              onNavigate={(view) => navigateTo(view)}
+            />
+          </ErrorBoundary>
         )}
 
         {activeView === 'blood-banks' && (
@@ -304,39 +372,45 @@ function AppContent() {
         )}
 
         {activeView === 'tracking' && (
-          <RequestTracking
-            initialCode={trackingCode}
-            role={trackingRole}
-            matchId={trackingMatchId}
-          />
+          <ErrorBoundary fallbackMessage="Request tracking hit an unexpected error. Please refresh.">
+            <RequestTracking
+              initialCode={trackingCode}
+              role={trackingRole}
+              matchToken={trackingMatchToken}
+            />
+          </ErrorBoundary>
         )}
 
         {activeView === 'requester-portal' && (sessionLoading ? (
           <LoadingScreen />
         ) : (
-          <RequesterPortal
-            currentRequester={loggedInRequester}
-            onLoginSuccess={(requester) => { setLoggedInRequester(requester); setActiveView('requester-portal'); }}
-            onLogout={handleLogout}
-            onNavigateToRequest={() => navigateTo('request')}
-            onNavigateToRegister={() => navigateTo('requester-register')}
-          />
+          <ErrorBoundary fallbackMessage="The requester portal hit an unexpected error. Your data is safe.">
+            <RequesterPortal
+              currentRequester={loggedInRequester}
+              onLoginSuccess={(requester) => { setLoggedInRequester(requester); setActiveView('requester-portal'); }}
+              onLogout={handleLogout}
+              onNavigateToRequest={() => navigateTo('request')}
+              onNavigateToRegister={() => navigateTo('requester-register')}
+            />
+          </ErrorBoundary>
         ))}
 
         {activeView === 'donor-dashboard' && (sessionLoading ? (
           <LoadingScreen />
         ) : (
-          <DonorDashboard 
-            currentUser={loggedInUser}
-            onLoginSuccess={handleDonorLoginSuccess}
-            onLogout={handleLogout}
-            onGoogleRegisterRedirect={(googleData) => {
-              setPrefilledGoogleUser(googleData);
-              navigateTo('donor-register');
-            }}
-            onNavigateToRequest={() => navigateTo('request')}
-            onNavigate={(view) => navigateTo(view as ActiveView)}
-          />
+          <ErrorBoundary fallbackMessage="The donor dashboard hit an unexpected error. Your data is safe.">
+            <DonorDashboard 
+              currentUser={loggedInUser}
+              onLoginSuccess={handleDonorLoginSuccess}
+              onLogout={handleLogout}
+              onGoogleRegisterRedirect={(googleData) => {
+                setPrefilledGoogleUser(googleData);
+                navigateTo('donor-register');
+              }}
+              onNavigateToRequest={() => navigateTo('request')}
+              onNavigate={(view) => navigateTo(view as ActiveView)}
+            />
+          </ErrorBoundary>
         ))}
 
         {(activeView === 'auth-signin' || activeView === 'auth-signup' || activeView === 'donor-register' || activeView === 'requester-register') && (
@@ -352,6 +426,11 @@ function AppContent() {
               setLoggedInRequester(requester);
               setLoggedInUser(null);
               navigateTo('requester-portal');
+            }}
+            onLoginSuccessInstitution={(inst) => {
+              setLoggedInInstitution(inst);
+              setLoggedInHospital(institutionToHospitalUser(inst));
+              navigateTo('hospital-dashboard');
             }}
             onSelectDonorSignUp={() => navigateTo('donor-register')}
             onSelectRequesterSignUp={() => navigateTo('requester-register')}
