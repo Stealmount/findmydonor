@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { Requester, BloodRequest, Match, User } from '../types';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
+import { StateMessage } from './ui/StateMessage';
 import { 
   Heart, 
   MapPin, 
@@ -16,6 +17,7 @@ import {
   AlertTriangle,
   LogOut,
   Shield,
+  Droplet,
   FileText,
   Save,
   ArrowRight,
@@ -24,8 +26,10 @@ import {
   Search,
   Check,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
+import DeleteAccountModal from './ui/DeleteAccountModal';
 
 interface RequesterPortalProps {
   currentRequester: Requester | null;
@@ -46,6 +50,7 @@ export default function RequesterPortal({
 }: RequesterPortalProps) {
   const { t, language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Dashboard state
   const [requests, setRequests] = useState<BloodRequest[]>([]);
@@ -54,6 +59,7 @@ export default function RequesterPortal({
   const [loadingData, setLoadingData] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -84,6 +90,7 @@ export default function RequesterPortal({
       }
     } catch (err) {
       console.error("Error loading requester data: ", err);
+      setDataError(isHi ? 'आपका डेटा लोड नहीं हो सका। कृपया पुनः प्रयास करें।' : 'Could not load your data. Please try again.');
     } finally {
       setLoadingData(false);
     }
@@ -300,6 +307,14 @@ export default function RequesterPortal({
             {t.requesterDashboard.newRequestBtn}
           </button>
           <button
+            id="btn-requester-delete-account"
+            onClick={() => setShowDeleteModal(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-all cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+            {isHi ? 'खाता हटाएं' : 'Delete Account'}
+          </button>
+          <button
             id="btn-requester-logout"
             onClick={onLogout}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-ink-200 bg-white px-5 py-2.5 text-xs font-semibold text-ink-700 hover:bg-ink-50 hover:text-ink-900 transition-all cursor-pointer"
@@ -309,6 +324,12 @@ export default function RequesterPortal({
           </button>
         </div>
       </div>
+
+      <DeleteAccountModal
+        open={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onDeleted={onLogout}
+      />
 
       {/* Requester Stat Strip */}
       <div id="requester-stat-strip" className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -463,14 +484,21 @@ export default function RequesterPortal({
             </div>
           )}
 
-          {loadingData && requests.length === 0 ? (
+          {dataError ? (
+            <StateMessage
+              variant="error"
+              title={dataError}
+              onRetry={() => { setDataError(null); loadDashboardData(); }}
+              isHi={isHi}
+            />
+          ) : loadingData && requests.length === 0 ? (
             <div className="bg-white/80 backdrop-blur rounded-2xl border border-ink-200 p-8 text-center">
               <span className="w-6 h-6 border-2 border-blood-600 border-t-transparent rounded-full animate-spin inline-block"></span>
               <p className="text-xs text-ink-500 mt-2 font-semibold">{isHi ? 'अनुरोध सिंक हो रहे हैं...' : 'Syncing Requests...'}</p>
             </div>
           ) : requests.length === 0 ? (
             <div className="bg-white/80 backdrop-blur rounded-2xl border border-ink-200 p-8 text-center">
-              <FileText className="w-10 h-10 mx-auto text-ink-300 mb-2" />
+              <Droplet className="w-10 h-10 mx-auto text-ink-300 mb-2" />
               <p className="text-sm text-ink-800 font-bold">{t.requesterDashboard.noRequests}</p>
               <p className="text-xs text-ink-500 mt-1 leading-relaxed">
                 {t.requesterDashboard.noRequestsSub}

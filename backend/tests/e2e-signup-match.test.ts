@@ -21,9 +21,8 @@ describe('E2E: Donor and Requester Signup & Match', () => {
   const REQ_PHONE = `91999${randomSuffix2}`;
 
   before(async () => {
-    child = spawn('npx', ['tsx', 'server.ts'], {
+    child = spawn(process.execPath, ['--import', 'tsx', 'backend/server.ts'], {
       stdio: 'inherit',
-      shell: true,
       env: {
         ...process.env,
         PORT,

@@ -207,3 +207,70 @@ export function buildWelcomeEmailHTML(params: { name: string; type: 'donor' | 'r
   const text = `Welcome to FindMyDonor™, ${params.name}!\n\n${params.type === 'donor' ? donorBody.replace(/<[^>]*>?/gm, '') : requesterBody}\n\nGo to Dashboard: https://findmydonor.online\n\nSent by raktdaan.contact@gmail.com`;
   return { subject, html, text };
 }
+
+/** Empathy Welcome email — sent to requesters immediately after request creation */
+export function buildRequesterEmpathyEmailHTML(params: {
+  requesterName: string;
+  bloodType: string;
+  units: number;
+  hospitalName: string;
+  trackingCode: string;
+}): { subject: string; html: string; text: string } {
+  const subject = `❤️ We're looking out for you — Request ${params.trackingCode}`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background:#f8f8f8;">
+  <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#dc2626,#991b1b);padding:28px 32px;text-align:center;">
+      <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;letter-spacing:-0.5px;">🩸 FindMyDonor™</h1>
+      <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:14px;">We're with you. Always.</p>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:32px;">
+      <p style="font-size:16px;color:#111;">Dear <strong>${params.requesterName.split(' ')[0]}</strong>,</p>
+      <p style="font-size:15px;color:#444;line-height:1.7;">
+        We have received your request for <strong>${params.units} unit${params.units > 1 ? 's' : ''} of ${params.bloodType}</strong> blood at <strong>${params.hospitalName}</strong>.
+      </p>
+      <p style="font-size:15px;color:#444;line-height:1.7;">
+        Our system is <strong>actively searching</strong> for compatible, verified donors near the hospital right now. You will receive another email the moment a matching donor confirms their availability.
+      </p>
+
+      <!-- Status Card -->
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:20px;margin:24px 0;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:6px 0;font-size:14px;color:#666;">Tracking Code</td><td style="padding:6px 0;font-size:14px;font-weight:700;color:#111;text-align:right;">${params.trackingCode}</td></tr>
+          <tr><td style="padding:6px 0;font-size:14px;color:#666;">Blood Type</td><td style="padding:6px 0;font-size:14px;font-weight:700;color:#dc2626;text-align:right;">${params.bloodType}</td></tr>
+          <tr><td style="padding:6px 0;font-size:14px;color:#666;">Units Needed</td><td style="padding:6px 0;font-size:14px;font-weight:700;color:#111;text-align:right;">${params.units}</td></tr>
+          <tr><td style="padding:6px 0;font-size:14px;color:#666;">Hospital</td><td style="padding:6px 0;font-size:14px;font-weight:700;color:#111;text-align:right;">${params.hospitalName}</td></tr>
+        </table>
+      </div>
+
+      <!-- CTA Button -->
+      <div style="text-align:center;margin:28px 0;">
+        <a href="https://findmydonor.online/tracking?code=${params.trackingCode}" style="display:inline-block;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;text-decoration:none;padding:14px 32px;border-radius:50px;font-weight:700;font-size:15px;">
+          📍 Track Your Request Live
+        </a>
+      </div>
+
+      <p style="font-size:14px;color:#888;line-height:1.6;text-align:center;">
+        Stay strong. We're working to connect you with a donor as quickly as possible. ❤️
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#111;color:rgba(255,255,255,0.5);text-align:center;padding:16px;font-size:12px;">
+      FindMyDonor™ — Free Community Blood Donation Network<br/>
+      Sent by raktdaan.contact@gmail.com
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = `Dear ${params.requesterName},\n\nWe have received your request for ${params.units} unit(s) of ${params.bloodType} blood at ${params.hospitalName}.\n\nOur system is actively searching for compatible donors. You will be notified the moment a donor confirms.\n\nTracking Code: ${params.trackingCode}\nTrack Live: https://findmydonor.online/tracking?code=${params.trackingCode}\n\nStay strong. We're with you. ❤️\n\nFindMyDonor™ — Free Community Blood Donation Network`;
+  return { subject, html, text };
+}
+

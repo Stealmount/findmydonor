@@ -1,7 +1,20 @@
 # FindMyDonor — Live Database Current State
 > Source of truth as of 2026-07-28. Generated from live Supabase introspection, not SQL files.
+> Last updated: 2026-08-02 (requesters.account_status migration verified applied on live DB via PostgREST probe).
 
 ---
+
+## Pending Migrations (written, not yet applied)
+
+| File | Status | What it adds |
+|------|--------|-------------|
+| `supabase_institutions_migration.sql` | ✅ **APPLIED 2026-08-01** | `institutions` table, `institution_profile_links` join table, RLS policies, indexes, `updated_at` trigger |
+| `supabase_requesters_account_status_migration.sql` | ✅ **APPLIED 2026-08-02** | `requesters.account_status` column (TEXT DEFAULT 'active') + `idx_requesters_account_status` index — fixes Gap 1 (admin ban/delete/restore + `isAccountDeleted()` read `requesters.account_status` which only existed in local JSON). Verified live via PostgREST `select=account_status` → 200. |
+
+> **Action required before Phase 2:** Apply `supabase_institutions_migration.sql` in Supabase Dashboard → SQL Editor, then update this table to `✅ APPLIED YYYY-MM-DD`.
+
+---
+
 
 ## Tables (Public Schema)
 
@@ -162,13 +175,53 @@ Audit trail for blood request lifecycle.
 
 ---
 
+### Institutional Tables (Pending — `supabase_institutions_migration.sql` NOT YET APPLIED)
+
+#### `institutions` ⚠️ pending migration
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| id | UUID | NO | uuid_generate_v4() | PK |
+| type | TEXT | NO | | CHECK: 'hospital'\|'ngo'\|'blood_bank'\|'other' |
+| org_name | TEXT | NO | | |
+| registration_number | TEXT | NO | | Clinical reg / Darpan ID / License |
+| contact_person | TEXT | NO | | |
+| phone | TEXT | NO | | UNIQUE, format `91XXXXXXXXXX` |
+| email | TEXT | NO | | |
+| address | TEXT | YES | | Optional street address |
+| city | TEXT | NO | | |
+| pincode | TEXT | NO | | CHECK `^[0-9]{6}$` |
+| verification_status | TEXT | NO | 'pending' | CHECK: 'pending'\|'verified'\|'rejected' |
+| reviewed_by | TEXT | YES | | Admin username |
+| reviewed_at | TIMESTAMPTZ | YES | | |
+| rejection_reason | TEXT | YES | | Set on rejection |
+| created_at | TIMESTAMPTZ | NO | now() | |
+| updated_at | TIMESTAMPTZ | NO | now() | |
+
+**Key constraint:** `institutions_phone_unique` — one institution per contact phone number.
+
+**Design note:** `registration_number` is NOT unique-constrained — same hospital chain may have multiple branches with shared parent registration. Admin reviews manually.
+
+#### `institution_profile_links` ⚠️ pending migration
+
+| Column | Type | Nullable | Default | Notes |
+|--------|------|----------|---------|-------|
+| profile_id | UUID | NO | | PK, FK → profiles(id) ON DELETE CASCADE |
+| institution_id | UUID | NO | | FK → institutions(id) ON DELETE CASCADE |
+| role | TEXT | NO | 'admin' | CHECK: 'admin'\|'staff' |
+| created_at | TIMESTAMPTZ | NO | now() | |
+
+**Auth pattern:** Mirrors `donor_profiles` — same `auth.users → auth_profile_links → profiles → institution_profile_links → institutions` chain. No parallel auth system.
+
+---
+
 ### Legacy Tables (Dead — kept for FK compatibility)
 
 #### `users`
 Original donor table. Still referenced by `matches.donor_id` FK. Server syncs new donors here.
 
 #### `requesters`
-Original requester table. Still referenced by `blood_requests.requester_id` FK. **Dead — no code writes here for new signups.**
+Original requester table. Still referenced by `blood_requests.requester_id` FK. **Dead — no code writes here for new signups.** Has `account_status TEXT DEFAULT 'active'` (added by `supabase_requesters_account_status_migration.sql`, applied 2026-08-02) — read by admin ban/delete/restore + `isAccountDeleted()`.
 
 #### `donation_log`, `forum_posts`, `forum_comments`
 Legacy tables, no active writes.
@@ -189,6 +242,8 @@ Legacy tables, no active writes.
 | requesters | Returns 0 | Not tested | |
 | request_events | Returns 0 | Not tested | |
 | request_reports | Returns 0 | Not tested | |
+| institutions | ⚠️ NOT APPLIED | ⚠️ NOT APPLIED | verified rows public-readable once applied |
+| institution_profile_links | ⚠️ NOT APPLIED | ⚠️ NOT APPLIED | owner-read only once applied |
 
 ---
 
@@ -206,3 +261,4 @@ Legacy tables, no active writes.
 - `set_updated_at_requesters` on `requesters`
 - `set_updated_at_requests` on `blood_requests`
 - `set_updated_at_forum` on `forum_posts`
+- `set_updated_at_institutions` on `institutions` (⚠️ pending migration)

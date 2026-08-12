@@ -4,13 +4,69 @@
 
 export type BloodType = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-';
 
+export type BloodComponent = 'whole_blood' | 'prbc' | 'ffp' | 'platelets_sdp';
+
+export interface BloodBankStock {
+  blood_type: BloodType;
+  component: BloodComponent;
+  available_units: number;
+  last_updated_at: string;
+}
+
+export interface BloodBank {
+  id: string;
+  eraktkosh_id: string;
+  eraktkosh_url?: string;
+  name: string;
+  category: 'government' | 'private' | 'charitable' | 'red_cross';
+  address: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+  latitude: number;
+  longitude: number;
+  phone: string;
+  email?: string;
+  has_component_facility: boolean;
+  operating_hours: string;
+  stock: BloodBankStock[];
+  last_synced_at: string;
+}
+
+export interface DonationCamp {
+  id: string;
+  eraktkosh_camp_id?: string;
+  title: string;
+  organizer_name: string;
+  venue_address: string;
+  area: string;
+  city: string;
+  district: string;
+  state: string;
+  pincode: string;
+  camp_date: string;
+  start_time: string;
+  end_time: string;
+  contact_number?: string;
+  contact_phone?: string;
+  contact_email?: string | null;
+  latitude: number;
+  longitude: number;
+  target_units?: number;
+  status?: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  eraktkosh_url?: string;
+  last_synced_at?: string;
+}
+
 export type DonationFrequency = 'first_time' | 'occasional' | 'regular';
 
 export type AvailabilityStatus = 'available' | 'available_with_notice' | 'unavailable';
 
 export type NumberSharingPref = 'on_approval' | 'never';
 
-export type AccountStatus = 'active' | 'cooldown' | 'inactive' | 'banned';
+export type AccountStatus = 'active' | 'cooldown' | 'inactive' | 'banned' | 'deleted';
 
 export type UrgencyLevel = 'critical' | 'urgent' | 'planned';
 
@@ -39,6 +95,7 @@ export interface User {
   pincode: string; // 6-digit numeric
   area: string;
   city: string;
+  district?: string;
   state?: string; // For Tier 4 state-wide matching
   availability_status: AvailabilityStatus;
   donor_locked_until?: string | null; // ISO string — reservation lock held by a pending match
@@ -50,6 +107,7 @@ export interface User {
   age?: number; // 18 - 65 yrs per NBTC / RaktDaan clinical criteria
   gender?: 'Male' | 'Female' | 'Other';
   weight_kg?: number; // min 45kg per Indian clinical blood donation protocol
+  address_text?: string; // free-form address from donor registration
   hospital_affiliation?: string; // e.g. AIIMS, Apollo, Fortis, Max, RaktDaan Network
   medical_clearance?: boolean; // self-declared clinical eligibility
   profile_complete?: boolean; // migration compatibility: required once donor_profiles is active
@@ -159,6 +217,8 @@ export interface BloodRequest {
   component_needed?: 'Whole Blood (WB)' | 'Packed Red Blood Cells (PRBC)' | 'Single Donor Platelets (SDP)' | 'Random Donor Platelets (RDP)' | 'Fresh Frozen Plasma (FFP)' | 'Cryoprecipitate';
   hospital_uhid?: string; // UHID / IPD / Ward No
   attending_doctor?: string; // Dr. Name
+  units_confirmed?: number; // How many donors said YES (0 to units_required)
+  requester_email_verified?: boolean; // Email verified (OTP or Gmail fast-track)
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -345,6 +405,7 @@ export interface Requester {
   email: string;
   phone: string;
   whatsapp_number?: string;
+  account_status?: AccountStatus; // 'deleted' = soft-deleted by admin; omitted = active (legacy docs)
   created_at: string;
   updated_at: string;
 }
@@ -365,6 +426,12 @@ export interface Match {
   created_at: string; // ISO String
   distance_km?: number; // Distance in kilometers from hospital
   is_exact_match?: boolean; // true = donor blood type exactly matches request; false = compatible but not exact
+  unit_slot?: number | null; // Which unit (1-based) this donor fills. Assigned when donor says YES.
+  // Capability token — opaque random value minted per match. Exposed to donors in the
+  // public tracking payload INSTEAD of the raw match id (which is a horizontal-privilege
+  // escalation vector: any requester could approve another requester's match by guessing
+  // the uuid). Donor must present it to /respond-public to mutate this match.
+  public_token?: string | null;
 }
 
 export interface NotificationLog {
@@ -411,7 +478,7 @@ export function isBloodCompatible(donorType: BloodType, recipientType: BloodType
   return BLOOD_COMPATIBILITY_MATRIX[recipientType].includes(donorType);
 }
 
-import { DELHI_PINCODES } from './data/pincodes';
+import { DELHI_PINCODES } from '../../src/data/pincodes';
 
 /**
  * NCR district → display city mapping

@@ -2,6 +2,9 @@
  * WAHA — WhatsApp HTTP API Integration
  * Self-hosted WhatsApp messaging via WAHA Docker container.
  * Docs: https://waha.devlike.pro/docs/
+ *
+ * PROVIDER ADAPTER — call ONLY via the Messaging Service queue
+ * (src/lib/messaging.ts). No route/caller imports these functions directly.
  */
 
 import type { BloodRequest, User } from '../types';
@@ -140,11 +143,19 @@ function getPublicAppUrl(): string {
 /**
  * Build interactive donor SOS message payload with native buttons and witty human warmth.
  */
-export function buildDonorSosInteractivePayload(request: BloodRequest, donor: User, matchId: string) {
+export function buildDonorSosInteractivePayload(
+  request: BloodRequest,
+  donor: User,
+  matchId: string,
+  matchToken?: string | null
+) {
   const firstName = donor.full_name.split(' ')[0];
   const distance = getDistanceBetweenPincodes(donor.pincode, request.hospital_pincode);
   const appUrl = getPublicAppUrl();
-  const link = `${appUrl}/track/${request.tracking_code}?role=donor&matchId=${matchId}`;
+  // Use the opaque capability token in the public link (S-1 fix).
+  // Fall back to matchId only for legacy matches without a token (should not occur post-deploy).
+  const tokenParam = matchToken ? `matchToken=${matchToken}` : `matchId=${matchId}`;
+  const link = `${appUrl}/track/${request.tracking_code}?role=donor&${tokenParam}`;
   const mapsQuery = encodeURIComponent(`${request.hospital_name}, ${request.hospital_area || ''}, ${request.hospital_city || ''}, ${request.hospital_pincode || ''}`);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
 
@@ -177,8 +188,13 @@ Someone's family is counting on a hero today. Can you donate?
 /**
  * Legacy builder for backward compatibility.
  */
-export function buildDonorSosMessage(request: BloodRequest, donor: User, matchId: string): string {
-  const payload = buildDonorSosInteractivePayload(request, donor, matchId);
+export function buildDonorSosMessage(
+  request: BloodRequest,
+  donor: User,
+  matchId: string,
+  matchToken?: string | null
+): string {
+  const payload = buildDonorSosInteractivePayload(request, donor, matchId, matchToken);
   return `${payload.title}\n\n${payload.text}\n\n👉 Reply *YES* to confirm or *NO* to decline.`;
 }
 

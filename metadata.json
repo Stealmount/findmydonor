@@ -1,6 +1,0 @@
-{
-  "name": "Blood Connect",
-  "description": "A community-driven blood donation platform connecting voluntary donors with patients in need through pincode-matched proximity and blood type compatibility.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

@@ -25,7 +25,9 @@
   --color-ink-600: #3d3534;
   --color-ink-700: #2a2423;
   --color-ink-800: #1a1514;
+  --color-ink-850: #161011;
   --color-ink-900: #0d0a0a;
+  --color-ink-950: #070505;
 
   --color-blood-50: #fff1f2;
   --color-blood-100: #ffe1e3;
@@ -418,6 +420,24 @@ body {
 [data-lang="HI"] input {
   font-family: "Noto Sans Devanagari", "Hind", "Inter", sans-serif;
   letter-spacing: normal !important;
+}
+
+/* ── Professional Institution CRM utility styles ────────────────────────────── */
+.shadow-premium-lg {
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+.grid-pattern-dark {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.animate-fade-in {
+  animation: institutional-fadein 0.35s ease-out both;
+}
+@keyframes institutional-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 

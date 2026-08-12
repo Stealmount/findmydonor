@@ -13,7 +13,7 @@ describe('Hospital dashboard endpoint (/api/hospital/dashboard)', () => {
     try {
       const check = await fetch(`${BASE}/api/health`).catch(() => null);
       if (!check || !check.ok) {
-        child = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], { stdio: 'pipe', env: { ...process.env, PORT, NODE_ENV: 'test', VITE_SUPABASE_URL: 'https://stub.supabase.co' } });
+        child = spawn(process.execPath, ['--import', 'tsx', 'backend/server.ts'], { stdio: 'pipe', env: { ...process.env, PORT, NODE_ENV: 'test', VITE_SUPABASE_URL: 'https://stub.supabase.co' } });
         for (let i = 0; i < 30; i++) {
           await new Promise(r => setTimeout(r, 500));
           const res = await fetch(`${BASE}/api/health`).catch(() => null);

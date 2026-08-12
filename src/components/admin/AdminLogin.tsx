@@ -15,10 +15,20 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
   const [accessKey, setAccessKey] = useState('');
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validKeys = ['FMD-ADMIN-2026'];
-    if (validKeys.includes(accessKey.trim())) {
+    const secret = accessKey.trim();
+    if (!secret) { setError(isHi ? 'कुंजी दर्ज करें।' : 'Enter the access key.'); return; }
+    try {
+      const res = await fetch('/api/admin/verify-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret }),
+      });
+      if (!res.ok) throw new Error('Invalid');
+      // Phase 7.2: server returns a short-lived JWT; the raw key never reaches the browser.
+      const data = await res.json();
+      sessionStorage.setItem('fmd_admin_secret', data.token);
       const admin: AdminUser = {
         id: 'admin_1',
         username: 'SuperAdmin',
@@ -26,7 +36,7 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
         created_at: new Date().toISOString()
       };
       onLogin(admin);
-    } else {
+    } catch {
       setError(isHi ? 'अमान्य कुंजी। सुरक्षा उल्लंघन दर्ज किया गया।' : 'Invalid Access Key. Security breach logged.');
     }
   };

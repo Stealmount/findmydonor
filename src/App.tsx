@@ -1,37 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import RequestForm from './components/RequestForm';
 import RequestTracking from './components/RequestTracking';
 import DonorDashboard from './components/DonorDashboard';
 import RequesterPortal from './components/RequesterPortal';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthHub } from './components/AuthHub';
+import { Rev3AuthScreen } from './components/rev3/Rev3AuthScreen';
+import { Rev3OnboardingWizard } from './components/rev3/Rev3OnboardingWizard';
 import NotificationSimulator from './components/NotificationSimulator';
 import { RaktdaanHome } from './components/home/RaktdaanHome';
 import { Navbar } from './components/home/Navbar';
 import { MobileBottomNav } from './components/home/MobileBottomNav';
-import { supabase } from './lib/supabase';
-import { authenticatedApi } from './lib/api';
 import { HospitalRegistration } from './components/hospital/HospitalRegistration';
 import { HospitalDashboard } from './components/hospital/HospitalDashboard';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { BloodBankDirectory } from './components/BloodBankDirectory';
-import { User as DonorUser, Requester, Profile, HospitalUser, Institution, AdminUser, AuthState } from './types';
-
-// Explicit mapper: Profile (from /api/auth/me) → Requester (frontend state).
-// Any future Requester field not present on Profile will be a compile-time error here.
-function profileToRequester(profile: Profile): Requester {
-  return {
-    id: profile.id,
-    full_name: profile.full_name,
-    email: profile.email ?? '',
-    phone: profile.phone,
-    whatsapp_number: profile.whatsapp_phone,
-    created_at: profile.consent_accepted_at ?? profile.created_at,
-    updated_at: profile.updated_at,
-  };
-}
 import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { TermsOfService } from './components/TermsOfService';
 import { FAQPage } from './components/FAQPage';
@@ -40,19 +25,41 @@ import { BloodCompatibilityPage } from './components/BloodCompatibilityPage';
 import { GuidesPage } from './components/GuidesPage';
 import { SupportPage } from './components/SupportPage';
 import { LanguageProvider } from './lib/LanguageContext';
+import { useAuth, institutionToHospitalUser } from './lib/AuthContext';
+import { fetchMe, toLegacy } from './lib/rev3Auth';
 
-type ActiveView = 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'requester-register' | 'auth-signin' | 'auth-signup' | 'admin' | 'admin-login' | 'admin-dashboard' | 'hospital-register' | 'hospital-dashboard' | 'blood-banks' | 'privacy' | 'terms' | 'faq' | 'donors' | 'blood-compatibility' | 'guides' | 'support';
-
-const ACTIVE_VIEWS: readonly ActiveView[] = ['home', 'request', 'tracking', 'donor-register', 'donor-dashboard', 'requester-portal', 'requester-register', 'auth-signin', 'auth-signup', 'admin', 'admin-login', 'admin-dashboard', 'hospital-register', 'hospital-dashboard', 'blood-banks', 'privacy', 'terms', 'faq', 'donors', 'blood-compatibility', 'guides', 'support'];
-
-function isActiveView(value: string): value is ActiveView {
-  return ACTIVE_VIEWS.includes(value as ActiveView);
-}
+// View → path mapping. Components still call onNavigate(view) — nav() bridges it
+// to react-router navigate(). Added as Task 4.1; kept here for reference.
+const VIEW_PATHS: Record<string, string> = {
+  'home': '/',
+  'request': '/request',
+  'tracking': '/track',
+  'donor-register': '/auth/donor-register',
+  'requester-register': '/auth/requester-register',
+  'auth-signin': '/auth/signin',
+  'auth-signup': '/auth/signup',
+  'hospital-register': '/hospital/register',
+  'hospital-dashboard': '/hospital/dashboard',
+  'admin-login': '/admin/login',
+  'admin-dashboard': '/admin/dashboard',
+  'admin': '/admin/login',
+  'blood-banks': '/blood-banks',
+  'privacy': '/privacy',
+  'terms': '/terms',
+  'faq': '/faq',
+  'donors': '/donors',
+  'blood-compatibility': '/blood-compatibility',
+  'guides': '/guides',
+  'support': '/support',
+  'donor-dashboard': '/donor-dashboard',
+  'requester-portal': '/requester-portal',
+  'landing': '/',
+};
 
 export default function App() {
   return (
     <LanguageProvider>
-      <AppContent />
+      <AppRoutes />
     </LanguageProvider>
   );
 }
@@ -65,388 +72,415 @@ function LoadingScreen() {
   );
 }
 
-function AppContent() {
-  const [activeView, setActiveView] = useState<ActiveView>('home');
-  const [trackingCode, setTrackingCode] = useState('');
-  const [loggedInUser, setLoggedInUser] = useState<DonorUser | null>(null);
-  const [loggedInRequester, setLoggedInRequester] = useState<Requester | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [loggedInHospital, setLoggedInHospital] = useState<HospitalUser | null>(null);
-  const [loggedInAdmin, setLoggedInAdmin] = useState<AdminUser | null>(null);
-  // Canonical institution row from /api/auth/me (never mutated). loggedInHospital is the
-  // derived view-model used by HospitalDashboard; status flows through both.
-  const [loggedInInstitution, setLoggedInInstitution] = useState<Institution | null>(null);
-  const [prefilledGoogleUser, setPrefilledGoogleUser] = useState<{ uid: string; email: string; full_name: string } | null>(null);
-  const [trackingRole, setTrackingRole] = useState<'donor' | 'requester'>('requester');
-  // S-1: use opaque capability token from ?matchToken= query param.
-  // Legacy ?matchId= is kept as a fallback for old WhatsApp links in the wild.
-  const [trackingMatchToken, setTrackingMatchToken] = useState<string | undefined>();
-  const lastResolvedUserIdRef = React.useRef<string | null>(null);
+// ── Routes ────────────────────────────────────────────────────────────────────
 
-  function navigateTo(view: ActiveView, pushHistory = true, customCode?: string) {
-    const code = customCode || trackingCode;
-    const targetUrl = (view === 'home' || (view as string) === 'landing')
-      ? '/'
-      : view === 'tracking' && code
-      ? `/track/${code}`
-      : `/?view=${view}`;
+function AppRoutes() {
+  const navigate = useNavigate();
+  const auth = useAuth();
 
-    if (pushHistory) {
-      window.history.pushState({ view, trackingCode: code }, '', targetUrl);
+  // Legacy ?view=X / ?code=CODE URL redirect (WhatsApp links, old bookmarks).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    const codeParam = params.get('code');
+    if (viewParam && VIEW_PATHS[viewParam]) {
+      const target = viewParam === 'tracking' && codeParam
+        ? `/track/${encodeURIComponent(codeParam)}`
+        : VIEW_PATHS[viewParam];
+      navigate(target, { replace: true });
     }
-    setActiveView(view);
+  }, [navigate]);
+
+  // Keep the onNavigate prop pattern — just call navigate() internally.
+  const nav = (view: string, _pushHistory?: boolean, code?: string) => {
+    const target = VIEW_PATHS[view] ?? '/';
+    if (view === 'tracking' && code) {
+      navigate(`/track/${encodeURIComponent(code)}`);
+    } else {
+      navigate(target);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  };
 
-  // Institution row → HospitalUser view-model (shared by /api/auth/me handling
-  // and the AuthHub institution sign-in callback).
-  function institutionToHospitalUser(inst: Institution): HospitalUser {
-    return {
-      id: inst.id,
-      institution_type: inst.type,
-      hospital_name: inst.org_name,
-      registration_number: inst.registration_number,
-      admin_name: inst.contact_person,
-      email: inst.email,
-      phone: inst.phone,
-      pincode: inst.pincode,
-      city: inst.city,
-      status: inst.verification_status,
-      created_at: inst.created_at,
-      updated_at: inst.updated_at,
-    };
-  }
+  const { loggedInUser, loggedInRequester, loggedInHospital, loggedInAdmin, sessionLoading } = auth;
 
-  async function handleAuthUser(authUser?: SupabaseAuthUser, forceRefresh = false) {
-    if (authUser && (forceRefresh || authUser.id !== lastResolvedUserIdRef.current)) {
-      try {
-        lastResolvedUserIdRef.current = authUser.id;
-        const authState = await authenticatedApi<AuthState & { institution?: Institution | null }>('/api/auth/me', undefined, 'GET');
+  return (
+    <Routes>
+      <Route path="/" element={<HomeView nav={nav} />} />
 
-        // Institution admin detection (Option A)
-        if (authState.institution) {
-          setLoggedInInstitution(authState.institution);
-          // Build a minimal HospitalUser from the Institution row so existing
-          // HospitalDashboard props continue to work without a Phase 3 refactor.
-          setLoggedInHospital(institutionToHospitalUser(authState.institution));
-          // Navigate for ALL statuses — HospitalDashboard renders its own pending/rejected
-          // holding screens (L87-88); 'verified' shows the live dashboard.
-          navigateTo('hospital-dashboard');
-          return; // don't also set as donor/requester
-        }
+      <Route path="/request" element={
+        <AppShell nav={nav} activeView="request">
+          <ErrorBoundary fallbackMessage="The request form hit an unexpected error. Please try again.">
+            <RequestForm
+              onSuccess={(code) => nav('tracking', true, code)}
+              loggedInRequester={loggedInRequester}
+              loggedInDonor={loggedInUser}
+              onLoginSuccess={(requester) => auth.setLoggedInRequester(requester)}
+              onNavigate={nav}
+            />
+          </ErrorBoundary>
+        </AppShell>
+      } />
 
-        if (authState.profile) {
-          if (authState.profile.can_donate) {
-            setLoggedInUser(authState.profile as unknown as DonorUser);
-          }
-          if (authState.profile.can_request || authState.profile.can_donate) {
-            setLoggedInRequester(profileToRequester(authState.profile));
-          }
-        }
-      } catch {
-        console.warn('[Auth] /api/auth/me failed, session may have expired');
-        if (!forceRefresh) lastResolvedUserIdRef.current = null;
-      }
+      <Route path="/track/:code" element={
+        <AppShell nav={nav} activeView="tracking">
+          <TrackingView />
+        </AppShell>
+      } />
+
+      <Route path="/donor-dashboard" element={
+        <AppShell nav={nav} activeView="donor-dashboard">
+          {sessionLoading ? (
+            <LoadingScreen />
+          ) : (
+            <ErrorBoundary fallbackMessage="The donor dashboard hit an unexpected error. Your data is safe.">
+              <DonorDashboard
+                currentUser={loggedInUser}
+                onLoginSuccess={(donor) => { auth.setLoggedInUser(donor); nav('donor-dashboard'); }}
+                onLogout={auth.logout}
+                onGoogleRegisterRedirect={() => navigate('/auth/donor-register')}
+                onNavigateToRequest={() => nav('request')}
+                onNavigate={nav}
+              />
+            </ErrorBoundary>
+          )}
+        </AppShell>
+      } />
+
+      <Route path="/requester-portal" element={
+        <AppShell nav={nav} activeView="requester-portal">
+          {sessionLoading ? (
+            <LoadingScreen />
+          ) : (
+            <ErrorBoundary fallbackMessage="The requester portal hit an unexpected error. Your data is safe.">
+              <RequesterPortal
+                currentRequester={loggedInRequester}
+                onLoginSuccess={(requester) => { auth.setLoggedInRequester(requester); }}
+                onLogout={auth.logout}
+                onNavigateToRequest={() => nav('request')}
+                onNavigateToRegister={() => nav('requester-register')}
+              />
+            </ErrorBoundary>
+          )}
+        </AppShell>
+      } />
+
+      <Route path="/auth/rev3" element={<Rev3AuthRoute nav={nav} />} />
+      <Route path="/auth/rev3/onboarding" element={<Rev3OnboardingRoute nav={nav} />} />
+
+      <Route path="/auth/signin" element={<AuthRoute nav={nav} mode="signin" intent="donor" />} />
+      <Route path="/auth/signup" element={<AuthRoute nav={nav} mode="signup" intent="donor" />} />
+      <Route path="/auth/donor-register" element={<AuthRoute nav={nav} mode="signup" intent="donor" />} />
+      <Route path="/auth/requester-register" element={<AuthRoute nav={nav} mode="signup" intent="requester" />} />
+
+      <Route path="/hospital/register" element={
+        <FullScreenRoute nav={nav}>
+          <HospitalRegistration
+            onRegister={(hosp) => { auth.setLoggedInHospital(hosp); nav('hospital-dashboard'); }}
+            onBack={() => nav('home')}
+          />
+        </FullScreenRoute>
+      } />
+
+      <Route path="/hospital/dashboard" element={
+        loggedInHospital ? (
+          <FullScreenRoute nav={nav}>
+            <ErrorBoundary fallbackMessage="The hospital dashboard hit an unexpected error. Your data is safe.">
+              <HospitalDashboard
+                hospital={loggedInHospital}
+                onLogout={() => { auth.setLoggedInHospital(null); nav('home'); }}
+              />
+            </ErrorBoundary>
+          </FullScreenRoute>
+        ) : (
+          <Navigate to="/hospital/register" replace />
+        )
+      } />
+
+      <Route path="/admin/login" element={
+        <FullScreenRoute nav={nav}>
+          <AdminLogin
+            onLogin={(admin) => { auth.setLoggedInAdmin(admin); nav('admin-dashboard'); }}
+            onBack={() => nav('home')}
+          />
+        </FullScreenRoute>
+      } />
+
+      <Route path="/admin/dashboard" element={
+        loggedInAdmin ? (
+          <FullScreenRoute nav={nav}>
+            <ErrorBoundary fallbackMessage="The admin dashboard hit an unexpected error. Your data is safe.">
+              <AdminDashboard
+                admin={loggedInAdmin}
+                onLogout={() => { auth.setLoggedInAdmin(null); nav('home'); }}
+              />
+            </ErrorBoundary>
+          </FullScreenRoute>
+        ) : (
+          <Navigate to="/admin/login" replace />
+        )
+      } />
+
+      <Route path="/blood-banks" element={
+        <AppShell nav={nav} activeView="blood-banks">
+          <BloodBankDirectory onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/privacy" element={
+        <AppShell nav={nav} activeView="privacy">
+          <PrivacyPolicy onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/terms" element={
+        <AppShell nav={nav} activeView="terms">
+          <TermsOfService onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/faq" element={
+        <AppShell nav={nav} activeView="faq">
+          <FAQPage onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/donors" element={
+        <AppShell nav={nav} activeView="donors">
+          <CityDonorDirectory onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/blood-compatibility" element={
+        <AppShell nav={nav} activeView="blood-compatibility">
+          <BloodCompatibilityPage onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/guides" element={
+        <AppShell nav={nav} activeView="guides">
+          <GuidesPage onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="/support" element={
+        <AppShell nav={nav} activeView="support">
+          <SupportPage onNavigate={nav} />
+        </AppShell>
+      } />
+
+      <Route path="*" element={<NotFoundRedirect />} />
+    </Routes>
+  );
+}
+
+// Legacy ?view= / unknown paths → home (replace so back button isn't polluted).
+function NotFoundRedirect() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    if (viewParam && VIEW_PATHS[viewParam]) {
+      const codeParam = params.get('code');
+      const target = viewParam === 'tracking' && codeParam
+        ? `/track/${encodeURIComponent(codeParam)}`
+        : VIEW_PATHS[viewParam];
+      navigate(target, { replace: true });
+    } else {
+      navigate('/', { replace: true });
     }
-  }
+  }, [navigate]);
+  return <LoadingScreen />;
+}
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) handleAuthUser(session.user);
-      setSessionLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) handleAuthUser(session.user);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+// Tracking params (code from path, role/matchToken from query) → RequestTracking.
+function TrackingView() {
+  const { code } = useParams<{ code: string }>();
+  const [params] = useSearchParams();
+  const role = (params.get('role') as 'donor' | 'requester') || 'requester';
+  const matchToken = params.get('matchToken') || params.get('matchId') || undefined;
 
-  useEffect(() => {
-    const syncFromUrl = (replaceState = false) => {
-      const params = new URLSearchParams(window.location.search);
-      const pathMatch = window.location.pathname.match(/^\/track\/([A-Z0-9-]+)/i);
-      let initialView: ActiveView = 'home';
-      let code = '';
+  return (
+    <ErrorBoundary fallbackMessage="Request tracking hit an unexpected error. Please refresh.">
+      <RequestTracking initialCode={code} role={role} matchToken={matchToken} />
+    </ErrorBoundary>
+  );
+}
 
-      if (pathMatch) {
-        code = pathMatch[1];
-        setTrackingCode(code);
-        setTrackingRole((params.get('role') as 'donor' | 'requester') || 'requester');
-        // Prefer capability token; fall back to raw matchId for old links.
-        setTrackingMatchToken(params.get('matchToken') || params.get('matchId') || undefined);
-        initialView = 'tracking';
-      } else {
-        const queryCode = params.get('code');
-        const viewParam = params.get('view');
-        if (queryCode) {
-          code = queryCode;
-          setTrackingCode(code);
-          initialView = 'tracking';
-        } else if (viewParam && isActiveView(viewParam)) {
-          initialView = viewParam as ActiveView;
-        }
-      }
+// AuthHub route — mode/intent derived from the URL path.
+function AuthRoute({ nav, mode, intent }: {
+  nav: (view: string, push?: boolean, code?: string) => void;
+  mode: 'signin' | 'signup';
+  intent: 'donor' | 'requester';
+}) {
+  const navigate = useNavigate();
+  const auth = useAuth();
 
-      setActiveView(initialView);
-      const targetUrl = (initialView === 'home' || (initialView as string) === 'landing')
-        ? '/'
-        : initialView === 'tracking' && code
-        ? `/track/${code}`
-        : `/?view=${initialView}`;
+  return (
+    <AppShell nav={nav} activeView={mode === 'signin' ? 'auth-signin' : intent === 'requester' ? 'requester-register' : 'auth-signup'}>
+      <AuthHub
+        initialMode={mode}
+        initialIntent={intent}
+        onLoginSuccessDonor={(donor) => {
+          auth.setLoggedInUser(donor);
+          auth.setLoggedInRequester(null);
+          navigate('/donor-dashboard');
+        }}
+        onLoginSuccessRequester={(requester) => {
+          auth.setLoggedInRequester(requester);
+          auth.setLoggedInUser(null);
+          navigate('/requester-portal');
+        }}
+        onLoginSuccessInstitution={(inst) => {
+          auth.setLoggedInInstitution(inst);
+          auth.setLoggedInHospital(institutionToHospitalUser(inst));
+          navigate('/hospital/dashboard');
+        }}
+        onSelectDonorSignUp={() => navigate('/auth/donor-register')}
+        onSelectRequesterSignUp={() => navigate('/auth/requester-register')}
+      />
+    </AppShell>
+  );
+}
 
-      if (replaceState) {
-        window.history.replaceState({ view: initialView, trackingCode: code }, '', targetUrl);
-      }
-    };
+// Rev 3 authentication route (Phase 5). After sign-in, resolve the user's next
+// step from /me and route to onboarding, a dashboard, or the completion wizard.
+function Rev3AuthRoute({ nav }: { nav: (view: string, push?: boolean, code?: string) => void }) {
+  const navigate = useNavigate();
+  const auth = useAuth();
 
-    syncFromUrl(true);
-
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.view && isActiveView(event.state.view)) {
-        setActiveView(event.state.view as ActiveView);
-        if (event.state.trackingCode) setTrackingCode(event.state.trackingCode);
-      } else {
-        syncFromUrl(false);
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  const handleRequestSuccess = (code: string) => {
-    setTrackingCode(code);
-    navigateTo('tracking');
-  };
-
-  const handleDonorLoginSuccess = (donor: DonorUser) => {
-    setLoggedInUser(donor);
-    setPrefilledGoogleUser(null);
-    navigateTo('donor-dashboard');
-  };
-
-  const handleLogout = async () => {
+  const handleContinue = async (step: string) => {
+    let me: Awaited<ReturnType<typeof fetchMe>> | undefined;
     try {
-      lastResolvedUserIdRef.current = null;
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error("Supabase signOut failed:", error);
+      me = await fetchMe();
+    } catch { /* keep signing in */ }
+    if (!me || !me.authUser) return;
+    const legacy = toLegacy(me);
+    if (legacy.institution) {
+      auth.setLoggedInInstitution(legacy.institution);
+      auth.setLoggedInHospital(institutionToHospitalUser(legacy.institution));
+      navigate('/hospital/dashboard');
+      return;
     }
-    setLoggedInUser(null);
-    setLoggedInRequester(null);
-    setLoggedInHospital(null);
-    setLoggedInInstitution(null);
-    setLoggedInAdmin(null);
-    navigateTo('home');
+    if (legacy.donor) {
+      auth.setLoggedInUser(legacy.donor);
+      auth.setLoggedInRequester(null);
+    } else if (legacy.requester) {
+      auth.setLoggedInRequester(legacy.requester);
+      auth.setLoggedInUser(null);
+    }
+    // Onboarding pending — hand the user to the onboarding flow (Slice 2).
+    if (me.profile && !(me.profile as unknown as { onboarding_step?: string }).onboarding_step) {
+      navigate('/auth/rev3');
+      return;
+    }
+    // Route by backend-served next step.
+    switch (me.nextStep) {
+      case 'basic':
+      case 'intent':
+        navigate('/auth/rev3/onboarding');
+        break;
+      default:
+        nav(legacy.institution ? 'hospital-dashboard'
+          : legacy.donor ? 'donor-dashboard'
+          : 'requester-portal');
+    }
   };
 
-  // ── Standalone full-screen views (no Navbar) ──
-  if (activeView === 'admin-login') {
-    return (
-      <>
-        <AdminLogin 
-          onLogin={(admin) => { setLoggedInAdmin(admin); navigateTo('admin-dashboard'); }} 
-          onBack={() => setActiveView('home')} 
-        />
-        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
-      </>
-    );
-  }
+  return (
+    <AppShell nav={nav} activeView="auth-signin">
+      <Rev3AuthScreen onContinue={(step) => { void handleContinue(step); }} />
+    </AppShell>
+  );
+}
 
-  if (activeView === 'admin-dashboard' && loggedInAdmin) {
-    return (
-      <>
-        <ErrorBoundary fallbackMessage="The admin dashboard hit an unexpected error. Your data is safe.">
-          <AdminDashboard 
-            admin={loggedInAdmin} 
-            onLogout={() => { setLoggedInAdmin(null); setActiveView('home'); }} 
-          />
-        </ErrorBoundary>
-        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
-      </>
-    );
-  }
+// Rev 3 onboarding route (Slice 2). Three-step wizard: Basic Profile → Intent → Complete.
+function Rev3OnboardingRoute({ nav }: { nav: (view: string, push?: boolean, code?: string) => void }) {
+  const navigate = useNavigate();
+  const auth = useAuth();
 
-  if (activeView === 'hospital-register') {
-    return (
-      <>
-        <HospitalRegistration 
-          onRegister={(hosp) => { setLoggedInHospital(hosp); navigateTo('hospital-dashboard'); }} 
-          onBack={() => setActiveView('home')} 
-        />
-        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
-      </>
-    );
-  }
+  const handleComplete = async () => {
+    try {
+      const me = await fetchMe();
+      if (!me || !me.authUser) {
+        navigate('/auth/rev3');
+        return;
+      }
+      const legacy = toLegacy(me);
+      if (legacy.institution) {
+        auth.setLoggedInInstitution(legacy.institution);
+        auth.setLoggedInHospital(institutionToHospitalUser(legacy.institution));
+        navigate('/hospital/dashboard');
+        return;
+      }
+      if (legacy.donor) {
+        auth.setLoggedInUser(legacy.donor);
+        auth.setLoggedInRequester(null);
+      } else if (legacy.requester) {
+        auth.setLoggedInRequester(legacy.requester);
+        auth.setLoggedInUser(null);
+      }
 
-  if (activeView === 'hospital-dashboard' && loggedInHospital) {
-    return (
-      <>
-        <ErrorBoundary fallbackMessage="The hospital dashboard hit an unexpected error. Your data is safe.">
-          <HospitalDashboard 
-            hospital={loggedInHospital} 
-            onLogout={() => { setLoggedInHospital(null); setActiveView('home'); }} 
-          />
-        </ErrorBoundary>
-        <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
-      </>
-    );
-  }
+      nav(legacy.institution ? 'hospital-dashboard'
+        : legacy.donor ? 'donor-dashboard'
+        : 'requester-portal');
+    } catch {
+      navigate('/auth/rev3');
+    }
+  };
 
-  // ── Home (special: no Navbar, own layout) ──
-  if (activeView === 'home') {
-    return (
-      <div className="relative pb-16 md:pb-0">
-        <RaktdaanHome
-          onNavigate={(view) => navigateTo(view)}
-          loggedInUser={loggedInUser}
-          loggedInRequester={loggedInRequester}
-        />
-        <MobileBottomNav
-          activeView={activeView}
-          onNavigate={(view) => navigateTo(view)}
-          loggedInUser={loggedInUser}
-          loggedInRequester={loggedInRequester}
-        />
-        <NotificationSimulator />
-      </div>
-    );
-  }
+  return (
+    <AppShell nav={nav} activeView="auth-signup">
+      <Rev3OnboardingWizard onComplete={() => { void handleComplete(); }} />
+    </AppShell>
+  );
+}
 
-  // ── All other views share Navbar ──
+// Full-screen views (no Navbar/AppShell) — admin/hospital standalone pages.
+function FullScreenRoute({ children, nav }: { children: React.ReactNode; nav: (view: string, push?: boolean, code?: string) => void }) {
+  return (
+    <>
+      {children}
+      <NotificationSimulator onNavigate={(view) => nav(view as string)} />
+    </>
+  );
+}
+
+// Shared shell for Navbar-backed views.
+// Navbar and MobileBottomNav read auth state from useAuth() directly (Task 4.2).
+function AppShell({ nav, activeView, children }: {
+  nav: (view: string, push?: boolean, code?: string) => void;
+  activeView: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="min-h-screen ambient-bg flex flex-col font-sans text-ink-900 relative">
-      <Navbar
-        onNavigate={(view) => navigateTo(view)}
-        loggedInUser={loggedInUser}
-        loggedInRequester={loggedInRequester}
-      />
+      <Navbar onNavigate={(view) => nav(view)} />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-16">
-
-        {activeView === 'request' && (
-          <ErrorBoundary fallbackMessage="The request form hit an unexpected error. Please try again.">
-            <RequestForm 
-              onSuccess={handleRequestSuccess} 
-              loggedInRequester={loggedInRequester} 
-              loggedInDonor={loggedInUser}
-              onLoginSuccess={(requester) => setLoggedInRequester(requester)}
-              onNavigate={(view) => navigateTo(view)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {activeView === 'blood-banks' && (
-          <BloodBankDirectory
-            onNavigate={(view, pushHistory, code) => navigateTo(view as ActiveView, pushHistory, code)}
-          />
-        )}
-
-        {activeView === 'privacy' && (
-          <PrivacyPolicy onNavigate={(view) => navigateTo(view as ActiveView)} />
-        )}
-
-        {activeView === 'terms' && (
-          <TermsOfService onNavigate={(view) => navigateTo(view as ActiveView)} />
-        )}
-
-        {activeView === 'faq' && (
-          <FAQPage onNavigate={(view) => navigateTo(view as ActiveView)} />
-        )}
-
-        {activeView === 'donors' && (
-          <CityDonorDirectory onNavigate={(view, pushHistory, code) => navigateTo(view as ActiveView, pushHistory, code)} />
-        )}
-
-        {activeView === 'blood-compatibility' && (
-          <BloodCompatibilityPage onNavigate={(view) => navigateTo(view)} />
-        )}
-
-        {activeView === 'guides' && (
-          <GuidesPage onNavigate={(view) => navigateTo(view)} />
-        )}
-
-        {activeView === 'support' && (
-          <SupportPage onNavigate={(view) => navigateTo(view as ActiveView)} />
-        )}
-
-        {activeView === 'tracking' && (
-          <ErrorBoundary fallbackMessage="Request tracking hit an unexpected error. Please refresh.">
-            <RequestTracking
-              initialCode={trackingCode}
-              role={trackingRole}
-              matchToken={trackingMatchToken}
-            />
-          </ErrorBoundary>
-        )}
-
-        {activeView === 'requester-portal' && (sessionLoading ? (
-          <LoadingScreen />
-        ) : (
-          <ErrorBoundary fallbackMessage="The requester portal hit an unexpected error. Your data is safe.">
-            <RequesterPortal
-              currentRequester={loggedInRequester}
-              onLoginSuccess={(requester) => { setLoggedInRequester(requester); setActiveView('requester-portal'); }}
-              onLogout={handleLogout}
-              onNavigateToRequest={() => navigateTo('request')}
-              onNavigateToRegister={() => navigateTo('requester-register')}
-            />
-          </ErrorBoundary>
-        ))}
-
-        {activeView === 'donor-dashboard' && (sessionLoading ? (
-          <LoadingScreen />
-        ) : (
-          <ErrorBoundary fallbackMessage="The donor dashboard hit an unexpected error. Your data is safe.">
-            <DonorDashboard 
-              currentUser={loggedInUser}
-              onLoginSuccess={handleDonorLoginSuccess}
-              onLogout={handleLogout}
-              onGoogleRegisterRedirect={(googleData) => {
-                setPrefilledGoogleUser(googleData);
-                navigateTo('donor-register');
-              }}
-              onNavigateToRequest={() => navigateTo('request')}
-              onNavigate={(view) => navigateTo(view as ActiveView)}
-            />
-          </ErrorBoundary>
-        ))}
-
-        {(activeView === 'auth-signin' || activeView === 'auth-signup' || activeView === 'donor-register' || activeView === 'requester-register') && (
-          <AuthHub
-            initialMode={activeView === 'auth-signin' ? 'signin' : 'signup'}
-            initialIntent={activeView === 'requester-register' ? 'requester' : 'donor'}
-            onLoginSuccessDonor={(donor) => {
-              setLoggedInUser(donor);
-              setLoggedInRequester(null);
-              navigateTo('donor-dashboard');
-            }}
-            onLoginSuccessRequester={(requester) => {
-              setLoggedInRequester(requester);
-              setLoggedInUser(null);
-              navigateTo('requester-portal');
-            }}
-            onLoginSuccessInstitution={(inst) => {
-              setLoggedInInstitution(inst);
-              setLoggedInHospital(institutionToHospitalUser(inst));
-              navigateTo('hospital-dashboard');
-            }}
-            onSelectDonorSignUp={() => navigateTo('donor-register')}
-            onSelectRequesterSignUp={() => navigateTo('requester-register')}
-          />
-        )}
-
+        {children}
       </main>
 
       <MobileBottomNav
         activeView={activeView}
-        onNavigate={(view) => navigateTo(view)}
-        loggedInUser={loggedInUser}
-        loggedInRequester={loggedInRequester}
+        onNavigate={(view) => nav(view)}
       />
 
-      <NotificationSimulator onNavigate={(view) => navigateTo(view as ActiveView)} />
+      <NotificationSimulator onNavigate={(view) => nav(view as string)} />
+    </div>
+  );
+}
+
+// Home (special: no Navbar, own layout).
+function HomeView({ nav }: { nav: (view: string, push?: boolean, code?: string) => void }) {
+  return (
+    <div className="relative pb-16 md:pb-0">
+      <RaktdaanHome onNavigate={nav} />
+      <MobileBottomNav
+        activeView="home"
+        onNavigate={nav}
+      />
+      <NotificationSimulator />
     </div>
   );
 }

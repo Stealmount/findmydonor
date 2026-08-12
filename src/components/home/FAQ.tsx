@@ -14,19 +14,39 @@ const faqs = [
   },
   {
     q: "Is FindMyDonor™ really 100% free?",
-    a: "Yes. Always. FindMyDonor™ is a non-profit community initiative. We do not charge patients, hospitals, or donors anything. We believe saving lives should never come with a price tag.",
+    a: "Yes. FindMyDonor is 100% free for everyone — donors, requesters, and hospitals. We are a community platform and will never charge for connecting people with blood donors.",
   },
   {
     q: "How does the 60-day safety cooldown work?",
-    a: "Once a donor logs a successful donation, their profile is automatically marked on safety recovery cooldown for 60 days (whole blood). During this period, they will not receive emergency SOS alerts.",
+    a: "Once a donor logs a successful donation, their profile is automatically marked on safety recovery cooldown for 60 days (whole blood). During this period, they will not receive donation alerts.",
   },
   {
-    q: "Can hospitals register and broadcast urgent needs?",
-    a: "Absolutely. Hospitals and blood banks have a dedicated Requester Portal where they can post multi-unit requests and track real-time donor responses.",
+    q: "Can hospitals register and broadcast blood needs?",
+    a: "Yes. Hospitals and blood banks have a dedicated Requester Portal where they can post multi-unit requests and track real-time donor responses.",
   },
   {
     q: "How do hospitals integrate FindMyDonor™?",
-    a: "We offer a REST API and a web console. Most hospitals and blood centers integrate in under a day. Our team handles the onboarding and runs alongside your existing blood bank workflow.",
+    a: "Hospitals can register on our platform to post blood requirements and coordinate with voluntary donors. Deeper integration features including inventory dashboards and API access are currently in development.",
+  },
+  {
+    q: "Is my phone number visible to anyone?",
+    a: "No. Your phone number stays completely private until both you and the other party confirm a match. We never share contact details without mutual consent.",
+  },
+  {
+    q: "What happens if no donor responds to my request?",
+    a: "If no nearby donor responds immediately, the system continues to search within an expanding area. You can also browse our blood bank directory to contact blood banks directly for immediate assistance.",
+  },
+  {
+    q: "How is a donor's blood group verified?",
+    a: "FindMyDonor stores the blood group information provided by donors during registration. Final medical screening, blood type confirmation, and donation eligibility are always determined by the authorised blood bank or hospital at the time of donation.",
+  },
+  {
+    q: "Can I cancel a request after posting it?",
+    a: "Yes. You can cancel an active request at any time from the Requester Portal or tracking page. Any donors who were notified will be informed of the cancellation.",
+  },
+  {
+    q: "Is FindMyDonor a hospital or blood bank?",
+    a: "No. FindMyDonor is a technology platform that connects people who need blood with voluntary donors nearby. We do not operate blood banks, manage blood inventory, or provide any medical services. All donations happen at authorised blood banks and hospitals.",
   },
 ];
 

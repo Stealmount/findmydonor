@@ -4,6 +4,8 @@ import { AlertCircle, RotateCcw } from 'lucide-react';
 interface ErrorBoundaryProps {
   children: React.ReactNode;
   fallbackMessage?: string;
+  /** Preferred UI language for the fallback. 'en' default — the boundary must never throw. */
+  lang?: 'en' | 'hi';
 }
 
 interface ErrorBoundaryState {
@@ -36,15 +38,20 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
   render() {
     if (this.state.hasError) {
-      const { fallbackMessage } = this.props;
+      const { fallbackMessage, lang = 'en' } = this.props;
+      const isHi = lang === 'hi';
       return (
         <div className="glass rounded-2xl p-8 text-center max-w-md mx-auto my-10">
           <div className="mx-auto w-14 h-14 rounded-full bg-blood-500/10 flex items-center justify-center mb-4">
             <AlertCircle className="w-7 h-7 text-blood-500" />
           </div>
-          <h2 className="text-lg font-semibold text-ink-900 mb-2">Something went wrong</h2>
+          <h2 className="text-lg font-semibold text-ink-900 mb-2">
+            {isHi ? 'कुछ गलत हो गया' : 'Something went wrong'}
+          </h2>
           <p className="text-sm text-ink-500 mb-4">
-            {fallbackMessage ?? 'An unexpected error occurred in this section. Your other data is safe.'}
+            {fallbackMessage ?? (isHi
+              ? 'इस अनुभाग में एक अप्रत्याशित त्रुटि हुई। आपका बाकी डेटा सुरक्षित है।'
+              : 'An unexpected error occurred in this section. Your other data is safe.')}
           </p>
           {this.state.error && (
             <pre className="text-left text-xs bg-ink-900/5 dark:bg-white/5 rounded-lg p-3 mb-4 overflow-x-auto text-ink-600 dark:text-ink-300 whitespace-pre-wrap break-words">
@@ -57,7 +64,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
             className="inline-flex items-center gap-2 rounded-full bg-blood-500 text-white px-5 py-2.5 text-sm font-medium hover:bg-blood-600 transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            Try again
+            {isHi ? 'फिर कोशिश करें' : 'Try again'}
           </button>
         </div>
       );

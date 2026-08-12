@@ -1,10 +1,10 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Droplet, Heart, Search, Sparkles, Star } from "lucide-react";
+import { ArrowRight, Building2, Droplet, Heart, Search, Sparkles, Star } from "lucide-react";
 import { useLanguage } from "../../lib/LanguageContext";
 
 interface CTAProps {
-  onNavigate: (view: 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'admin') => void;
+  onNavigate: (view: 'home' | 'request' | 'tracking' | 'donor-register' | 'donor-dashboard' | 'requester-portal' | 'hospital-register' | 'admin') => void;
 }
 
 export function CTA({ onNavigate }: CTAProps) {
@@ -86,6 +86,17 @@ export function CTA({ onNavigate }: CTAProps) {
                 >
                   <Search className="h-4 w-4" />
                   {t.cta.requestBtn}
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <button
+                  onClick={() => onNavigate('hospital-register')}
+                  className="group inline-flex items-center justify-center gap-2 rounded-full ring-1 ring-white/20 bg-white/5 px-5 py-2.5 text-[13px] font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Building2 className="h-4 w-4 text-blood-300" />
+                  {useLanguage().language === 'HI' ? 'अस्पताल / ब्लड बैंक पार्टनर बनें' : 'For hospitals / blood banks — become a partner'}
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
                 </button>
               </div>
 

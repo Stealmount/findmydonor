@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, Search, ShieldCheck, ArrowLeft, PhoneCall } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Minus, Search, ShieldCheck, ArrowLeft, Heart } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface FAQPageProps {
@@ -16,7 +17,7 @@ interface FAQItem {
 }
 
 export function FAQPage({ onNavigate }: FAQPageProps) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const isHi = language === 'HI';
   const [activeCategory, setActiveCategory] = useState<'all' | 'donors' | 'requesters' | 'privacy'>('all');
   const [openId, setOpenId] = useState<string | null>('faq-1');
@@ -26,58 +27,58 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
     {
       id: 'faq-1',
       category: 'requesters',
-      question: "Is FindMyDonor completely free for emergency patients and families?",
-      questionHi: "Kya FindMyDonor emergency marezon aur unke parivaar ke liye 100% nishulk (free) hai?",
-      answer: "Yes, 100% free. We charge ₹0 for submitting requests, tracking donors, or receiving WhatsApp alerts. FindMyDonor is a voluntary non-profit community network funded by optional donations.",
-      answerHi: "Haan, 100% nishulk hai. Hum request submit karne, donors ko track karne ya WhatsApp alert bhejne ka 1 paisa bhi nahi lete. Yeh platform voluntary community dwara chalta hai."
+      question: "How does FindMyDonor™ find a donor in real time?",
+      questionHi: "FindMyDonor™ real-time mein donor kaise khojta hai?",
+      answer: "When a request is posted, our matching engine filters our network by blood group, eligibility, distance, and preferences — and pushes a notification to every donor who fits. The first to accept is locked in; others remain on warm standby for additional units.",
+      answerHi: "Jab koi request daali jaati hai, humara matching engine network ko blood group, eligibility, doori aur preferences ke hisab se filter karta hai — aur fit hone wale har donor ko instant notification bhejta hai."
     },
     {
       id: 'faq-2',
-      category: 'donors',
-      question: "How does the emergency WhatsApp donor alert work?",
-      questionHi: "Emergency WhatsApp donor alert kaise kaam karta hai?",
-      answer: "When a patient submits a request, our matching engine checks nearby registered donors in the same pincode and blood group. Eligible donors receive a WhatsApp message detailing the hospital name and required units. Replying YES shares contact details directly.",
-      answerHi: "Jab koi marez request submit karta hai, humare engine dwara aaspas ke verified donors ko WhatsApp message jata hai jisme hospital naam aur blood group hota hai. YES reply karte hi contact share hota hai."
+      category: 'requesters',
+      question: "How fast is a donor matched after posting a request?",
+      questionHi: "Request post karne ke kitni der baad donor match hota hai?",
+      answer: "Usually within 3 to 10 minutes. As soon as you post a blood request, our engine instantly alerts verified voluntary donors within a 3–5 km radius whose blood group matches.",
+      answerHi: "Aamtaur par 3 se 10 minute ke andar. Jaise hi aap blood request post karte hain, humara engine 3-5 km ke daayre mein verified donors ko turant alert bhejta hai."
     },
     {
       id: 'faq-3',
-      category: 'donors',
-      question: "What is the safety cooldown period between blood donations?",
-      questionHi: "Blood donation ke beech safety cooldown period kitna hota hai?",
-      answer: "Per NBTC guidelines, whole blood donation requires a 90-day cooldown period for male and female donors. Platelet (SDP) donation allows shorter intervals (14 days). Our platform automatically tracks your cooldown to protect donor health.",
-      answerHi: "NBTC niyam ke mutabiq, Whole Blood donation ke baad 90 din ka cooldown period zaroori hai. Platelets (SDP) donation ke liye 14 din ka interval hota hai. System ise automatic calculate karta hai."
+      category: 'privacy',
+      question: "Is FindMyDonor™ really 100% free?",
+      questionHi: "Kya FindMyDonor™ sach mein 100% nishulk (free) hai?",
+      answer: "Yes. Always. FindMyDonor™ is a non-profit community initiative. We do not charge patients, hospitals, or donors anything. We believe saving lives should never come with a price tag.",
+      answerHi: "Haan, hamesha. FindMyDonor™ ek non-profit community initiative hai. Hum marezon, hospitals ya donors se 1 paisa bhi nahi lete."
     },
     {
       id: 'faq-4',
+      category: 'donors',
+      question: "How does the 60-day safety cooldown work?",
+      questionHi: "60-din ka safety cooldown kaise kaam karta hai?",
+      answer: "Once a donor logs a successful donation, their profile is automatically marked on safety recovery cooldown for 60 days (whole blood). During this period, they will not receive emergency SOS alerts.",
+      answerHi: "Blood donation ke baad donor profile 60 dinon ke liye automatic safety cooldown par chali jaati hai. Is dauran unhe emergency SOS alerts nahi bheinje jaate."
+    },
+    {
+      id: 'faq-5',
+      category: 'requesters',
+      question: "Can hospitals register and broadcast urgent needs?",
+      questionHi: "Kya hospitals register karke urgent zaruratein broadcast kar sakte hain?",
+      answer: "Absolutely. Hospitals and blood banks have a dedicated Requester Portal where they can post multi-unit requests and track real-time donor responses.",
+      answerHi: "Bilkul. Hospitals aur blood banks ke paas dedicated Requester Portal hai jahan se wo multi-unit requests post aur real-time track kar sakte hain."
+    },
+    {
+      id: 'faq-6',
+      category: 'requesters',
+      question: "How do hospitals integrate FindMyDonor™?",
+      questionHi: "Hospitals FindMyDonor™ ke saath kaise integrate karte hain?",
+      answer: "We offer a REST API and a web console. Most hospitals and blood centers integrate in under a day. Our team handles the onboarding and runs alongside your existing blood bank workflow.",
+      answerHi: "Hum REST API aur web console pradan karte hain. Adhikansh hospitals 1 din se kam samay mein integrate kar lete hain."
+    },
+    {
+      id: 'faq-7',
       category: 'privacy',
       question: "Is my mobile number visible to everyone on the website?",
       questionHi: "Kya mera mobile number website par sabhi ko dikhta hai?",
       answer: "No. Your phone number is strictly hidden from public view. It is shared ONLY with the patient's family AFTER you voluntarily reply YES to a WhatsApp emergency broadcast.",
       answerHi: "Nahi. Aapka phone number public website par bilkul nahi dikhta. Yeh tabhi share hota hai jab aap WhatsApp emergency alert par khud YES reply karte hain."
-    },
-    {
-      id: 'faq-5',
-      category: 'requesters',
-      question: "Can I request multiple units or rare blood groups like O- or AB-?",
-      questionHi: "Kya main multiple units ya rare blood groups (O-, AB-) request kar sakta hun?",
-      answer: "Yes. Our matching engine supports multi-unit splitting across multiple nearby donors and automatically expands radius tiers if exact matching donors are scarce.",
-      answerHi: "Haan. Humara system multiple donors ke beech units split kar sakta hai aur agar exact blood group kam ho toh aaspas ke compatible donors tak radius expand karta hai."
-    },
-    {
-      id: 'faq-6',
-      category: 'privacy',
-      question: "Can I pause my donor status or delete my profile anytime?",
-      questionHi: "Kya main kisi bhi samay apna donor status pause ya delete kar sakta hun?",
-      answer: "Yes. You can toggle your availability switch OFF anytime in your donor dashboard or click Delete Profile to permanently wipe your data from our servers.",
-      answerHi: "Haan. Aap apne Donor Dashboard se jab chahein availability OFF kar sakte hain ya Delete Profile par click karke apna data permanently mita sakte hain."
-    },
-    {
-      id: 'faq-7',
-      category: 'requesters',
-      question: "Does FindMyDonor charge hospitals or blood banks?",
-      questionHi: "Kya FindMyDonor hospitals ya blood banks se koi fee leta hai?",
-      answer: "No. We never charge hospitals, blood banks, or patients. All pricing tiers and commercial memberships are permanently excluded from FindMyDonor.",
-      answerHi: "Nahi. Hum kisi bhi hospital, blood bank ya patient se koi commercial fee nahi lete. Platform sabhi ke liye 100% free hai."
     }
   ];
 
@@ -92,54 +93,55 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 pt-24 pb-20 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen ambient-bg text-ink-900 pt-8 pb-20 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="max-w-4xl mx-auto space-y-8">
         
         {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-between border-b border-gray-200 pb-4">
+        <div className="flex items-center justify-between border-b border-ink-200/60 pb-4">
           <button
             onClick={() => onNavigate ? onNavigate('home') : (window.location.href = '/')}
-            className="text-xs font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-1.5"
+            className="text-xs font-bold uppercase tracking-wider text-ink-600 hover:text-ink-900 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 text-blood-600" />
             {isHi ? "Mukhya Prashth" : "Back to Home"}
           </button>
-          <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full ring-1 ring-emerald-200 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" />
+          <span className="text-xs font-bold text-emerald-700 bg-emerald-50/80 px-3.5 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5 shadow-sm">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
             {isHi ? "24x7 Help Center" : "24x7 Community Help Center"}
           </span>
         </div>
 
         {/* Page Header */}
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-rose-600 flex items-center gap-1.5">
-            <HelpCircle className="w-3.5 h-3.5" />
-            {isHi ? "Sawaal Aur Jawaab" : "Clear Answers for Real Humans"}
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center space-y-3"
+        >
+          <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-blood-600">
+            {t.faq.badge || (isHi ? "अक्सर पूछे जाने वाले प्रश्न" : "FREQUENTLY ASKED QUESTIONS")}
           </p>
-          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 tracking-tight">
-            {isHi ? "Koshish Yahi Ki Aapka Har Sawaal Hal Ho Jaye." : "Frequently Asked Questions. Simple, Honest Answers."}
+          <h1 className="text-[clamp(1.85rem,4.5vw,3rem)] font-medium leading-[1.05] tracking-tight text-ink-900">
+            {t.faq.title || (isHi ? "क्या सवाल हैं? हमारे पास जवाब हैं।" : "Got questions? We have answers.")}
           </h1>
-          <p className="text-sm text-gray-600 max-w-3xl leading-relaxed">
-            {isHi
-              ? "Emergency mein time sabse zaroori hota hai. Yahan donor, patient aur privacy se jude sabhi sawaalon ke spasht jawaab hain."
-              : "During medical emergencies, clarity saves lives. Here are honest, direct answers to common questions about donation, requests, and privacy."}
+          <p className="text-[15.5px] leading-relaxed text-ink-600 max-w-2xl mx-auto">
+            {t.faq.subtitle || (isHi ? "सुरक्षा नियमों, दाता पात्रता और आपातकालीन ब्लड अनुरोधों के बारे में पूरी जानकारी।" : "Everything you need to know about safety protocols, donor eligibility, and emergency blood requests.")}
           </p>
-        </div>
+        </motion.div>
 
         {/* Search Bar & Category Filters */}
         <div className="space-y-4">
-          <div className="relative max-w-xl">
-            <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+          <div className="relative max-w-xl mx-auto">
+            <Search className="w-4 h-4 text-ink-400 absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder={isHi ? "Sawaal khojien (e.g. cooldown, whatsapp, free, privacy)..." : "Search questions (e.g. cooldown, whatsapp, free, privacy)..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-gray-200 shadow-sm rounded-xl py-3 pl-11 pr-4 text-sm text-gray-900 focus:outline-none focus:border-rose-500 transition-colors placeholder:text-gray-400"
+              className="w-full bg-white border border-ink-200 shadow-sm rounded-2xl py-3 pl-11 pr-4 text-sm text-ink-900 focus:outline-none focus:border-blood-500 focus:ring-2 focus:ring-blood-500/20 transition-all placeholder:text-ink-400"
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             {[
               { id: 'all', label: isHi ? 'Sabhi Sawaal' : 'All Questions' },
               { id: 'donors', label: isHi ? '🩸 Donors Ke Liye' : '🩸 For Donors' },
@@ -149,10 +151,10 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
               <button
                 key={tab.id}
                 onClick={() => setActiveCategory(tab.id as any)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer border ${
                   activeCategory === tab.id
-                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    ? 'bg-blood-600 text-white border-blood-600 shadow-md shadow-blood-600/20'
+                    : 'bg-white text-ink-700 border-ink-200 hover:bg-ink-50'
                 }`}
               >
                 {tab.label}
@@ -162,60 +164,75 @@ export function FAQPage({ onNavigate }: FAQPageProps) {
         </div>
 
         {/* Accordion List */}
-        <div className="space-y-3">
+        <div className="divide-y divide-ink-100 rounded-3xl bg-white subtle-border shadow-premium overflow-hidden">
           {filteredFaqs.length === 0 ? (
-            <div className="text-center py-12 p-6 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm">
+            <div className="text-center py-12 p-6 text-ink-500 text-sm font-medium">
               {isHi ? "Koi sawaal nahi mila. Kripya doosra keyword type karein." : "No matching questions found. Try another search term."}
             </div>
           ) : (
-            filteredFaqs.map((faq) => {
+            filteredFaqs.map((faq, i) => {
               const isOpen = openId === faq.id;
+              const qText = isHi ? faq.questionHi : faq.question;
+              const aText = isHi ? faq.answerHi : faq.answer;
+
               return (
-                <div
-                  key={faq.id}
-                  className={`bg-white border transition-all duration-200 rounded-xl shadow-sm overflow-hidden ${
-                    isOpen ? 'border-rose-300 ring-1 ring-rose-200' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
+                <div key={faq.id} className="px-5 sm:px-7">
                   <button
                     onClick={() => setOpenId(isOpen ? null : faq.id)}
-                    className="w-full p-5 text-left flex items-center justify-between gap-4 cursor-pointer"
+                    className="flex w-full items-center justify-between gap-4 py-5 text-left cursor-pointer"
                   >
-                    <span className="font-bold text-sm sm:text-base text-gray-900 leading-snug">
-                      {isHi ? faq.questionHi : faq.question}
+                    <span className="text-[15.5px] font-semibold text-ink-900">
+                      {qText}
                     </span>
-                    <div className={`p-1.5 rounded-lg border transition-transform duration-200 shrink-0 ${
-                      isOpen ? 'bg-rose-50 text-rose-700 border-rose-200 rotate-180' : 'bg-gray-50 text-gray-400 border-gray-200'
-                    }`}>
-                      <ChevronDown className="w-4 h-4" />
-                    </div>
+                    <span
+                      className={`grid h-7 w-7 flex-shrink-0 place-items-center rounded-full transition-all duration-300 ${
+                        isOpen
+                          ? "bg-ink-900 text-white rotate-180"
+                          : "bg-ink-100 text-ink-700"
+                      }`}
+                    >
+                      {isOpen ? (
+                        <Minus className="h-3.5 w-3.5" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" />
+                      )}
+                    </span>
                   </button>
-
-                  {isOpen && (
-                    <div className="px-5 pb-5 pt-1 text-xs sm:text-sm text-gray-600 border-t border-gray-100 leading-relaxed">
-                      {isHi ? faq.answerHi : faq.answer}
-                    </div>
-                  )}
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <p className="pb-6 pr-10 text-[14.5px] leading-relaxed text-ink-600">
+                          {aText}
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               );
             })
           )}
         </div>
 
-        {/* Contact Footer */}
-        <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
-              <PhoneCall className="w-4 h-4 text-rose-600" />
+        {/* Contact / Request CTA Footer Card */}
+        <div className="glass border border-ink-200/60 shadow-premium rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="space-y-1.5 text-center sm:text-left">
+            <h3 className="text-base font-bold text-ink-900 flex items-center justify-center sm:justify-start gap-2">
+              <Heart className="w-4 h-4 text-blood-600 fill-blood-100" />
               {isHi ? "Emergency Blood Request Post Karein" : "Still Have an Urgent Blood Question?"}
             </h3>
-            <p className="text-xs text-gray-500">
-              {isHi ? "Agar aapse kisi ko emergency khoon ki zaroorat hai, toh turant request submit karein." : "If someone needs blood immediately, post an emergency request to alert nearby donors."}
+            <p className="text-xs text-ink-600">
+              {isHi ? "Agar kisi ko emergency khoon ki zaroorat hai, toh turant request submit karein." : "If someone needs blood immediately, post an emergency request to alert nearby donors."}
             </p>
           </div>
           <button
             onClick={() => onNavigate ? onNavigate('request') : (window.location.href = '/?view=request')}
-            className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-2 transition-all shrink-0 shadow-sm"
+            className="btn-glow px-6 py-3 rounded-full bg-blood-600 hover:bg-blood-700 text-white font-bold text-xs flex items-center gap-2 transition-all shrink-0 cursor-pointer shadow-lg shadow-blood-600/30"
           >
             {isHi ? "Request Blood Now →" : "Request Blood Now →"}
           </button>

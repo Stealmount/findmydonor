@@ -55,15 +55,17 @@ async function withRetry<T>(operation: string, task: () => Promise<T>): Promise<
 // Global Memory & Disk Persistence Engine
 const localMemoryStore: Map<string, Map<string, any>> = (globalThis as any).__localMemoryStore || ((globalThis as any).__localMemoryStore = new Map<string, Map<string, any>>());
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 if (!fs.existsSync(DATA_DIR)) {
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
 }
 
 function loadLocalDiskStore(table: string): Map<string, any> {
-  if (localMemoryStore.has(table)) return localMemoryStore.get(table)!;
-  const map = new Map<string, any>();
-  localMemoryStore.set(table, map);
+  let map = localMemoryStore.get(table);
+  if (!map) {
+    map = new Map<string, any>();
+    localMemoryStore.set(table, map);
+  }
   const filePath = path.join(DATA_DIR, `db_${table}.json`);
   if (fs.existsSync(filePath)) {
     try {
@@ -99,7 +101,7 @@ function isTestMode(): boolean {
 
 const PROFILE_SELECT = 'id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)';
 
-function mapProfile(p: any) {
+export function mapProfile(p: any) {
   const dp = Array.isArray(p.donor_profiles) ? p.donor_profiles[0] : p.donor_profiles;
   return {
     id: p.id,

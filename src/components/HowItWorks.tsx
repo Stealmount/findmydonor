@@ -107,10 +107,6 @@ export function HowItWorks() {
                   <p className="mt-2 text-[13.5px] leading-relaxed text-ink-600">
                     {s.desc}
                   </p>
-                  <div className="mt-5 flex items-center gap-1 text-[12.5px] font-medium text-ink-500 group-hover:text-ink-900 transition">
-                    Learn more
-                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
-                  </div>
                 </div>
               </motion.div>
             ))}

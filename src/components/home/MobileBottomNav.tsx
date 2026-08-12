@@ -1,21 +1,18 @@
 import React from 'react';
 import { Home, HeartPulse, Activity, UserPlus, UserCheck } from 'lucide-react';
-import type { User, Requester } from '../../types';
 import { useLanguage } from '../../lib/LanguageContext';
+import { useAuth } from '../../lib/AuthContext';
 
 interface MobileBottomNavProps {
   activeView: string;
   onNavigate: (view: any) => void;
-  loggedInUser?: User | null;
-  loggedInRequester?: Requester | null;
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeView,
-  onNavigate,
-  loggedInUser,
-  loggedInRequester
+  onNavigate
 }) => {
+  const { loggedInUser, loggedInRequester } = useAuth();
   const { language } = useLanguage();
   const isHi = language === 'HI';
 
@@ -49,10 +46,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       activeColor: 'text-blood-600',
     },
     {
-      id: 'signup',
-      label: isHi ? 'पंजीकरण' : 'Sign Up',
+      id: 'donor',
+      label: isHi ? 'रक्तदाता' : 'Donor',
       icon: UserPlus,
-      view: 'auth-signup',
+      view: 'donor-register',
       activeColor: 'text-blood-600',
     },
     {

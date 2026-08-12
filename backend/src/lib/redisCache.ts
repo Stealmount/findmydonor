@@ -74,6 +74,14 @@ function getRedis(): Redis | null {
 getRedis();
 
 /**
+ * Public accessor for the underlying ioredis client (used by the Redis-backed
+ * rate limiter). Returns null if Redis was never initialised.
+ */
+export function getRedisClient(): Redis | null {
+  return redis;
+}
+
+/**
  * Get a cached value. Returns null on miss or error.
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
@@ -160,4 +168,17 @@ export function getCacheStats() {
     memoryEntries: memoryCache.size,
     redisConnected: useRedis,
   };
+}
+
+/**
+ * Stop the redis client and its reconnection timer. Needed by tests: without
+ * this, ioredis's retryStrategy keeps a setTimeout alive forever and the test
+ * process never exits after the suite completes.
+ */
+export function closeRedis(): void {
+  if (redis) {
+    redis.disconnect();
+    redis = null;
+    useRedis = false;
+  }
 }

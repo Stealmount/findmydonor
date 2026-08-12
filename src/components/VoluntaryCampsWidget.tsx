@@ -9,6 +9,19 @@ interface VoluntaryCampsWidgetProps {
 }
 
 export function VoluntaryCampsWidget({ userPincode, onNavigate }: VoluntaryCampsWidgetProps) {
+  const [camps, setCamps] = React.useState<DonationCamp[]>(INITIAL_VOLUNTARY_CAMPS);
+
+  React.useEffect(() => {
+    fetch('/api/camps?limit=6')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data?.camps) && data.camps.length > 0) {
+          setCamps(data.camps);
+        }
+      })
+      .catch(() => { /* keep fallback */ });
+  }, []);
+
   return (
     <div className="bg-gradient-to-br from-ink-900/90 to-ink-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6">
       <div className="flex items-center justify-between">
@@ -32,7 +45,7 @@ export function VoluntaryCampsWidget({ userPincode, onNavigate }: VoluntaryCamps
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {INITIAL_VOLUNTARY_CAMPS.map((camp: DonationCamp) => (
+        {camps.map((camp: DonationCamp) => (
           <div
             key={camp.id}
             className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-blood-500/40 transition space-y-3"
@@ -61,7 +74,7 @@ export function VoluntaryCampsWidget({ userPincode, onNavigate }: VoluntaryCamps
 
             <div className="pt-2 flex items-center gap-2">
               <a
-                href={`tel:${camp.contact_number}`}
+                href={`tel:${camp.contact_phone || (camp as any).contact_number}`}
                 className="flex-1 py-2 px-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1 transition"
               >
                 <Phone className="h-3 w-3 text-emerald-400" /> Contact Desk

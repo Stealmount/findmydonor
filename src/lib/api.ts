@@ -2,13 +2,18 @@ import { supabase } from './supabase';
 
 export async function authenticatedApi<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Please sign in again before continuing.');
+  // Admin console routes authenticate via the ADMIN_AUTH_SECRET stored by the
+  // login screens (sessionStorage). Everything else uses the Supabase session.
+  const adminSecret = sessionStorage.getItem('fmd_admin_secret');
+  const token = path.startsWith('/api/admin') && adminSecret
+    ? adminSecret
+    : (session?.access_token || '');
 
   const response = await fetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

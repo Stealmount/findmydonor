@@ -61,9 +61,11 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 function loadLocalDiskStore(table: string): Map<string, any> {
-  if (localMemoryStore.has(table)) return localMemoryStore.get(table)!;
-  const map = new Map<string, any>();
-  localMemoryStore.set(table, map);
+  let map = localMemoryStore.get(table);
+  if (!map) {
+    map = new Map<string, any>();
+    localMemoryStore.set(table, map);
+  }
   const filePath = path.join(DATA_DIR, `db_${table}.json`);
   if (fs.existsSync(filePath)) {
     try {

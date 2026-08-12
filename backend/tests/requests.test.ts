@@ -10,9 +10,8 @@ describe('Blood Requests API Endpoints (/api/requests & /api/sos/requests)', () 
   let child: ChildProcess | null = null;
 
   before(async () => {
-    child = spawn('npx', ['tsx', 'server.ts'], {
+    child = spawn(process.execPath, ['--import', 'tsx', 'backend/server.ts'], {
       stdio: 'pipe',
-      shell: true,
       env: {
         ...process.env,
         PORT,
@@ -42,9 +41,26 @@ describe('Blood Requests API Endpoints (/api/requests & /api/sos/requests)', () 
     const res = await fetch(`${BASE}/api/requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patient_name: 'Test Patient', units_required: 1 })
+      body: JSON.stringify({
+        patient_name: 'Test Patient',
+        blood_type_needed: 'O+',
+        units_required: 1,
+        hospital_name: 'Test Hospital',
+        hospital_pincode: '110001',
+        hospital_area: 'Test Area',
+        hospital_city: 'Delhi'
+      })
     });
     assert.equal(res.status, 401, 'Should return 401 when unauthenticated');
+  });
+
+  test('POST /api/requests with invalid body returns 400 before auth check', async () => {
+    const res = await fetch(`${BASE}/api/requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_name: 'Test Patient', units_required: 1 })
+    });
+    assert.equal(res.status, 400, 'validate() runs before auth — invalid body is rejected with 400');
   });
 
   test('POST /api/sos/requests rejects request without verification token with 400', async () => {
@@ -72,7 +88,7 @@ describe('Blood Requests API Endpoints (/api/requests & /api/sos/requests)', () 
         hospital_area: 'Test Area',
         hospital_city: 'Delhi',
         hospital_state: 'Delhi',
-        urgency_level: 'urgent',
+        urgency_level: 'critical',
         requester_name: 'Race Tester',
         requester_phone: '9876543210'
       };

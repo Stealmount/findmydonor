@@ -132,27 +132,27 @@ function RequesterView() {
       <div>
         <h3 className="text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-tight tracking-tight">
           {isHi
-            ? "एक मिनट से भी कम समय में रक्त का अनुरोध करें। प्रत्येक रक्तदाता को रियल-टाइम में ट्रैक करें।"
-            : "Request blood in under a minute. Track every donor in real time."}
+            ? "रक्त की उपलब्धता की जांच करें। अपने पास के दाताओं से जुड़े।"
+            : "Check blood availability. Connect with donors nearby."}
         </h3>
         <p className="mt-4 text-[15px] text-white/70 leading-relaxed">
           {isHi
-            ? "रोगी का रक्त समूह, आवश्यक यूनिट और अस्पताल का स्थान दर्ज करें। हम सही रक्तदाताओं को लाइव अनुरोध भेजते हैं और हर कदम पर अपडेट देते हैं — स्वीकृति, ETA और पुष्टि।"
-            : "Type in the patient's blood group, units needed, and hospital location. We push a live request to the right donors and stream you every step — acceptances, ETAs, and confirmations."}
+            ? "रोगी का रक्त समूह और स्थान दर्ज करें। हम आपको सही दाताओं से जोड़ते हैं और हर कदम पर अपडेट देते हैं — उपलब्धता, दूरी और समय।"
+            : "Enter the patient's blood group and location. We connect you to the right donors and keep you updated every step of the way — availability, distance, and timing."}
         </p>
         <div className="mt-6 space-y-3">
           {(isHi
             ? [
-                "रक्त समूह मिलान के साथ लाइव रक्तदाता संख्या",
+                "रक्त समूह मिलान के साथ लाइव डोनर उपलब्धता",
                 "इन-ऐप चैट और वन-टैप कॉलिंग",
-                "यदि कोई रक्तदाता रद्द करता है तो स्वचालित री-रूट",
-                "अस्पताल की पुष्टि के साथ रसीद",
+                "सुविधाजनक शेड्यूलिंग",
+                "विश्वसनीय और सत्यापित प्रोफाइल",
               ]
             : [
-                "Live donor count with blood-group match",
+                "Live donor availability with blood-group match",
                 "In-app chat and one-tap calling",
-                "Auto-reroute if a donor cancels",
-                "Receipt with hospital confirmation",
+                "Convenient scheduling",
+                "Reliable and verified profiles",
               ]
           ).map((b) => (
             <div key={b} className="flex items-center gap-2.5 text-[14px]">
@@ -171,22 +171,22 @@ function RequesterView() {
             <span>•••</span>
           </div>
           <p className="mt-3 text-[11px] font-medium uppercase tracking-wider text-ink-500">
-            {isHi ? "सक्रिय अनुरोध" : "Active request"}
+            {isHi ? "उपलब्धता स्थिति" : "Availability Status"}
           </p>
           <h4 className="mt-1 text-[20px] font-semibold text-ink-900">
             {isHi ? "B+ · 2 यूनिट" : "B+ · 2 units"}
           </h4>
           <p className="text-[12px] text-ink-500">
-            {isHi ? "अपोलो अस्पताल · वार्ड 4B" : "Apollo Hospital · Ward 4B"}
+            {isHi ? "स्थान · क्षेत्र" : "Location · Area"}
           </p>
 
           <div className="mt-5 rounded-2xl bg-white border border-ink-100 p-3.5 shadow-premium">
             <div className="flex items-center justify-between">
               <p className="text-[12px] font-semibold text-ink-900">
-                {isHi ? "प्रतिक्रिया देने वाले रक्तदाता" : "Donors responding"}
+                {isHi ? "उपलब्ध डोनर" : "Available donors"}
               </p>
               <span className="text-[10px] text-emerald-600 font-semibold">
-                {isHi ? "2/2 मिलान" : "2/2 matched"}
+                {isHi ? "सक्रिय" : "Active"}
               </span>
             </div>
             <div className="mt-3 space-y-2.5">
@@ -194,14 +194,12 @@ function RequesterView() {
                 {
                   name: isHi ? "प्रिया एम." : "Priya M.",
                   dist: isHi ? "1.2 किमी" : "1.2 km",
-                  eta: isHi ? "8 मिनट" : "8 min",
-                  status: isHi ? "पुष्ट" : "Confirmed",
+                  status: isHi ? "उपलब्ध" : "Available",
                 },
                 {
                   name: isHi ? "कार्तिक आर." : "Karthik R.",
                   dist: isHi ? "2.0 किमी" : "2.0 km",
-                  eta: isHi ? "12 मिनट" : "12 min",
-                  status: isHi ? "रास्ते में" : "En route",
+                  status: isHi ? "उपलब्ध" : "Available",
                 },
               ].map((d) => (
                 <div
@@ -225,31 +223,9 @@ function RequesterView() {
                     <p className="text-[10.5px] font-semibold text-emerald-600">
                       {d.status}
                     </p>
-                    <p className="text-[10px] text-ink-500">
-                      ETA {d.eta}
-                    </p>
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-2xl bg-ink-900 p-3.5 text-white">
-            <div className="flex items-center justify-between">
-              <p className="text-[11.5px] text-white/70">
-                {isHi ? "पहली यूनिट का ETA" : "ETA to first unit"}
-              </p>
-              <p className="text-[14px] font-semibold">
-                {isHi ? "8 मिनट 12 सेकंड" : "8 min 12 sec"}
-              </p>
-            </div>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: "72%" }}
-                transition={{ duration: 1.4, ease: [0.16, 1, 0.3, 1] }}
-                className="h-full bg-blood-500"
-              />
             </div>
           </div>
         </div>
@@ -272,15 +248,17 @@ function DonorView() {
     >
       <div>
         <h3 className="text-[clamp(1.5rem,3vw,2.25rem)] font-medium leading-tight tracking-tight">
-          {isHi ? "एक शांत सूचना। " : "One quiet ping. "}
+          {isHi
+            ? "एक शांत सूचना। "
+            : "One quiet ping. "}
           <span className="font-serif italic text-blood-200">
-            {isHi ? "एक जीवन सुरक्षित।" : "One life saved."}
+            {isHi ? "एक मैच मिला।" : "One donor matched."}
           </span>
         </h3>
         <p className="mt-4 text-[15px] text-white/70 leading-relaxed">
           {isHi
-            ? "रक्तदाता चुनते हैं कि वे कितनी बार संपर्क किया जाना चाहते हैं, उनकी पसंदीदा दूरी क्या है और वे किन दिनों उपलब्ध हैं। जब कोई सही मैच मिलता है, तो आपको केवल एक सम्मानजनक सूचना मिलती है — कोई स्पैम नहीं, कोई अपराधबोध नहीं।"
-            : "Donors choose how often they want to be contacted, their preferred radius, and which days they're available. When a match fits, you get a single, respectful notification — never spam, never guilt."}
+            ? "रक्तदाता चुनते हैं कि उनसे कितनी बार संपर्क किया जाए, उनकी पसंदीदा दूरी और उपलब्ध दिन। जब कोई दाता मेल खाता है, तो आपको एक सम्मानजनक सूचना मिलती है।"
+            : "Donors choose how often they're contacted, their preferred radius, and their availability days. When a compatible request appears nearby, you get a respectful notification — nothing more."}
         </p>
         <div className="mt-6 space-y-3">
           {(isHi
@@ -321,13 +299,13 @@ function DonorView() {
             <Bell className="h-6 w-6" />
           </motion.div>
           <p className="mt-3 text-[11px] font-medium uppercase tracking-wider text-white/70">
-            {isHi ? "तत्काल अनुरोध · 1.2 किमी" : "Urgent request · 1.2 km"}
+            {isHi ? "रक्त अनुरोध · 1.2 किमी" : "Blood request · 1.2 km"}
           </p>
           <h4 className="mt-1 text-[22px] font-semibold">
             {isHi ? "B+ रक्त की आवश्यकता" : "B+ blood needed"}
           </h4>
           <p className="text-[12px] text-white/80">
-            {isHi ? "अपोलो अस्पताल · 2 यूनिट" : "Apollo Hospital · 2 units"}
+            {isHi ? "नमूना अस्पताल · 2 यूनिट" : "City Hospital · 2 units"}
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-2">
@@ -397,22 +375,22 @@ function HospitalView() {
         </h3>
         <p className="mt-4 text-[15px] text-white/70 leading-relaxed">
           {isHi
-            ? "अस्पतालों को रियल-टाइम इन्वेंटरी, रक्तदाता नेटवर्क पहुंच, संभावित कमी की चेतावनी और वन-क्लिक अनुरोध कंसोल मिलता है। हमारे FHIR-तैयार API के साथ एक दिन में एकीकृत करें।"
-            : "Hospitals get a real-time inventory, donor network access, predictive shortage alerts, and a one-click request console. Integrate in a day with our FHIR-ready API."}
+            ? "हम अस्पतालों के लिए उपकरण बना रहे हैं — जिसमें इन्वेंटरी ट्रैकिंग, रक्तदाता नेटवर्क एक्सेस, और सुव्यवस्थित अनुरोध वर्कफ़्लो शामिल होंगे। अस्पताल एकीकरण सुविधाएँ वर्तमान में विकास में हैं।"
+            : "We're building tools for hospitals — including inventory tracking, donor network access, and streamlined request workflows. Hospital integration features are currently in development."}
         </p>
         <div className="mt-6 space-y-3">
           {(isHi
             ? [
-                "FHIR-तैयार EHR एकीकरण",
-                "अनुमानित 7-दिवसीय मांग मॉडल",
-                "मल्टी-अस्पताल इन्वेंट्री साझाकरण",
-                "नियामक समीक्षा के लिए ऑडिट लॉग",
+                "अस्पताल अनुरोध डैशबोर्ड (जल्द आ रहा है)",
+                "रक्तदाता नेटवर्क एकीकरण (जल्द आ रहा है)",
+                "इन्वेंटरी ट्रैकिंग उपकरण (योजनाबद्ध)",
+                "अनुपालन और ऑडिट समर्थन (योजनाबद्ध)",
               ]
             : [
-                "FHIR-ready EHR integration",
-                "Predicted 7-day demand model",
-                "Multi-hospital inventory sharing",
-                "Audit logs for regulatory review",
+                "Hospital request dashboard (Coming Soon)",
+                "Donor network integration (Coming Soon)",
+                "Inventory tracking tools (Planned)",
+                "Compliance & audit support (Planned)",
               ]
           ).map((b) => (
             <div key={b} className="flex items-center gap-2.5 text-[14px]">
@@ -422,26 +400,6 @@ function HospitalView() {
               <span className="text-white/80">{b}</span>
             </div>
           ))}
-        </div>
-
-        <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 relative group">
-          <img
-            src="https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=800&q=80"
-            alt="Authentic Clinical Hospital Transfusion Care"
-            className="h-36 w-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-ink-950/90 via-ink-950/30 to-transparent flex items-end p-3.5">
-            <div className="text-white">
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-blood-600/95 px-2.5 py-0.5 rounded-full">
-                {isHi ? "वास्तविक नैदानिक सेटिंग" : "Real Clinical Setting"}
-              </span>
-              <p className="text-[12.5px] font-semibold mt-1">
-                {isHi
-                  ? "अस्पताल-स्तर के बाँझ आधान और भंडारण प्रोटोकॉल"
-                  : "Hospital-Grade Sterile Infusion & Storage Protocols"}
-              </p>
-            </div>
-          </div>
         </div>
       </div>
       <div className="relative">
@@ -453,10 +411,10 @@ function HospitalView() {
               </div>
               <div>
                 <p className="text-[12.5px] font-semibold">
-                  {isHi ? "अपोलो अस्पताल" : "Apollo Hospital"}
+                  {isHi ? "नमूना पूर्वावलोकन" : "Sample Hospital Preview"}
                 </p>
                 <p className="text-[11px] text-white/60">
-                  {isHi ? "लाइव इन्वेंटरी" : "Live inventory"}
+                  {isHi ? "इंटरफ़ेस पूर्वावलोकन" : "Interface preview"}
                 </p>
               </div>
             </div>

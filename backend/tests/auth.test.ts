@@ -13,7 +13,7 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
     try {
       const check = await fetch(`${BASE}/api/health`).catch(() => null);
       if (!check || !check.ok) {
-        child = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+        child = spawn(process.execPath, ['--import', 'tsx', 'backend/server.ts'], {
           stdio: 'pipe',
           env: {
             ...process.env,
@@ -23,8 +23,8 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
           }
         });
 
-        for (let i = 0; i < 40; i++) {
-          await new Promise(r => setTimeout(r, 250));
+        for (let i = 0; i < 120; i++) {
+          await new Promise(r => setTimeout(r, 500));
           const res = await fetch(`http://127.0.0.1:${PORT}/api/health`).catch(() => null);
           if (res && res.ok) break;
         }

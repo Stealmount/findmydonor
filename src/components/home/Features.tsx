@@ -3,77 +3,53 @@ import { motion } from "framer-motion";
 import {
   Radio,
   Users,
-  Calendar,
   ShieldCheck,
-  Building2,
   BellRing,
   MapPinned,
   FileCheck2,
-  HeartPulse,
 } from "lucide-react";
 import { useLanguage } from "../../lib/LanguageContext";
 
 const features = [
   {
     icon: Radio,
-    title: "Real-time matching engine",
-    desc: "Sub-second matching against verified donors. Considers blood group, proximity eligibility, location, and donation history.",
+    title: "Smart Donor Matching",
     span: "lg:col-span-2",
     accent: "from-blood-50 via-white to-white",
   },
   {
     icon: Users,
-    title: "Multi-donor requests",
-    desc: "Need 4 units? We page four eligible donors in parallel and assign the first to accept while others stay on warm standby.",
+    title: "Notify Multiple Donors",
+    desc: "Simultaneously notifies multiple eligible donors when more than one unit is required, so you're not dependent on a single response.",
     span: "lg:col-span-1",
     accent: "from-amber-50 to-white",
   },
   {
     icon: ShieldCheck,
-    title: "Safety cooldown tracking",
-    desc: "Automatic eligibility windows (60 & 90 day safety rules) so donors can never be over-notified. Compliance-grade audit logs included.",
+    title: "Safety Cooldown Tracking",
+    desc: "Automatically checks donor eligibility based on recommended donation intervals. Donors within their recovery window won't be contacted.",
     span: "lg:col-span-1",
     accent: "from-emerald-50 to-white",
   },
   {
     icon: MapPinned,
-    title: "Hospital-aware routing",
-    desc: "Donors are navigated to the exact wing, bed, or blood bank counter — including verified parking and entry instructions.",
+    title: "Hospital-Aware Routing",
+    desc: "Planned navigation to the exact hospital wing or blood bank counter — including entry instructions for donors.",
     span: "lg:col-span-1",
     accent: "from-violet-50 to-white",
-  },
-  {
-    icon: HeartPulse,
-    title: "Vitals & recovery",
-    desc: "Optional post-donation check-ins track hemoglobin, hydration, and recovery — surfaced back to your donor profile.",
-    span: "lg:col-span-2",
-    accent: "from-sky-50 to-white",
+    comingSoon: true,
   },
   {
     icon: BellRing,
-    title: "Smart, silent alerts",
-    desc: "Notifications respect quiet hours, frequency caps, and the donor's preferred radius. No spam — only when it matters.",
+    title: "Timely Notifications",
+    desc: "Notifications respect quiet hours, frequency caps, and donor preferences. No spam — only relevant alerts when a compatible request is nearby.",
     span: "lg:col-span-1",
     accent: "from-rose-50 to-white",
   },
   {
-    icon: Building2,
-    title: "Hospital dashboard",
-    desc: "Real-time inventory, predicted shortages, and a one-click request console for transfusion teams.",
-    span: "lg:col-span-1",
-    accent: "from-indigo-50 to-white",
-  },
-  {
-    icon: Calendar,
-    title: "Planned surgeries",
-    desc: "Schedule a procedure 2 weeks out and we pre-warm donors for the date — no last-minute scrambles.",
-    span: "lg:col-span-1",
-    accent: "from-teal-50 to-white",
-  },
-  {
     icon: FileCheck2,
-    title: "Verification, end-to-end",
-    desc: "Every donor completes medical screening, ID check, and blood-type confirmation before they can be matched.",
+    title: "Donor Verification",
+    desc: "Supports identity verification and stores donor information. Final medical screening and donation eligibility are determined by the authorised blood bank or hospital.",
     span: "lg:col-span-1",
     accent: "from-orange-50 to-white",
   },
@@ -120,8 +96,15 @@ export function Features() {
               />
               <div className="relative flex h-full flex-col">
                 <div className="flex items-center justify-between">
-                  <div className="grid h-11 w-11 place-items-center rounded-2xl bg-ink-900 text-white">
-                    <f.icon className="h-5 w-5" strokeWidth={2} />
+                  <div className="flex items-center gap-2">
+                    <div className="grid h-11 w-11 place-items-center rounded-2xl bg-ink-900 text-white">
+                      <f.icon className="h-5 w-5" strokeWidth={2} />
+                    </div>
+                    {f.comingSoon && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                        Coming Soon
+                      </span>
+                    )}
                   </div>
                   <span className="text-[11px] font-mono font-medium text-ink-300">
                     0{i + 1}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BloodRequest, BloodType, UrgencyLevel, lookupPincode, Requester, HOSPITAL_NETWORKS, BLOOD_COMPONENTS } from '../types';
+import { BloodRequest, BloodType, UrgencyLevel, lookupPincode, Requester, BLOOD_COMPONENTS } from '../types';
+import { HOSPITAL_NETWORKS } from '../data/hospitals';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { Heart, Landmark, Send, CheckCircle, ShieldAlert, Lock, User as UserIcon, Mail, Phone, ArrowRight, Sparkles, MapPin, Search, Activity, Stethoscope, Megaphone, Save, Clock, AlertTriangle } from 'lucide-react';

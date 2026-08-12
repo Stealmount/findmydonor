@@ -7,22 +7,27 @@ const benefits = [
   {
     icon: Zap,
     title: "Instant proximity paging",
-    desc: "We notify only eligible donors within the required travel radius — no broadcast blast to people 500 km away.",
+    desc: "We notify only eligible donors within the required travel radius — keeping alerts relevant and respectful.",
+    bullets: ["Precision location targeting within your area"],
   },
   {
     icon: Shield,
     title: "Zero spam, strict frequency caps",
     desc: "Once a donor donates, our engine enforces an automatic 60-day cool-off window.",
+    bullets: ["Automatic 60-day recovery window enforcement"],
   },
   {
     icon: Users2,
     title: "Verified hospital integration",
-    desc: "Direct blood bank verification ensures requests are genuine and units reach the intended patient.",
+    desc: "Planned direct blood bank integration will help verify that requests are genuine and units reach the intended patient.",
+    bullets: ["Hospital partnership features in development"],
+    planned: true,
   },
   {
     icon: Lock,
     title: "Privacy first communication",
     desc: "Phone numbers stay private between donors and hospitals until a match is confirmed.",
+    bullets: ["Mutual confirmation required before contact sharing"],
   },
 ];
 
@@ -88,22 +93,24 @@ export function Benefits() {
                   transition={{ duration: 0.55, delay: i * 0.08 }}
                   className="group relative overflow-hidden rounded-3xl bg-white subtle-border shadow-premium p-6 card-lift"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <div className="grid h-11 w-11 place-items-center rounded-2xl bg-blood-50 text-blood-600 ring-1 ring-blood-100">
                       <b.icon className="h-5 w-5" />
                     </div>
                     <h3 className="text-[16.5px] font-semibold tracking-tight text-ink-900">
                       {t.benefits.items?.[i]?.title || b.title}
                     </h3>
+                    {b.planned && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 shrink-0">
+                        {isHi ? 'योजनाबद्ध' : 'Planned'}
+                      </span>
+                    )}
                   </div>
                   <p className="mt-4 text-[13.5px] leading-relaxed text-ink-600">
                     {t.benefits.items?.[i]?.desc || b.desc}
                   </p>
                   <ul className="mt-4 space-y-1.5">
-                    {(useLanguage().language === 'HI'
-                      ? ['सेकंडों में मिलान', 'सुरक्षित विश्राम अवधि', 'गोपनीयता सर्वोपरी']
-                      : ['Sub-second matching', 'Safety cooldowns', 'Privacy first']
-                    ).map((tItem) => (
+                    {(b.bullets || []).map((tItem) => (
                       <li
                         key={tItem}
                         className="flex items-center gap-2 text-[12.5px] text-ink-500"

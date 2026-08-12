@@ -58,7 +58,7 @@ export function Leaderboard() {
             Hero Honor Roll
           </h2>
           <p className="text-xs sm:text-sm text-ink-500 mt-2">
-            Celebrating the members of our community who step forward to donate blood and coordinate emergency response.
+            Celebrating the members of our community who step forward to donate blood.
           </p>
         </div>
 

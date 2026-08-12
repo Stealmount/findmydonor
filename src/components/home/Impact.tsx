@@ -17,27 +17,27 @@ export function Impact() {
   const stats = [
     {
       icon: HeartPulse,
-      n: dbStats.totalDonors > 0 ? `${dbStats.totalDonors}` : "Live",
+      n: dbStats.totalDonors > 0 ? `${dbStats.totalDonors}` : "Building",
       label: language === 'HI' ? "सत्यापित स्वैच्छिक रक्तदाता" : "Verified voluntary donors",
       sub: language === 'HI' ? "सुरक्षा कूलडाउन पर प्रतिक्रिया के लिए तैयार" : "Ready to respond with safety cooldown verification",
     },
     {
       icon: Clock,
       n: "< 3 mins",
-      label: language === 'HI' ? "पिनकोड मिलान समय" : "Automated pincode matching",
-      sub: language === 'HI' ? "पारंपरिक फोन समूहों की तुलना में त्वरित अलर्ट" : "Instant SMS & WhatsApp emergency broadcast engine",
+      label: language === 'HI' ? "लक्ष्य मिलान समय" : "Target matching time",
+      sub: language === 'HI' ? "त्वरित अलर्ट इंजन" : "Instant SMS & WhatsApp notification engine",
     },
     {
       icon: MapPin,
       n: "Delhi NCR",
-      label: language === 'HI' ? "सक्रिय नेटवर्क क्षेत्र" : "Active pilot coverage",
-      sub: language === 'HI' ? "दिल्ली, नोएडा, और गुरुग्राम लाइव" : "Real-time geographical matching in NCR & surrounding regions",
+      label: language === 'HI' ? "नेटवर्क क्षेत्र" : "Pilot coverage",
+      sub: language === 'HI' ? "दिल्ली, नोएडा, और गुरुग्राम" : "Geographical matching across NCR",
     },
     {
       icon: Building2,
       n: dbStats.livesSaved > 0 ? `${dbStats.livesSaved}` : "0 Fees",
       label: language === 'HI' ? "समुदाय समर्थित मंच" : "100% Free Community Platform",
-      sub: language === 'HI' ? "बिना किसी वाणिज्यिक शुल्क या सदस्यता के" : "Direct voluntary connection without commercial hospital tiers",
+      sub: language === 'HI' ? "बिना किसी वाणिज्यिक शुल्क के" : "Direct voluntary connection, no commercial fees",
     },
   ];
 
@@ -66,12 +66,12 @@ export function Impact() {
             <div className="mt-7 grid grid-cols-2 gap-3">
               <div className="rounded-2xl bg-white subtle-border p-4 shadow-premium">
                 <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">
-                  This week
+                  {language === 'HI' ? 'लक्ष्य' : 'Target'}
                 </p>
                 <p className="mt-1.5 text-[28px] font-semibold tracking-tight text-ink-900">
-                  14
+                  50+
                 </p>
-                <p className="text-[12px] text-ink-500">units matched</p>
+                <p className="text-[12px] text-ink-500">{language === 'HI' ? 'रक्तदाता नेटवर्क' : 'donors in the network'}</p>
               </div>
               <div className="rounded-2xl blood-drop-gradient p-5 text-white shadow-premium">
                 <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-white/90">

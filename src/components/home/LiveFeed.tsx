@@ -7,7 +7,7 @@ const SYSTEM_STATUS_EVENTS = [
   { text: 'WhatsApp & Email instant notification gateway operational', time: 'Live Status', type: 'cooldown' },
   { text: '60-day & 90-day medical safety cooldown verification system active', time: 'Live Status', type: 'match' },
   { text: 'Zero commercial fees · 100% free community blood matching network', time: 'Live Status', type: 'request' },
-  { text: 'No active emergency blood requests pending in your area right now', time: 'Live Status', type: 'request' },
+  { text: 'No active blood requests pending in your area right now', time: 'Live Status', type: 'request' },
 ];
 
 type LiveRequest = {

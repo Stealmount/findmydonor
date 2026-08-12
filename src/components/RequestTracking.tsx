@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { BloodRequest, Match, User } from '../types';
+import { BloodRequest, Match } from '../types';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { getCoordinates } from '../data/pincode_coords';
 import HospitalMap from './HospitalMap';
+import { Spinner } from './ui/Spinner';
+import RequestProgress from './RequestProgress';
 import { 
   CheckCircle, 
   Clock, 
@@ -23,16 +25,18 @@ interface RequestTrackingProps {
   initialCode?: string;
   onStateChange?: () => void;
   role?: 'donor' | 'requester';
-  matchId?: string;
+  /** Opaque capability token from the ?matchToken= URL param (S-1: replaces raw matchId). */
+  matchToken?: string;
 }
 
-export default function RequestTracking({ initialCode = '', onStateChange, role = 'requester', matchId }: RequestTrackingProps) {
+export default function RequestTracking({ initialCode = '', onStateChange, role = 'requester', matchToken }: RequestTrackingProps) {
   const { language, setLanguage } = useLanguage();
   const isHi = language === 'HI';
   const [searchCode, setSearchCode] = useState(initialCode);
   const [request, setRequest] = useState<BloodRequest | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
-  const [donors, setDonors] = useState<User[]>([]);
+  // donors[] is no longer returned by the public tracking API (S-1: PII removed from projection);
+  // donor fields are now inlined into each match object by the backend.
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [donorResponseStatus, setDonorResponseStatus] = useState<'pending' | 'confirmed' | 'declined' | 'already_done'>('pending');
@@ -54,7 +58,7 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
 
       setRequest(data.request);
       setMatches(data.matches || []);
-      setDonors(data.donors || []);
+      // donors[] no longer returned — donor info is inlined in each match (see backend tracking route)
     } catch (err) {
       console.error(err);
       setError('An error occurred while fetching tracking details.');
@@ -92,8 +96,8 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
 
       const approvedMatches = matches.filter(m => m.donor_response === 'approved');
       for (const m of approvedMatches) {
-        const donor = donors.find(d => d.id === m.donor_id);
-        if (donor) {
+        // donor_phone is inlined into the match object by the backend tracking API
+        if (m.donor_phone) {
           const checkNotifId = crypto.randomUUID();
           const bodyMsg = `Did you successfully donate blood for Request ID: ${request.tracking_code} at ${request.hospital_name}? Reply YES to CONFIRM and activate your 60-day recovery cooldown, or NO to indicate it did not happen.`;
           
@@ -101,7 +105,7 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
             id: checkNotifId,
             type: 'whatsapp',
             recipient_type: 'donor',
-            recipient_id: donor.id,
+            recipient_id: m.matchToken || 'unknown',
             trigger_event: 'cooldown_verification',
             message_body: bodyMsg,
             status: 'delivered',
@@ -171,12 +175,14 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
   };
 
   const handleDonorRespond = async (response: 'approved' | 'declined') => {
-    if (!matchId) return;
+    if (!matchToken) return;
     try {
-      const res = await fetch(`/api/matches/${matchId}/respond-public`, {
+      // S-1: post capability token, not a raw match UUID.
+      // The server scans matches by public_token and validates with timingSafeEqual.
+      const res = await fetch(`/api/matches/respond-public`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response }),
+        body: JSON.stringify({ response, token: matchToken }),
       });
       if (res.status === 409) { setDonorResponseStatus('already_done'); return; }
       if (!res.ok) throw new Error('Request failed');
@@ -189,8 +195,8 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
   return (
     <div id="tracking-view-container" className="max-w-4xl mx-auto space-y-8">
 
-      {/* Donor view — shown when role=donor and matchId is present */}
-      {role === 'donor' && matchId && (
+      {/* Donor view — shown when role=donor and matchToken is present */}
+      {role === 'donor' && matchToken && (
         <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg p-6 sm:p-8">
           {donorResponseStatus === 'confirmed' ? (
             <div className="text-center py-8">
@@ -254,7 +260,7 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-ink-400 text-sm">{isHi ? 'अनुरोध विवरण लोड हो रहा है…' : 'Loading request details…'}</div>
+            <Spinner isHi={isHi} label={isHi ? 'अनुरोध विवरण लोड हो रहा है…' : 'Loading request details…'} />
           )}
         </div>
       )}
@@ -420,6 +426,35 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
 
           {/* Matches & Privacy Gate Info */}
           <div className="space-y-6">
+
+            {/* ── P4: Unit Fulfillment Progress Bar ── */}
+            {request.units_required > 0 && (
+              <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-ink-800 flex items-center gap-2">
+                    🩸 {isHi ? 'यूनिट पूर्ति प्रगति' : 'Unit Fulfillment Progress'}
+                  </h3>
+                  <span className="text-sm font-bold text-blood-700">
+                    {(request as any).units_confirmed ?? matches.filter(m => m.donor_response === 'approved').length}/{request.units_required}
+                  </span>
+                </div>
+                <div className="w-full h-3 rounded-full bg-ink-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full blood-drop-gradient transition-all duration-700 ease-out"
+                    style={{
+                      width: `${Math.min(100, (((request as any).units_confirmed ?? matches.filter(m => m.donor_response === 'approved').length) / request.units_required) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-[11px] text-ink-500 mt-2 font-medium">
+                  {((request as any).units_confirmed ?? matches.filter(m => m.donor_response === 'approved').length) >= request.units_required
+                    ? (isHi ? '✅ सभी यूनिट पूर्ण!' : '✅ All units fulfilled!')
+                    : (isHi ? '⏳ डोनर्स की प्रतिक्रिया की प्रतीक्षा...' : '⏳ Waiting for donor responses...')
+                  }
+                </p>
+              </div>
+            )}
+
             <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-ink-100 pb-3">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-ink-800 flex items-center gap-2">
@@ -430,33 +465,32 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
               </div>
 
               {matches.length === 0 ? (
-                <div className="text-center py-8 px-4 rounded-2xl bg-ink-50/70 border border-ink-100">
-                  <AlertTriangle className="w-8 h-8 text-blood-500 mx-auto mb-2" />
-                  <p className="text-xs font-bold text-ink-800">No proximity matches yet</p>
-                  <p className="text-xs text-ink-500 mt-1.5 leading-relaxed">
-                    Try registering a volunteer donor with compatible blood type and pincode {request.hospital_pincode}!
-                  </p>
-                </div>
+                <RequestProgress request={request} matches={matches} isHi={isHi} />
               ) : (
                 <div className="space-y-3">
-                  {matches.map((match) => {
-                    const donor = donors.find(d => d.id === match.donor_id);
+                  {matches.map((match, idx) => {
+                    // Donor info is inlined in match by the backend safe-projection (S-1 fix)
                     const isApproved = match.donor_response === 'approved';
                     const isDeclined = match.donor_response === 'declined';
                     const isPending = match.donor_response === 'pending';
 
                     return (
-                      <div key={match.id} className={`p-4 rounded-2xl border transition-all ${
+                      <div key={match.matchToken || idx} className={`p-4 rounded-2xl border transition-all ${
                         isApproved ? 'bg-emerald-50/40 border-emerald-200 shadow-sm' : 
                         isDeclined ? 'bg-ink-50/40 border-ink-200 opacity-60' : 'bg-white border-ink-200'
                       }`}>
                         <div className="flex justify-between items-start gap-2">
                           <div>
-                            <span className="text-[10px] font-semibold text-ink-400 uppercase">Rank #{match.match_rank}</span>
+                            <span className="text-[10px] font-semibold text-ink-400 uppercase">
+                              {match.unit_slot ? `Unit #${match.unit_slot}` : `Rank #${match.match_rank}`}
+                            </span>
                             <h4 className="font-bold text-sm text-ink-900 mt-0.5">
-                              {isApproved ? donor?.full_name : `Volunteer Donor (${donor?.blood_type})`}
+                              {isApproved && match.donor_name ? match.donor_name : `Volunteer Donor (${match.blood_type})`}
                             </h4>
-                            <p className="text-xs text-ink-500 font-medium mt-0.5">{donor?.area}, {donor?.city}</p>
+                            <p className="text-xs text-ink-500 font-medium mt-0.5">
+                              {match.area}, {match.city}
+                              {match.distance_km ? ` · ${Number(match.distance_km).toFixed(1)} km` : ''}
+                            </p>
                           </div>
                           
                           <span className={`rounded-full px-2.5 py-0.5 font-semibold text-[10px] uppercase ${
@@ -467,20 +501,20 @@ export default function RequestTracking({ initialCode = '', onStateChange, role 
                           </span>
                         </div>
 
-                        {isApproved ? (
+                        {isApproved && match.donor_phone ? (
                           <div className="mt-3 pt-3 border-t border-emerald-200/60 space-y-2 text-xs">
                             <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
                               <ShieldCheck className="w-3.5 h-3.5" /> Consent granted! Direct Contact:
                             </p>
                             <div className="grid grid-cols-2 gap-2">
                               <a
-                                href={`tel:${donor?.phone}`}
+                                href={`tel:${match.donor_phone}`}
                                 className="p-2 rounded-xl bg-white hover:bg-emerald-50 text-ink-800 border border-emerald-200 flex items-center justify-center gap-1.5 font-semibold text-xs transition-colors"
                               >
                                 <Phone className="w-3.5 h-3.5 text-emerald-600" /> Call
                               </a>
                               <a
-                                href={`https://wa.me/${donor?.whatsapp_number?.replace(/\D/g, '')}`}
+                                href={`https://wa.me/${String(match.donor_phone).replace(/\D/g, '')}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1.5 font-semibold text-xs transition-colors shadow-sm"

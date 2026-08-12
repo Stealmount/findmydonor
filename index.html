@@ -19,7 +19,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="theme-color" content="#e02545" />
-    <script type="application/ld+json">
+    <script type="application/ld+json" nonce="__CSP_NONCE__">
     {
       "@context": "https://schema.org",
       "@type": "MedicalBusiness",
@@ -35,7 +35,7 @@
       "medicalSpecialty": "BloodBanking"
     }
     </script>
-    <script>
+    <script nonce="__CSP_NONCE__">
       (function() {
         try {
           const originalFetch = window.fetch;
@@ -61,7 +61,7 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
+    <script nonce="__CSP_NONCE__">
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(registrations => {
           for (let reg of registrations) {

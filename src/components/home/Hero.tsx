@@ -131,7 +131,7 @@ export function Hero({ onNavigate }: HeroProps) {
           </div>
         </div>
 
-        {/* Logos strip */}
+        {/* Community strapline */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -141,23 +141,9 @@ export function Hero({ onNavigate }: HeroProps) {
         >
           <p className="text-center text-[12px] font-medium uppercase tracking-[0.18em] text-ink-400">
             {useLanguage().language === 'HI'
-              ? 'समुदाय नेटवर्क, अस्पतालों और सत्यापित रक्तदाताओं द्वारा विश्वसनीय'
-              : 'Trusted by community networks, hospitals, and verified voluntary donors'}
+              ? 'स्वास्थ्य सेवा समुदाय के साथ साझेदारियाँ बनाना'
+              : 'Building partnerships within the healthcare community'}
           </p>
-          <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 items-center gap-x-8 gap-y-6">
-            {["Apollo", "Medanta", "RedCross+", "Lifeline", "AIIMS", "Fortis"].map(
-              (n) => (
-                <div
-                  key={n}
-                  className="flex items-center justify-center text-ink-400/80 hover:text-ink-700 transition"
-                >
-                  <span className="text-[15px] font-semibold tracking-tight">
-                    {n}
-                  </span>
-                </div>
-              )
-            )}
-          </div>
         </motion.div>
       </div>
     </section>
@@ -236,8 +222,8 @@ function HeroCard({
               <span className="w-2 h-2 rounded-full bg-blood-600 inline-block" />
               {isHi ? 'अपना / आवश्यक रक्त समूह चुनें:' : 'Select Blood Group To Check:'}
             </span>
-            <span className="text-[10px] sm:text-xs font-bold text-blood-700 font-sans tracking-wide bg-blood-100/80 px-2 py-0.5 rounded-md">
-              {isHi ? 'चिकित्सकीय रूप से सत्यापित' : 'FindMyDonor™ Verified'}
+            <span className="text-[10px] sm:text-xs font-bold text-ink-600 font-sans tracking-wide bg-ink-100/80 px-2 py-0.5 rounded-md">
+              {isHi ? 'संदर्भ गाइड' : 'Reference Guide'}
             </span>
           </div>
 
@@ -417,26 +403,7 @@ function HeroCard({
           </motion.div>
         </AnimatePresence>
 
-        {/* Authentic Clinical Photography Banner (100% Real Unsplash Photo) */}
-        <div className="mt-4 overflow-hidden rounded-2xl border border-ink-200/80 relative group">
-          <img
-            src="https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=800&q=80"
-            alt="Sterile Clinical Blood Laboratory and Testing"
-            className="h-36 w-full object-cover group-hover:scale-105 transition-transform duration-700"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent flex items-end p-3.5">
-            <div className="text-white">
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-blood-600/95 px-2 py-0.5 rounded-full">
-                {isHi ? 'वास्तविक चिकित्सा मानक' : 'Real Clinical Standards'}
-              </span>
-              <p className="text-[12.5px] font-semibold mt-1.5">
-                {isHi
-                  ? 'स्टरिलाइज्ड प्रयोगशाला रक्त प्रसंस्करण और सत्यापन'
-                  : 'Sterile Laboratory Blood Processing & Verification'}
-              </p>
-            </div>
-          </div>
-        </div>
+
       </div>
 
       {/* Floating stat */}
