@@ -263,6 +263,8 @@ export default function SettingsPanel(props: SettingsPanelProps) {
   );
 }
 
+import { useFocusTrap } from '../../hooks/useFocusTrap';
+
 /** Complete-profile modal — blood group, weight, pincode, area, city, consent. */
 export function CompleteProfileModal(props: {
   open: boolean;
@@ -284,10 +286,17 @@ export function CompleteProfileModal(props: {
   onHealthDeclarationChange: (v: boolean) => void;
 }) {
   const isHi = props.isHi;
+  const trapRef = useFocusTrap<HTMLDivElement>(props.open);
   if (!props.open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/70 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      ref={trapRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={isHi ? 'प्रोफ़ाइल पूरी करें' : 'Complete Profile'}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/70 backdrop-blur-md animate-in fade-in duration-200"
+    >
       <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white border border-ink-200 shadow-premium-lg p-6 sm:p-8 space-y-6 relative text-ink-900">
         <button
           onClick={props.onClose}

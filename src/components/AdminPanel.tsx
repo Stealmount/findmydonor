@@ -128,6 +128,9 @@ export default function AdminPanel() {
       {p.activeTab === 'notifications' && (
         <Notifications
           notifications={p.notifications}
+          loading={p.loading}
+          error={p.dashboardError}
+          onRetry={p.loadAdminData}
           isHi={isHi}
           sosCity={p.sosCity} sosBloodType={p.sosBloodType} sosMessage={p.sosMessage}
           sosSending={p.sosSending} sosStatus={p.sosStatus}

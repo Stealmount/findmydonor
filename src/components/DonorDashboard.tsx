@@ -29,6 +29,8 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
   const [dashboardTab, setDashboardTab] = useState<'requests' | 'history'>('requests');
   const [donationLogs, setDonationLogs] = useState<DonationLog[]>([]);
   const [loadingMatchId, setLoadingMatchId] = useState<string | null>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -98,6 +100,8 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
 
   const loadDashboardData = async () => {
     if (!currentUser) return;
+    setLoadingDashboard(true);
+    setDashboardError(null);
     try {
       const dashboard = await authenticatedApi<{
         matches: Match[]; requests: BloodRequest[]; donationLogs?: DonationLog[];
@@ -139,6 +143,9 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
       setLocationSearch(currentUser.area ? `${currentUser.area} (${currentUser.pincode})` : (currentUser.pincode || ''));
     } catch (err) {
       console.error(err);
+      setDashboardError(isHi ? 'आपका डेटा लोड नहीं हो सका। कृपया पुनः प्रयास करें।' : 'Could not load your data. Please try again.');
+    } finally {
+      setLoadingDashboard(false);
     }
   };
 
@@ -306,7 +313,22 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
 
             {/* Tab content panel */}
             <div className="p-5 sm:p-7 space-y-6">
-              {dashboardTab === 'requests' ? (
+              {dashboardError ? (
+                <div className="text-center py-12 px-4 rounded-2xl bg-black/20 ring-1 ring-white/10 backdrop-blur-sm">
+                  <p className="text-[13px] font-semibold text-white">{dashboardError}</p>
+                  <button
+                    onClick={loadDashboardData}
+                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/20 ring-1 ring-white/20 cursor-pointer"
+                  >
+                    {isHi ? 'फिर कोशिश करें' : 'Try again'}
+                  </button>
+                </div>
+              ) : loadingDashboard && matches.length === 0 && donationLogs.length === 0 ? (
+                <div className="text-center py-12 px-4 rounded-2xl bg-white/5 ring-1 ring-white/10 backdrop-blur-sm">
+                  <span className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block"></span>
+                  <p className="text-xs text-white/80 mt-3 font-semibold">{isHi ? 'सिंक हो रहा है...' : 'Syncing Data...'}</p>
+                </div>
+              ) : dashboardTab === 'requests' ? (
                 <MatchList
                   matches={matches}
                   requests={requests}

@@ -2,6 +2,7 @@ import React from 'react';
 import { HelpCircle, Plus, Eye, EyeOff } from 'lucide-react';
 import { FaqEntry } from '../../AdminPanel/useAdminPanel';
 import { EmptyState, StatusPill } from '../widgets/Shared';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 interface FaqProps {
   faqs: FaqEntry[];
@@ -17,6 +18,7 @@ export default function Faq({ faqs, loading, isHi, onSaveFaq, onToggleActive }: 
   const [editing, setEditing] = React.useState<(Omit<FaqEntry, 'id' | 'created_at'> & { id?: string }) | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [showHidden, setShowHidden] = React.useState(false);
+  const editingTrapRef = useFocusTrap<HTMLDivElement>(!!editing);
 
   const visible = showHidden ? faqs : faqs.filter(f => f.active);
 
@@ -88,7 +90,13 @@ export default function Faq({ faqs, loading, isHi, onSaveFaq, onToggleActive }: 
 
       {/* Editor */}
       {editing && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+        <div
+          ref={editingTrapRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={isHi ? 'FAQ संपादित करें' : 'Edit FAQ'}
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
+        >
           <div className="w-full max-w-lg rounded-2xl border border-ink-700 bg-ink-900 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-[15px] font-bold text-white">{isHi ? 'FAQ संपादित करें' : 'Edit FAQ'}</h3>
             <div className="mt-4 space-y-3">

@@ -258,9 +258,11 @@ export default function useAdminPanel() {
   };
 
   const [loading, setLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   const loadAdminData = async () => {
     setLoading(true);
+    setDashboardError(null);
     try {
       const data = await authenticatedApi<{
         users: User[];
@@ -280,8 +282,9 @@ export default function useAdminPanel() {
         .then(r => r.json())
         .then(tData => setTelemetry(tData.telemetry || null))
         .catch(() => {});
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setDashboardError(err?.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -501,6 +504,6 @@ export default function useAdminPanel() {
     // actions
     handleTriggerSweep, handleForceCooldown, handleLiftCooldown, handleExportCSV,
     // data
-    loadAdminData, donationLogs, loading,
+    loadAdminData, donationLogs, loading, dashboardError,
   };
 }

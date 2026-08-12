@@ -5,6 +5,9 @@ import { StatusPill, EmptyState, downloadCSV } from '../widgets/Shared';
 
 interface NotificationsProps {
   notifications: NotificationLog[];
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   isHi: boolean;
   // SOS broadcast form
   sosCity: string;
@@ -21,7 +24,7 @@ interface NotificationsProps {
 const BLOOD = ['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export default function Notifications({
-  notifications, isHi,
+  notifications, loading, error, onRetry, isHi,
   sosCity, sosBloodType, sosMessage, sosSending, sosStatus,
   onSosCityChange, onSosBloodTypeChange, onSosMessageChange, onSendSos,
 }: NotificationsProps) {
@@ -93,7 +96,19 @@ export default function Notifications({
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
         </div>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="p-12 flex flex-col items-center justify-center">
+            <span className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block mb-3"></span>
+            <span className="text-xs font-semibold text-ink-500">{isHi ? 'सिंक हो रहा है...' : 'Syncing...'}</span>
+          </div>
+        ) : error ? (
+          <div className="p-12 text-center">
+            <p className="text-[13px] font-semibold text-white mb-4">{error}</p>
+            {onRetry && (
+              <button onClick={onRetry} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-semibold text-white transition border border-white/10 cursor-pointer">{isHi ? 'फिर कोशिश करें' : 'Try again'}</button>
+            )}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="p-8">
             <EmptyState title={isHi ? 'कोई नोटिफिकेशन नहीं' : 'No notifications'} hint={isHi ? 'फिल्टर बदलें' : 'Try adjusting filters'} isHi={isHi} />
           </div>

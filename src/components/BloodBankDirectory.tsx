@@ -464,6 +464,7 @@ export function BloodBankDirectory({ onNavigate }: BloodBankDirectoryProps) {
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                 title="Previous Page"
+                aria-label="Previous Page"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -476,6 +477,7 @@ export function BloodBankDirectory({ onNavigate }: BloodBankDirectoryProps) {
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                 title="Next Page"
+                aria-label="Next Page"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -503,6 +505,15 @@ export function BloodBankDirectory({ onNavigate }: BloodBankDirectoryProps) {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0 }}
                           onClick={() => setSelectedBankId(bank.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedBankId(bank.id);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-pressed={isSelected}
                           className={`bg-white border rounded-2xl p-5 cursor-pointer transition-all ${
                             isSelected
                               ? 'border-blood-500 ring-2 ring-blood-100 shadow-md'

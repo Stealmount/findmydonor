@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { useLanguage } from '../../lib/LanguageContext';
 import { authenticatedApi } from '../../lib/api';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface DeleteAccountModalProps {
   open: boolean;
@@ -12,6 +13,7 @@ interface DeleteAccountModalProps {
 /** Type-to-confirm modal for permanent account deletion. */
 export default function DeleteAccountModal({ open, onClose, onDeleted }: DeleteAccountModalProps) {
   const { t, language } = useLanguage();
+  const trapRef = useFocusTrap<HTMLDivElement>(open);
   const isHi = language === 'HI';
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,7 @@ export default function DeleteAccountModal({ open, onClose, onDeleted }: DeleteA
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t.account.deleteTitle}>
+    <div ref={trapRef} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t.account.deleteTitle}>
       <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-ink-200 p-6 sm:p-7 animate-in fade-in zoom-in-95">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">

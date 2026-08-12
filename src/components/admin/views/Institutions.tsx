@@ -2,6 +2,7 @@ import React from 'react';
 import { Search, Building2, CheckCircle2, X } from 'lucide-react';
 import { Institution } from '../../../types';
 import { StatusPill, EmptyState, EntityDrawer, Badge } from '../widgets/Shared';
+import { useFocusTrap } from '../../../hooks/useFocusTrap';
 
 interface InstitutionsProps {
   institutions: any[];
@@ -25,6 +26,7 @@ export default function Institutions({
   const [detail, setDetail] = React.useState<any | null>(null);
   const [rejecting, setRejecting] = React.useState<any | null>(null);
   const [rejectReason, setRejectReason] = React.useState('');
+  const rejectTrapRef = useFocusTrap<HTMLDivElement>(!!rejecting);
 
   const filtered = React.useMemo(() => {
     let list = institutions;
@@ -143,7 +145,13 @@ export default function Institutions({
 
       {/* Reject modal */}
       {rejecting && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+        <div
+          ref={rejectTrapRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={isHi ? 'संस्थान अस्वीकार करें' : 'Reject Institution'}
+          className="fixed inset-0 z-[90] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md rounded-2xl border border-ink-700 bg-ink-900 p-6 shadow-2xl">
             <h3 className="text-[15px] font-bold text-white">{isHi ? 'संस्थान अस्वीकार करें' : 'Reject Institution'}</h3>
             <p className="text-[12px] text-ink-400 mt-1.5">{rejecting.org_name}</p>
