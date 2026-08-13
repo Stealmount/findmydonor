@@ -1,32 +1,11 @@
-version: '3.8'
-
 services:
-  waha:
-    image: devlikeapro/waha:latest
+  redis:
+    image: redis:7-alpine
     ports:
-      - "3001:3001"
+      - "6379:6379"
     volumes:
-      - waha_sessions:/app/.sessions
-    environment:
-      - WAHA_API_KEY=${WAHA_API_KEY:?Set WAHA_API_KEY in .env}
-      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME:-admin}
-      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:?Set WAHA_DASHBOARD_PASSWORD in .env}
-      - WHATSAPP_SWAGGER_USERNAME=${WAHA_DASHBOARD_USERNAME:-admin}
-      - WHATSAPP_SWAGGER_PASSWORD=${WAHA_DASHBOARD_PASSWORD:?Set WAHA_DASHBOARD_PASSWORD in .env}
-      - WHATSAPP_DEFAULT_ENGINE=WEBJS
-      - PORT=3001
-      - WHATSAPP_API_PORT=3001
-      - WAHA_WEBHOOKS_URLS=http://host.docker.internal:5000/api/wa/webhook
-      - WAHA_WEBHOOKS_EVENTS=message
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - bloodconnect-net
+      - redis-data:/data
     restart: unless-stopped
 
 volumes:
-  waha_sessions:
-
-networks:
-  bloodconnect-net:
-    driver: bridge
+  redis-data:

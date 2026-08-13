@@ -61,3 +61,28 @@ npm run test:matching
 # 4. Build production bundle
 npm run build
 ```
+
+### 🐳 Docker (optional — local Redis)
+
+The backend uses Redis for caching and worker locks. To run a local Redis instance:
+
+```bash
+docker-compose up -d
+```
+
+Then start the app normally:
+
+```bash
+npm run dev
+```
+
+To stop Redis: `docker-compose down`. (The backend also falls back gracefully when Redis is unavailable.)
+
+---
+
+## 🛡️ Reliability & Monitoring
+
+- **CI**: [.github/workflows/ci.yml](.github/workflows/ci.yml) — tsc (root + backend) + full test suite on push/PR to `main`.
+- **Uptime monitoring**: see [docs/monitoring-setup.md](docs/monitoring-setup.md) (UptimeRobot setup for `/api/health` and the site).
+- **Disaster recovery**: see [docs/disaster-recovery.md](docs/disaster-recovery.md) (Supabase backups, pg_dump, local data backups, VPS rebuild, DNS failover).
+- **Structured logging**: `backend/helpers/logger.ts` — JSON-lines logger with `requestId` (proof of concept, used in the background worker).
