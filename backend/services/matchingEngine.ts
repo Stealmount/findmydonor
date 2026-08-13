@@ -232,19 +232,29 @@ export async function findEligibleDonorsFromDB(
       }
     }
 
-    let query = supabase
-      .from('profiles')
-      .select('id, phone, whatsapp_phone, email, full_name, trust_report_count, donor_profiles(blood_group, pincode, is_available, emergency_only, cooldown_until)')
-      .eq('donor_profiles.is_available', true);
+    // Query donor_profiles as the primary table so the LIMIT applies to
+    // already-filtered rows (is_available + blood_group + pincode).
+    // Querying profiles with embedded donor_profiles filters via PostgREST
+    // applies LIMIT to profiles BEFORE the embedded filter, potentially
+    // excluding eligible donors beyond position 200 in the profiles table.
+    let dpQuery = supabase
+      .from('donor_profiles')
+      .select('blood_group, pincode, is_available, emergency_only, cooldown_until, profiles(id, phone, whatsapp_phone, email, full_name, trust_report_count)')
+      .eq('is_available', true);
 
     if (compatibleTypes.length > 0) {
-      query = query.in('donor_profiles.blood_group', compatibleTypes);
+      dpQuery = dpQuery.in('blood_group', compatibleTypes);
     }
     if (nearbyPincodes.size > 0) {
-      query = query.in('donor_profiles.pincode', Array.from(nearbyPincodes));
+      dpQuery = dpQuery.in('pincode', Array.from(nearbyPincodes));
     }
 
-    const { data, error } = await query.limit(200);
+    const { data: rawData, error } = await dpQuery.limit(200);
+    // Reshape to match the profiles-with-donor_profiles structure mapProfile expects
+    const data = rawData?.map((dp: any) => ({
+      ...(dp.profiles || {}),
+      donor_profiles: [{ blood_group: dp.blood_group, pincode: dp.pincode, is_available: dp.is_available, emergency_only: dp.emergency_only, cooldown_until: dp.cooldown_until }],
+    }));
     if (error) throw error;
     if (!data || data.length === 0) return [];
 

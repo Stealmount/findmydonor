@@ -170,6 +170,9 @@ router.post("/api/matches/:matchId/notification-sent", wrap(async (req, res) => 
   if (!authUser) return res.status(401).json({ error: "Authentication required" });
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return res.status(404).json({ error: "Match not found" });
+  // Ownership: only the assigned donor or an admin may mark notification sent
+  const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
+  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     notification_sent_at: nowISO(),
@@ -209,6 +212,9 @@ router.post("/api/matches/:matchId/reminder-sent", wrap(async (req, res) => {
   if (!authUser) return res.status(401).json({ error: "Authentication required" });
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return res.status(404).json({ error: "Match not found" });
+  // Ownership: only the assigned donor or an admin may mark reminder sent
+  const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
+  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     reminder_sent_at: req.body?.sentAt || nowISO(),
@@ -222,6 +228,9 @@ router.post("/api/matches/:matchId/timeout", wrap(async (req, res) => {
   if (!authUser) return res.status(401).json({ error: "Authentication required" });
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return res.status(404).json({ error: "Match not found" });
+  // Ownership: only the assigned donor or an admin may timeout a match
+  const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
+  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     donor_response: "timed_out",
@@ -232,10 +241,17 @@ router.post("/api/matches/:matchId/timeout", wrap(async (req, res) => {
 
 // ─── POST /api/matches/:matchId/confirm-donation ─────────────────────────────
 router.post("/api/matches/:matchId/confirm-donation", wrap(async (req, res) => {
+  // Auth guard: this endpoint permanently changes donor status (90-day cooldown).
+  const authUser = await getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Authentication required" });
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return res.status(404).json({ error: "Match not found" });
   const donor = await getLocalOrFirestoreDoc<User>("users", match.donor_id);
   if (!donor) return res.status(404).json({ error: "Donor not found" });
+
+  // Ownership: only the assigned donor or an admin may confirm their own donation
+  const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
+  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
 
   const confirmedAt  = req.body?.confirmedAt || nowISO();
   const donationDate = confirmedAt.split("T")[0];
@@ -300,6 +316,8 @@ router.post("/api/matches/:matchId/donation-not-completed", wrap(async (req, res
 
 // ─── POST /api/requests/:requestId/next-donor ────────────────────────────────
 router.post("/api/requests/:requestId/next-donor", wrap(async (req, res) => {
+  const authUser = await getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Authentication required" });
   const request = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", req.params.requestId);
   if (!request) return res.status(404).json({ error: "Request not found" });
   const result = await createNextDonorMatch(request, req.body?.declinedMatchId || req.body?.timedOutMatchId);

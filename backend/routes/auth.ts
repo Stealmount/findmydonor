@@ -180,17 +180,13 @@ router.post("/auth/phone-signup", rateLimitMiddleware(10, 60_000), validate(phon
   });
 
   if (authError) {
-    console.warn("[Auth] Phone signup createUser notice:", authError.message);
     if (authError.message?.includes("already been registered")) {
-      const { data: { users: allUsers } } = await supabase.auth.admin.listUsers();
-      const existingAuthUser = (allUsers as any[])?.find((u: any) => u.email === syntheticEmail);
-      if (existingAuthUser) {
-        authUserId = existingAuthUser.id;
-        await supabase.auth.admin.updateUserById(authUserId, { password: String(password) }).catch(() => {});
-      } else {
-        return res.status(409).json({ error: "This WhatsApp number is already registered. Sign in instead." });
-      }
+      // Account exists — never mutate the existing password. Return 409 so the
+      // client redirects to sign-in. An attacker knowing a phone number must NOT
+      // be able to overwrite another user's credential.
+      return res.status(409).json({ error: "This WhatsApp number is already registered. Sign in instead." });
     } else {
+      console.error("[Auth] Phone signup createUser failed:", authError.message);
       return res.status(500).json({ error: "Unable to create account. Please try again." });
     }
   } else {
@@ -334,15 +330,12 @@ router.post("/auth/email-signup", rateLimitMiddleware(5, 60_000), validate(email
 
   if (authError) {
     if (authError.message?.includes("already been registered")) {
-      const { data: { users: allUsers } } = await supabase.auth.admin.listUsers();
-      const existingAuthUser = (allUsers as any[])?.find((u: any) => u.email === normalizedEmail);
-      if (existingAuthUser) {
-        authUserId = existingAuthUser.id;
-        await supabase.auth.admin.updateUserById(authUserId, { password: String(password) }).catch(() => {});
-      } else {
-        return res.status(409).json({ error: "This email address is already registered. Sign in instead." });
-      }
+      // Account exists — never mutate the existing password. Return 409 so the
+      // client redirects to sign-in. An attacker knowing an email must NOT be
+      // able to overwrite another user's credential.
+      return res.status(409).json({ error: "This email address is already registered. Sign in instead." });
     } else {
+      console.error("[Auth] Email signup createUser failed:", authError.message);
       return res.status(500).json({ error: authError.message || "Unable to create account." });
     }
   } else {
@@ -391,15 +384,10 @@ router.post("/auth/email-signup", rateLimitMiddleware(5, 60_000), validate(email
     password: String(password),
   });
 
-  if (signInData?.session?.access_token && profile?.id) {
-    try {
-      await supabase.from("auth_profile_links").upsert({
-        auth_user_id: signInData.session.access_token,
-        profile_id: profile.id,
-        provider: "email",
-      }, { onConflict: "auth_user_id" });
-    } catch { /* ignore duplicate */ }
-  }
+  // NOTE: The auth_profile_links upsert above (authUserId → profile.id) is the
+  // correct and only upsert needed. A previous version incorrectly used
+  // signInData.session.access_token (a JWT string) as auth_user_id here,
+  // creating a corrupt link row. That has been removed.
 
   return res.status(201).json({
     profile,
