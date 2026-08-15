@@ -5,6 +5,7 @@ import {
   getCollection as getLocalOrFirestoreCollection,
 } from "../src/lib/serverDb";
 import { getAuthenticatedUser } from "../middleware/auth";
+import { sendErrorResponse, UnauthorizedError } from "../helpers/errors";
 import type { BloodRequest, Match, User } from "../src/types";
 
 const router = Router();
@@ -23,7 +24,7 @@ const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, 
 router.get("/api/hospital/dashboard", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) {
-    return res.status(401).json({ error: "Unauthorized: Invalid or missing authentication token." });
+    return sendErrorResponse(res, new UnauthorizedError("Unauthorized: Invalid or missing authentication token."));
   }
 
   const [allReqs, allMatches, allDonors] = await Promise.all([

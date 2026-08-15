@@ -39,12 +39,14 @@ async function checkRateLimit(key: string, max: number, windowMs: number): Promi
   return memRateLimit(key, max, windowMs);
 }
 
+import { sendErrorResponse, RateLimitError } from "../helpers/errors";
+
 function rateLimitMiddleware(max: number, windowMs = 60_000) {
   return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const ip = req.ip || "unknown";
     const key = `rl:${req.method}:${req.baseUrl || ""}${req.path}:${ip}`;
     if (!(await checkRateLimit(key, max, windowMs))) {
-      return res.status(429).json({ error: "Too many requests. Please slow down." });
+      return sendErrorResponse(res, new RateLimitError("Too many requests. Please try again later."));
     }
     next();
   };

@@ -6,8 +6,10 @@ import {
   saveDoc as saveLocalOrFirestoreDoc,
 } from "../src/lib/serverDb";
 import type { BloodRequest, DonationLog, Match, NotificationLog, User } from "../src/types";
+import { sendErrorResponse } from "../helpers/errors";
 
 const router = Router();
+
 
 const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, res, next) => {
   try {
@@ -99,7 +101,7 @@ router.get("/api/blood-banks", wrap(async (req, res) => {
       blood_banks: paginatedItems
     });
   } catch (e: any) {
-    return res.status(500).json({ error: "Failed to fetch blood banks directory: " + e.message });
+    return sendErrorResponse(res, e, "Failed to fetch blood banks directory.");
   }
 }));
 
@@ -164,7 +166,7 @@ router.get("/api/camps", wrap(async (req, res) => {
       camps: paginatedItems
     });
   } catch (e: any) {
-    return res.status(500).json({ error: "Failed to fetch donation camps: " + e.message });
+    return sendErrorResponse(res, e, "Failed to fetch donation camps.");
   }
 }));
 

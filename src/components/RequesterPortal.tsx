@@ -4,6 +4,7 @@ import { Requester, BloodRequest, Match, User } from '../types';
 import { authenticatedApi } from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
 import { StateMessage } from './ui/StateMessage';
+import ContactInfoBanner from './DonorDashboard/ContactInfoBanner';
 import { 
   Heart, 
   MapPin, 
@@ -60,6 +61,9 @@ export default function RequesterPortal({
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  // Contact info state — phone may be null for Google/email signups without phone
+  const [contactPhone, setContactPhone] = useState<string | null>((currentRequester as any)?.phone || null);
+  const [contactWaPhone, setContactWaPhone] = useState<string | null>((currentRequester as any)?.whatsapp_number || null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -275,7 +279,17 @@ export default function RequesterPortal({
 
   return (
     <div id="requester-dashboard" className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
-      
+      {/* Contact info banner — shown when phone/WhatsApp is missing */}
+      <ContactInfoBanner
+        phone={contactPhone}
+        whatsappPhone={contactWaPhone}
+        onSaved={(phone, waPhone) => {
+          setContactPhone(phone);
+          setContactWaPhone(waPhone);
+          showToast('Contact info saved! WhatsApp notifications are now enabled.', 'success');
+        }}
+      />
+
       {/* Sleek Glass Overview Header */}
       <div className="rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 shadow-premium-lg p-6 sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex items-center gap-4">

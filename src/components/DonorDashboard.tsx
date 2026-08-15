@@ -8,6 +8,7 @@ import DonationHistory from './DonorDashboard/DonationHistory';
 import SettingsPanel, { CompleteProfileModal } from './DonorDashboard/SettingsPanel';
 import TabBar from './DonorDashboard/TabBar';
 import LoginView from './DonorDashboard/LoginView';
+import ContactInfoBanner from './DonorDashboard/ContactInfoBanner';
 import { DELHI_PINCODES, DelhiPincode } from '../data/pincodes';
 
 interface DonorDashboardProps {
@@ -32,6 +33,10 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  // Contact info state — tracks phone/whatsapp for the banner
+  // currentUser.phone may be null for Google/email users who skipped phone at signup
+  const [contactPhone, setContactPhone] = useState<string | null>((currentUser as any)?.phone || null);
+  const [contactWaPhone, setContactWaPhone] = useState<string | null>((currentUser as any)?.whatsapp_number || null);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -290,6 +295,16 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
 
   return (
     <div id="donor-dashboard" className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
+      {/* Contact info banner — shown when phone/WhatsApp is missing */}
+      <ContactInfoBanner
+        phone={contactPhone}
+        whatsappPhone={contactWaPhone}
+        onSaved={(phone, waPhone) => {
+          setContactPhone(phone);
+          setContactWaPhone(waPhone);
+          showToast('Contact info saved! WhatsApp notifications are now enabled.', 'success');
+        }}
+      />
       <ProfileCard
         user={currentUser}
         matches={matches}
@@ -379,6 +394,8 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
           onReportDateChange={setReportDate}
           onReportNotesChange={setReportNotes}
           onReportSubmit={handleSelfReportDonation}
+          phone={contactPhone}
+          whatsappPhone={contactWaPhone}
         />
       </div>
 

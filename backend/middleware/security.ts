@@ -15,6 +15,57 @@ export function logWithId(...args: unknown[]) {
   }
 }
 
+export function isOriginAllowed(origin: string, port?: number): boolean {
+  if (!origin) return false;
+  try {
+    const normalizedOrigin = origin.trim().replace(/\/$/, "");
+    const url = new URL(normalizedOrigin);
+    const originHost = url.hostname;
+
+    const envOrigins = (process.env.CORS_ORIGINS || "")
+      .split(",")
+      .map((o) => o.trim().replace(/\/$/, ""))
+      .filter(Boolean);
+
+    const configuredOrigins = new Set([
+      process.env.APP_URL,
+      "https://findmydonor.online",
+      "https://www.findmydonor.online",
+      "http://findmydonor.online",
+      "http://www.findmydonor.online",
+      "https://admin.findmydonor.online",
+      "http://admin.findmydonor.online",
+      "http://localhost:5173",
+      "http://localhost:5000",
+      "http://localhost:6001",
+      "http://localhost:7000",
+      "http://localhost:3000",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:5000",
+      "http://127.0.0.1:6001",
+      "http://127.0.0.1:7000",
+      "http://127.0.0.1:3000",
+      ...(port ? [`http://145.241.154.187:${port}`, `http://localhost:${port}`, `http://127.0.0.1:${port}`] : []),
+      ...envOrigins,
+    ].map((o) => o?.trim().replace(/\/$/, "")).filter((o): o is string => Boolean(o)));
+
+    if (configuredOrigins.has(normalizedOrigin)) {
+      return true;
+    }
+
+    return (
+      originHost === "localhost" ||
+      originHost === "127.0.0.1" ||
+      originHost === "findmydonor.online" ||
+      originHost === "www.findmydonor.online" ||
+      originHost === "admin.findmydonor.online" ||
+      originHost === "145.241.154.187"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function applySecurityMiddleware(app: express.Express, port: number) {
   // Feature 6: x-request-id middleware — wraps every handler in AsyncLocalStorage context
   app.use((req, _res, next) => {
@@ -49,34 +100,21 @@ export function applySecurityMiddleware(app: express.Express, port: number) {
     if (!req.path.startsWith("/api")) return next();
     const origin = req.header("origin")?.replace(/\/$/, "");
     if (origin) {
-      try {
-        const originHost = new URL(origin).hostname;
-        const reqHost = (req.header("x-forwarded-host") || req.header("host") || "").split(":")[0];
-        const configuredOrigins = new Set([
-          process.env.APP_URL,
-          "https://findmydonor.online",
-          "https://www.findmydonor.online",
-          `http://145.241.154.187:${port}`,
-          "http://localhost:5173",
-          ...(process.env.CORS_ORIGINS || "").split(","),
-        ].map((o) => o?.trim().replace(/\/$/, "")).filter((o): o is string => Boolean(o)));
+      const reqHost = (req.header("x-forwarded-host") || req.header("host") || "").split(":")[0];
+      const originHost = (() => {
+        try { return new URL(origin).hostname; } catch { return ""; }
+      })();
 
-        const isAllowed = configuredOrigins.has(origin) ||
-                          originHost === reqHost ||
-                          originHost === "localhost" ||
-                          originHost === "145.241.154.187" ||
-                          originHost === "findmydonor.online" ||
-                          originHost === "www.findmydonor.online";
-        if (!isAllowed) {
-          return res.status(403).json({ error: "Origin not allowed." });
-        }
-      } catch {
-        return res.status(403).json({ error: "Invalid origin." });
+      const isAllowed = isOriginAllowed(origin, port) || (originHost !== "" && originHost === reqHost);
+
+      if (!isAllowed) {
+        return res.status(403).json({ error: "Origin not allowed." });
       }
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
       res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Requested-With,X-Request-ID");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
     }
     if (req.method === "OPTIONS") return res.sendStatus(204);
     next();

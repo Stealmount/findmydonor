@@ -14,6 +14,8 @@ import { validate } from "../validation/index";
 import { institutionRegisterSchema } from "../validation/account";
 import { normalizePhone, isValidIndianPhone } from "../helpers/phone";
 import { nowISO } from "../helpers/time";
+import { sendErrorResponse, UnauthorizedError, NotFoundError, ValidationError, AppError } from "../helpers/errors";
+
 
 const router = Router();
 
@@ -35,12 +37,11 @@ function isRev3Profile(p: any): boolean {
 }
 
 // ─── GET /api/institutions/me — my institution(s) + verification status ──────
-// Returns the linked institution(s) for the current profile, or null.
 router.get("/institutions/me", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const linked = await getLinkedProfile(authUser.id);
-  if (!linked) return res.status(404).json({ error: "Profile not found." });
+  if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
 
   try {
     const supabase = getServerSupabase();
@@ -61,39 +62,34 @@ router.get("/institutions/me", wrap(async (req, res) => {
 
     return res.json({ institutions, count: institutions.length });
   } catch (error) {
-    console.error("[Institutions] /me failed:", error);
-    return res.status(500).json({ error: "Failed to load your institution." });
+    return sendErrorResponse(res, error, "Failed to load your institution.");
   }
 }));
 
 // ─── POST /api/institutions/register — submit institution for approval ───────
-// Creates (or re-submits) an institutions row at 'pending' + links it to the
-// current profile. Never auto-activates. One institution per phone (DB unique).
 router.post(
   "/institutions/register",
   rateLimitMiddleware(5, 60_000),
   validate(institutionRegisterSchema),
   wrap(async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+    if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
     const linked = await getLinkedProfile(authUser.id);
-    if (!linked) return res.status(404).json({ error: "Profile not found." });
+    if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
     if (!isRev3Profile(linked.profile)) {
-      return res.status(409).json({ error: "Institution registration is not available for legacy profiles." });
+      return sendErrorResponse(res, new AppError("Institution registration is not available for legacy profiles.", 409, "LEGACY_PROFILE"));
     }
 
     const body = req.body;
     const normalizedPhone = normalizePhone(String(body.phone || ""));
     if (!isValidIndianPhone(normalizedPhone)) {
-      return res.status(400).json({ error: "Enter a valid Indian phone number (e.g. 91XXXXXXXXXX)." });
+      return sendErrorResponse(res, new ValidationError("Enter a valid Indian phone number (e.g. 91XXXXXXXXXX)."));
     }
 
     const supabase = getServerSupabase();
     const normalizedEmail = String(body.email || "").toLowerCase().trim();
     const profileId = linked.profile.id;
 
-    // Upsert institution keyed on phone (natural OTP dedup key). If the phone
-    // already registered, re-submit resets it to 'pending' for admin review.
     const { data: existing } = await supabase
       .from("institutions")
       .select("*")
@@ -102,7 +98,7 @@ router.post(
 
     let institution = existing;
     if (existing) {
-      const { data: updated } = await supabase
+      const { data: updated, error: updateErr } = await supabase
         .from("institutions")
         .update({
           type: body.type,
@@ -120,10 +116,10 @@ router.post(
         .eq("id", existing.id)
         .select()
         .single();
-      if (!updated) return res.status(500).json({ error: "Failed to update your institution registration." });
+      if (updateErr || !updated) return sendErrorResponse(res, updateErr, "Failed to update your institution registration.");
       institution = updated;
     } else {
-      const { data: created } = await supabase
+      const { data: created, error: createErr } = await supabase
         .from("institutions")
         .insert({
           type: body.type,
@@ -139,11 +135,10 @@ router.post(
         })
         .select()
         .single();
-      if (!created) return res.status(500).json({ error: "Failed to create your institution registration." });
+      if (createErr || !created) return sendErrorResponse(res, createErr, "Failed to create your institution registration.");
       institution = created;
     }
 
-    // Link profile → institution (owner/admin of this institution).
     await supabase
       .from("institution_profile_links")
       .upsert({ profile_id: profileId, institution_id: institution.id, role: "admin" }, { onConflict: "profile_id" });

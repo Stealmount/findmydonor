@@ -15,7 +15,9 @@ import { nowISO } from "../helpers/time";
 import { matchAndNotifyRequest } from "../services/matchingEngine";
 import { validate } from "../validation";
 import { bloodRequestSchema } from "../validation/requests";
+import { sendErrorResponse, UnauthorizedError, NotFoundError, ForbiddenError, ValidationError, AppError, ServiceUnavailableError } from "../helpers/errors";
 import type { BloodRequest, Match, Requester, User } from "../src/types";
+
 
 const router = Router();
 
@@ -223,22 +225,21 @@ router.post("/api/requests", rateLimitMiddleware(10, 60_000), validate(bloodRequ
     }
     return res.status(201).json({ requestId: id, trackingCode: request.tracking_code, status: "broadcasting", matched });
   } catch (err: any) {
-    console.error("[Requests] POST /api/requests failed:", err?.message || err);
     if (err?.name === "SupabaseUnavailableError" || err?.code?.startsWith?.("42") || err?.code === "PGRST116") {
-      return res.status(503).json({ error: "Database is temporarily unavailable. Please try again in a few seconds." });
+      return sendErrorResponse(res, err, "Database is temporarily unavailable. Please try again in a few seconds.", 503, "SERVICE_UNAVAILABLE");
     }
-    return res.status(500).json({ error: "Unexpected server error." });
+    return sendErrorResponse(res, err, "A failure occurred while saving your blood request. Please try again.");
   }
 }));
 
 // ── Promote a draft to a live broadcast (triggers matching engine) ─────────────
 router.post("/api/requests/:id/broadcast", rateLimitMiddleware(10, 60_000), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const request = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", req.params.id);
-  if (!request) return res.status(404).json({ error: "Request not found." });
-  if (request.requester_id !== authUser.id) return res.status(403).json({ error: "Not your request." });
-  if (request.status !== "draft") return res.status(409).json({ error: "Only draft requests can be broadcast." });
+  if (!request) return sendErrorResponse(res, new NotFoundError("Request not found."));
+  if (request.requester_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not your request."));
+  if (request.status !== "draft") return sendErrorResponse(res, new AppError("Only draft requests can be broadcast.", 409, "INVALID_STATUS"));
 
   // Transition to broadcasting before running the engine
   const now = nowISO();
@@ -256,7 +257,6 @@ router.post("/api/requests/:id/broadcast", rateLimitMiddleware(10, 60_000), wrap
 }));
 
 // ─── Public feed of opt-in live requests ──────────────────────────────────────
-// Intentionally sanitized and only contains explicit opt-ins.
 router.get("/api/live-requests", rateLimitMiddleware(60, 60_000), wrap(async (_req, res) => {
   const { data, error } = await getServerSupabase()
     .from("blood_requests")
@@ -265,17 +265,17 @@ router.get("/api/live-requests", rateLimitMiddleware(60, 60_000), wrap(async (_r
     .in("status", ["open", "matching", "partially_matched"])
     .order("created_at", { ascending: false })
     .limit(12);
-  if (error) return res.status(500).json({ error: "Unable to load live requests." });
+  if (error) return sendErrorResponse(res, error, "Unable to load live requests.");
   return res.json({ requests: data || [] });
 }));
 
 // ─── Requester dashboard ───────────────────────────────────────────────────────
 router.get("/api/dashboard/requester", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
 
   const requester = await resolveRequester(authUser);
-  if (!requester) return res.status(404).json({ error: "Requester profile not found." });
+  if (!requester) return sendErrorResponse(res, new NotFoundError("Requester profile not found."));
 
   const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const requests = allRequests.filter(request =>
@@ -298,7 +298,7 @@ router.get("/api/dashboard/requester", wrap(async (req, res) => {
 // ─── Requester's request list ─────────────────────────────────────────────────
 router.get("/api/requester/requests", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   let requesterId = authUser.id;
   let requesterPhone: string | null = null;
   try {

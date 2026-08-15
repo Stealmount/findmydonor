@@ -14,6 +14,8 @@ import {
 import { enqueueMessage } from "./src/lib/messaging";
 import { cacheDel, cacheInvalidatePrefix } from "./src/lib/redisCache";
 import { signAdminToken, isAdminJwt } from "./middleware/jwt";
+import { isOriginAllowed } from "./middleware/security";
+import { sendErrorResponse, NotFoundError, AppError } from "./helpers/errors";
 import type { AuthProfileLink, BloodRequest, DonationLog, DonorProfile, Match, NotificationLog, Profile, Requester, User } from "./src/types";
 
 // Module-scope handle to the Vite dev server created in middleware mode. Tests
@@ -121,36 +123,26 @@ async function writeAudit(entry: {
 async function startAdminServer() {
   const app = express();
   const PORT = Number(process.env.ADMIN_PORT || 6001);
-  const adminOrigins = new Set([
-    "https://findmydonor.online",
-    "http://findmydonor.online",
-    "https://admin.findmydonor.online",
-    "http://admin.findmydonor.online",
-    "http://145.241.154.187:7000",
-    "http://145.241.154.187:6001",
-    "http://localhost:7000",
-    "http://localhost:6001",
-    `http://145.241.154.187:${PORT}`,
-    `http://localhost:${PORT}`,
-  ]);
-
   app.use(express.json({ limit: "100kb" }));
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
     const origin = req.header("origin")?.replace(/\/$/, "");
-    const isAllowedOrigin = !origin || adminOrigins.has(origin) ||
-      origin.includes("145.241.154.187") ||
-      origin.includes("findmydonor.online") ||
-      origin.includes("localhost") ||
-      origin.includes("127.0.0.1");
-
-    if (!isAllowedOrigin) return res.status(403).json({ error: "Origin not allowed." });
     if (origin) {
+      const reqHost = (req.header("x-forwarded-host") || req.header("host") || "").split(":")[0];
+      const originHost = (() => {
+        try { return new URL(origin).hostname; } catch { return ""; }
+      })();
+
+      const isAllowed = isOriginAllowed(origin, PORT) || (originHost !== "" && originHost === reqHost);
+
+      if (!isAllowed) return res.status(403).json({ error: "Origin not allowed." });
+
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Vary", "Origin");
       res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Requested-With,X-Request-ID");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
     }
     if (req.method === "OPTIONS") return res.sendStatus(204);
     next();
@@ -834,6 +826,11 @@ async function startAdminServer() {
     app.use(express.static(distPath));
     app.get("*", (_req, res) => res.sendFile(path.join(distPath, "admin.html")));
   }
+
+  // ─── Global Error Middleware ───────────────────────────────────────────────
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    sendErrorResponse(res, err, "An internal server error occurred in admin service.", 500, "INTERNAL_SERVER_ERROR");
+  });
 
   const server = app.listen(PORT, "0.0.0.0", () => console.log(`[Admin] running on http://localhost:${PORT}`));
   return server;

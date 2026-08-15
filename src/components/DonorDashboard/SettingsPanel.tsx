@@ -1,7 +1,8 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { BloodType, AvailabilityStatus } from '../../types';
 import { DelhiPincode } from '../../data/pincodes';
 import { useLanguage } from '../../lib/LanguageContext';
+import { authenticatedApi } from '../../lib/api';
 import DonorBadges from '../DonorBadges';
 import {
   MapPin,
@@ -48,6 +49,9 @@ interface SettingsPanelProps {
   onReportDateChange: (d: string) => void;
   onReportNotesChange: (n: string) => void;
   onReportSubmit: (e: React.FormEvent) => void;
+  // Contact info (phone / WhatsApp) — for the persistent settings section
+  phone?: string | null;
+  whatsappPhone?: string | null;
 }
 
 const BLOOD_GROUPS: BloodType[] = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -214,6 +218,9 @@ export default function SettingsPanel(props: SettingsPanelProps) {
           </button>
         </form>
       </div>
+
+      {/* ─ Contact Info (phone + WhatsApp) — persistent editable section */}
+      <ContactInfoSection phone={props.phone ?? null} whatsappPhone={props.whatsappPhone ?? null} />
 
       {/* Self-Report External Donation to Trigger Cooldown */}
       <div className="rounded-[32px] bg-gradient-to-b from-blood-600 to-blood-700 shadow-2xl p-6 sm:p-7 space-y-4">
@@ -424,6 +431,132 @@ export function CompleteProfileModal(props: {
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ─── ContactInfoSection — standalone settings card for phone / WhatsApp ───────
+// Used inside SettingsPanel (Settings tab) so users can update contact info at
+// any time, not just via the banner. Self-contained: own local state + fetch.
+function toDisplay(stored: string | null): string {
+  if (!stored) return '';
+  const digits = stored.replace(/\D/g, '');
+  return digits.startsWith('91') ? digits.slice(2) : digits;
+}
+
+function ContactInfoSection({ phone, whatsappPhone }: { phone: string | null; whatsappPhone: string | null }) {
+  const [phoneInput, setPhoneInput] = useState(toDisplay(phone));
+  const [waInput, setWaInput] = useState(toDisplay(whatsappPhone));
+  const [sameAsPhone, setSameAsPhone] = useState(!whatsappPhone || whatsappPhone === phone);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedback(null);
+    const phoneTrimmed = phoneInput.trim();
+    if (phoneTrimmed.length < 10) {
+      setFeedback({ msg: 'Enter a valid 10-digit number.', ok: false });
+      return;
+    }
+    const waTrimmed = (sameAsPhone ? phoneTrimmed : waInput.trim()) || phoneTrimmed;
+    setSaving(true);
+    try {
+      await authenticatedApi('/api/profile/contact', { phone: phoneTrimmed, whatsappPhone: waTrimmed }, 'PATCH');
+      setFeedback({ msg: 'Contact info saved!', ok: true });
+    } catch (err: any) {
+      setFeedback({ msg: err.message || 'Save failed. Try again.', ok: false });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-[32px] bg-gradient-to-b from-blood-600 to-blood-700 shadow-2xl p-6 sm:p-7 space-y-4">
+      <h3 className="font-semibold text-[14px] tracking-wide text-white border-b border-white/15 pb-4">
+        Phone &amp; WhatsApp
+      </h3>
+      <p className="text-[11px] text-white/60 -mt-2">
+        Used for WhatsApp match alerts. Keep this up to date.
+      </p>
+      <form onSubmit={handleSave} className="space-y-4 text-xs">
+        {/* Phone */}
+        <div className="space-y-2">
+          <label htmlFor="settings-phone" className="text-[11px] font-semibold text-white/80 block uppercase tracking-wider">
+            Phone Number
+          </label>
+          <div className="flex items-center rounded-2xl bg-white/10 ring-1 ring-white/20 px-4 h-12 gap-2">
+            <span className="text-white/60 font-mono text-xs">+91</span>
+            <input
+              id="settings-phone"
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              value={phoneInput}
+              onChange={e => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                setPhoneInput(v);
+                if (sameAsPhone) setWaInput(v);
+              }}
+              placeholder="10-digit number"
+              className="flex-1 bg-transparent text-white font-semibold placeholder-white/40 outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Same-as-phone toggle */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            id="settings-same-as-phone"
+            type="checkbox"
+            checked={sameAsPhone}
+            onChange={e => {
+              setSameAsPhone(e.target.checked);
+              if (e.target.checked) setWaInput(phoneInput);
+            }}
+            className="w-4 h-4 accent-white cursor-pointer"
+          />
+          <span className="text-[11px] text-white/70">WhatsApp number same as phone</span>
+        </label>
+
+        {/* WhatsApp (only when different) */}
+        {!sameAsPhone && (
+          <div className="space-y-2">
+            <label htmlFor="settings-whatsapp" className="text-[11px] font-semibold text-white/80 block uppercase tracking-wider">
+              WhatsApp Number
+            </label>
+            <div className="flex items-center rounded-2xl bg-white/10 ring-1 ring-white/20 px-4 h-12 gap-2">
+              <span className="text-white/60 font-mono text-xs">+91</span>
+              <input
+                id="settings-whatsapp"
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={waInput}
+                onChange={e => setWaInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit WhatsApp number"
+                className="flex-1 bg-transparent text-white font-semibold placeholder-white/40 outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {feedback && (
+          <p className={`text-[11px] font-semibold ${feedback.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+            {feedback.ok ? '\u2713 ' : '\u26a0 '}{feedback.msg}
+          </p>
+        )}
+
+        <button
+          id="btn-save-contact"
+          type="submit"
+          disabled={saving || phoneInput.length < 10}
+          className="w-full py-3.5 rounded-2xl bg-white text-blood-700 font-semibold text-[13px] transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:bg-white/90"
+        >
+          <Save className="w-4 h-4" />
+          {saving ? 'Saving...' : 'Save Contact Info'}
+        </button>
+      </form>
     </div>
   );
 }

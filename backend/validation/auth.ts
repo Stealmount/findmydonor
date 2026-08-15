@@ -46,7 +46,19 @@ export const emailSignupSchema = z.object({
     .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Valid email address required."),
   password: passwordField,
   intent: intentEnum.optional(),
-  verificationToken: z.string().optional(),
+  verificationToken: z
+    .string({ message: "Verification token is required." })
+    .min(1, "Verification token is required."),
+});
+
+// ─── POST /auth/email-signin ─────────────────────────────────────────────────
+export const emailSigninSchema = z.object({
+  email: z
+    .string({ message: "Valid email address required." })
+    .trim()
+    .toLowerCase()
+    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Valid email address required."),
+  password: passwordField,
 });
 
 // ─── POST /auth/email-complete ───────────────────────────────────────────────
@@ -74,5 +86,7 @@ export const completeVerificationSchema = z.object({
 
 export type PhoneSignupInput = z.infer<typeof phoneSignupSchema>;
 export type EmailSignupInput = z.infer<typeof emailSignupSchema>;
+export type EmailSigninInput = z.infer<typeof emailSigninSchema>;
 export type CompleteVerificationInput = z.infer<typeof completeVerificationSchema>;
 export type EmailCompleteInput = z.infer<typeof emailCompleteSchema>;
+

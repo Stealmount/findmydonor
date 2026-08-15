@@ -1,7 +1,7 @@
 // Auth routes — extracted from server.ts (Phase 3 decomposition, 3.6.2)
 import express, { Router } from "express";
-import { randomUUID } from "node:crypto";
-import { getServerSupabase, saveDoc as saveLocalOrFirestoreDoc } from "../src/lib/serverDb";
+import { getServerSupabase } from "../src/lib/serverDb";
+
 import { normalizePhone, isValidIndianPhone, buildSyntheticEmail } from "../helpers/phone";
 import { nowISO } from "../helpers/time";
 import {
@@ -14,7 +14,8 @@ import {
 } from "../middleware/auth";
 import rateLimitMiddleware from "../middleware/rateLimiter";
 import { validate } from "../validation";
-import { phoneSignupSchema, emailSignupSchema, completeVerificationSchema, emailCompleteSchema } from "../validation/auth";
+import { phoneSignupSchema, emailSignupSchema, emailSigninSchema, completeVerificationSchema, emailCompleteSchema } from "../validation/auth";
+import { sendErrorResponse, UnauthorizedError, ForbiddenError, ValidationError, NotFoundError, DatabaseError, AppError } from "../helpers/errors";
 
 const router = Router();
 
@@ -34,7 +35,7 @@ const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, 
 // ─── Me — current authenticated user profile ─────────────────────────────
 router.get("/auth/me", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   try {
     const linked = await getLinkedProfile(authUser.id);
     const profile = (linked?.profile || null) as (Record<string, unknown> & { id?: string }) | null;
@@ -64,8 +65,7 @@ router.get("/auth/me", wrap(async (req, res) => {
       nextStep: nextOnboardingStep(linked),
     });
   } catch (error) {
-    console.error("[Auth] Profile lookup failed:", error);
-    return res.status(503).json({ error: "Profile service is temporarily unavailable." });
+    return sendErrorResponse(res, error, "Profile service is temporarily unavailable.", 503, "SERVICE_UNAVAILABLE");
   }
 }));
 
@@ -76,7 +76,7 @@ router.post("/auth/email-complete", rateLimitMiddleware(10, 60_000), validate(em
   const { email, verificationToken, fullName } = req.body || {};
   const normalizedEmail = String(email || "").toLowerCase().trim();
   const ticketOk = await consumeEmailOtpTicket(String(verificationToken || ""), normalizedEmail);
-  if (!ticketOk) return res.status(403).json({ error: "Email verification expired. Request a new OTP." });
+  if (!ticketOk) return sendErrorResponse(res, new ForbiddenError("Email verification expired. Request a new OTP."));
 
   try {
     const supabase = getServerSupabase();
@@ -111,7 +111,7 @@ router.post("/auth/email-complete", rateLimitMiddleware(10, 60_000), validate(em
     // server only, never sent to the client). Recover it and swap for a session.
     const { data: authByEmail } = await supabase.auth.admin.listUsers();
     const authUser = (authByEmail.users as any[])?.find((u: any) => u.email === normalizedEmail);
-    if (!authUser) return res.status(500).json({ error: "Unable to create a session. Try again." });
+    if (!authUser) return sendErrorResponse(res, new DatabaseError("Unable to create a session. Try again."));
     const internalPassword = (authUser.user_metadata as any)?.internal_password;
     let signInData: { session: unknown } | null = null;
     if (internalPassword) {
@@ -143,20 +143,19 @@ router.post("/auth/email-complete", rateLimitMiddleware(10, 60_000), validate(em
       nextStep: nextOnboardingStep(linked),
     });
   } catch (error) {
-    console.error("[Auth] email-complete failed:", error);
-    return res.status(500).json({ error: "Unable to complete email sign in. Try again." });
+    return sendErrorResponse(res, error, "Unable to complete email sign in. Try again.");
   }
 }));
 
 // ─── Phone + Password signup (with mandatory WhatsApp OTP) ─────────────────
 router.post("/auth/phone-signup", rateLimitMiddleware(10, 60_000), validate(phoneSignupSchema), wrap(async (req, res) => {
   const { phone, password, full_name, email, intent, verificationToken } = req.body || {};
-  if (!String(full_name || "").trim()) return res.status(400).json({ error: "Full name is required." });
-  if (!password || String(password).length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
-  if (!["donor", "requester", "both"].includes(intent)) return res.status(400).json({ error: "Select how you'll use FindMyDonor." });
+  if (!String(full_name || "").trim()) return sendErrorResponse(res, new ValidationError("Full name is required."));
+  if (!password || String(password).length < 8) return sendErrorResponse(res, new ValidationError("Password must be at least 8 characters."));
+  if (!["donor", "requester", "both"].includes(intent)) return sendErrorResponse(res, new ValidationError("Select how you'll use FindMyDonor."));
 
   const normalized = normalizePhone(String(phone || ""));
-  if (!isValidIndianPhone(normalized)) return res.status(400).json({ error: "Enter a valid Indian WhatsApp number (e.g. 91XXXXXXXXXX)." });
+  if (!isValidIndianPhone(normalized)) return sendErrorResponse(res, new ValidationError("Enter a valid Indian WhatsApp number (e.g. 91XXXXXXXXXX)."));
 
   // Direct Phone Signup — OTP skipped per user requirement
   if (verificationToken) {
@@ -184,10 +183,9 @@ router.post("/auth/phone-signup", rateLimitMiddleware(10, 60_000), validate(phon
       // Account exists — never mutate the existing password. Return 409 so the
       // client redirects to sign-in. An attacker knowing a phone number must NOT
       // be able to overwrite another user's credential.
-      return res.status(409).json({ error: "This WhatsApp number is already registered. Sign in instead." });
+      return sendErrorResponse(res, new AppError("This WhatsApp number is already registered. Sign in instead.", 409, "ACCOUNT_EXISTS"));
     } else {
-      console.error("[Auth] Phone signup createUser failed:", authError.message);
-      return res.status(500).json({ error: "Unable to create account. Please try again." });
+      return sendErrorResponse(res, authError, "Unable to create account. Please try again.");
     }
   } else {
     authUserId = authData.user.id;
@@ -215,28 +213,14 @@ router.post("/auth/phone-signup", rateLimitMiddleware(10, 60_000), validate(phon
       }).select().single();
 
     if (profileError) {
-      console.warn("[Auth] Profile direct insert returned error, fetching by phone fallback:", profileError.message);
-      const { data: fallbackProfile } = await supabase.from("profiles").select("*").eq("phone", normalized).maybeSingle();
+      console.warn('[Auth] Profile direct insert returned error, fetching by phone fallback:', profileError.message);
+      const { data: fallbackProfile } = await supabase.from('profiles').select('*').eq('phone', normalized).maybeSingle();
       if (fallbackProfile) {
         profile = fallbackProfile;
       } else {
-        console.warn("[Auth] Direct insert failed and profile not in DB. Constructing resilient profile object.");
-        profile = {
-          id: randomUUID(),
-          full_name: String(full_name).trim(),
-          phone: normalized,
-          whatsapp_phone: normalized,
-          is_whatsapp: true,
-          email: email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim()) ? String(email).trim().toLowerCase() : null,
-          whatsapp_verified: true,
-          consent_accepted_at: now,
-          can_donate: canDonate,
-          can_request: canRequest,
-          trust_report_count: 0,
-          created_at: now,
-          updated_at: now,
-        };
-        await saveLocalOrFirestoreDoc("profiles", profile.id, profile).catch(() => {});
+        // Both DB insert and phone-lookup fallback failed.
+        // Do NOT fabricate a fake profile (Rule 15) — surface the real error.
+        return sendErrorResponse(res, profileError, 'Account partially created — profile setup failed. Please try again or contact support.');
       }
     } else {
       profile = createdProfile;
@@ -310,13 +294,18 @@ router.post("/auth/phone-signup", rateLimitMiddleware(10, 60_000), validate(phon
 // ─── Email + Password sign-up (Resend OTP Verified) ────────────────────────
 router.post("/auth/email-signup", rateLimitMiddleware(5, 60_000), validate(emailSignupSchema), wrap(async (req, res) => {
   const { full_name, email, password, intent, verificationToken } = req.body || {};
-  if (!full_name || !String(full_name).trim()) return res.status(400).json({ error: "Full name required." });
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) return res.status(400).json({ error: "Valid email address required." });
-  if (!password || String(password).length < 8) return res.status(400).json({ error: "Password must be at least 8 characters." });
+  if (!full_name || !String(full_name).trim()) return sendErrorResponse(res, new ValidationError("Full name required."));
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) return sendErrorResponse(res, new ValidationError("Valid email address required."));
+  if (!password || String(password).length < 8) return sendErrorResponse(res, new ValidationError("Password must be at least 8 characters."));
 
   const normalizedEmail = String(email).toLowerCase().trim();
-  if (verificationToken) {
-    await consumeEmailOtpTicket(String(verificationToken), normalizedEmail).catch(() => {});
+  if (!verificationToken) {
+    return sendErrorResponse(res, new ValidationError("Email verification is required."));
+  }
+
+  const ticketOk = await consumeEmailOtpTicket(String(verificationToken), normalizedEmail);
+  if (!ticketOk) {
+    return sendErrorResponse(res, new ForbiddenError("Email verification token is invalid or expired. Please request a new OTP."));
   }
 
   const supabase = getServerSupabase();
@@ -330,13 +319,9 @@ router.post("/auth/email-signup", rateLimitMiddleware(5, 60_000), validate(email
 
   if (authError) {
     if (authError.message?.includes("already been registered")) {
-      // Account exists — never mutate the existing password. Return 409 so the
-      // client redirects to sign-in. An attacker knowing an email must NOT be
-      // able to overwrite another user's credential.
-      return res.status(409).json({ error: "This email address is already registered. Sign in instead." });
+      return sendErrorResponse(res, new AppError("This email address is already registered. Sign in instead.", 409, "ACCOUNT_EXISTS"));
     } else {
-      console.error("[Auth] Email signup createUser failed:", authError.message);
-      return res.status(500).json({ error: authError.message || "Unable to create account." });
+      return sendErrorResponse(res, authError, "Unable to create account.");
     }
   } else {
     authUserId = authData.user.id;
@@ -346,21 +331,28 @@ router.post("/auth/email-signup", rateLimitMiddleware(5, 60_000), validate(email
   const canDonate = intent === "donor" || intent === "both";
   const canRequest = intent === "requester" || intent === "both";
 
-  let { data: profile } = await supabase.from("profiles").select("*").eq("email", normalizedEmail).maybeSingle();
+  let { data: profile } = await supabase.from('profiles').select('*').eq('email', normalizedEmail).maybeSingle();
   if (!profile) {
-    const fallbackPhone = `919${Math.floor(100000009 + Math.random() * 899999990)}`;
-    const { data: createdProfile } = await supabase.from("profiles").insert({
+    const { data: createdProfile, error: profileCreateError } = await supabase.from('profiles').insert({
       full_name: String(full_name).trim(),
-      phone: fallbackPhone,
-      whatsapp_phone: fallbackPhone,
       is_whatsapp: false,
       email: normalizedEmail,
-      whatsapp_verified: true,
+      auth_method: 'email',
+      onboarding_step: 'complete',
+      notification_channel: process.env.NOTIFICATION_DEFAULT_CHANNEL || 'both',
       consent_accepted_at: now,
       can_donate: canDonate,
       can_request: canRequest,
     }).select().single();
-    profile = createdProfile || { id: randomUUID(), full_name: String(full_name).trim(), email: normalizedEmail, whatsapp_verified: true };
+    if (!createdProfile) {
+      if (authUserId) {
+        try {
+          await supabase.auth.admin.deleteUser(authUserId);
+        } catch { /* cleanup ignore */ }
+      }
+      return sendErrorResponse(res, profileCreateError, 'Account setup failed — profile creation error. Please try again or contact support.');
+    }
+    profile = createdProfile;
   }
 
   if (authUserId && profile?.id) {
@@ -384,24 +376,50 @@ router.post("/auth/email-signup", rateLimitMiddleware(5, 60_000), validate(email
     password: String(password),
   });
 
-  // NOTE: The auth_profile_links upsert above (authUserId → profile.id) is the
-  // correct and only upsert needed. A previous version incorrectly used
-  // signInData.session.access_token (a JWT string) as auth_user_id here,
-  // creating a corrupt link row. That has been removed.
-
   return res.status(201).json({
     profile,
     session: signInData?.session || null,
-    nextStep: canDonate ? "donor-profile" : "complete",
+    nextStep: 'complete',
   });
+}));
+
+// ─── Email + Password sign-in ──────────────────────────────────────────────
+router.post("/auth/email-signin", rateLimitMiddleware(15, 60_000), validate(emailSigninSchema), wrap(async (req, res) => {
+  const { email, password } = req.body || {};
+  const normalizedEmail = String(email || "").toLowerCase().trim();
+  const supabase = getServerSupabase();
+
+  const { data, error: authError } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password: String(password),
+  });
+
+  if (authError || !data?.user) {
+    return sendErrorResponse(res, new UnauthorizedError("Invalid email address or password."));
+  }
+
+  try {
+    const linked = await getLinkedProfile(data.user.id);
+    if (!linked?.profile) {
+      return sendErrorResponse(res, new NotFoundError("No profile found for this account. Please register or contact support."));
+    }
+    return res.json({
+      session: data.session,
+      profile: linked.profile,
+      donorProfile: linked.donorProfile || null,
+      nextStep: "complete",
+    });
+  } catch (profileErr) {
+    return sendErrorResponse(res, profileErr, "Unable to retrieve user profile.");
+  }
 }));
 
 // ─── Phone + Password sign-in ──────────────────────────────────────────────
 router.post("/auth/phone-signin", rateLimitMiddleware(15, 60_000), wrap(async (req, res) => {
   const { phone, password } = req.body || {};
   const normalized = normalizePhone(String(phone || ""));
-  if (!isValidIndianPhone(normalized)) return res.status(400).json({ error: "Enter a valid Indian WhatsApp number." });
-  if (!password) return res.status(400).json({ error: "Password is required." });
+  if (!isValidIndianPhone(normalized)) return sendErrorResponse(res, new ValidationError("Enter a valid Indian WhatsApp number."));
+  if (!password) return sendErrorResponse(res, new ValidationError("Password is required."));
 
   const syntheticEmail = buildSyntheticEmail(normalized);
   const supabase = getServerSupabase();
@@ -411,10 +429,9 @@ router.post("/auth/phone-signin", rateLimitMiddleware(15, 60_000), wrap(async (r
     password: String(password),
   });
   if (authError) {
-    return res.status(401).json({ error: "Incorrect WhatsApp number or password." });
+    return sendErrorResponse(res, new UnauthorizedError("Incorrect WhatsApp number or password."));
   }
 
-  // Fetch linked profile for the response
   try {
     const linked = await getLinkedProfile(data.user.id);
     return res.json({
@@ -424,24 +441,19 @@ router.post("/auth/phone-signin", rateLimitMiddleware(15, 60_000), wrap(async (r
       nextStep: nextOnboardingStep(linked),
     });
   } catch (profileErr) {
-    // Session is valid even if profile lookup fails
     return res.json({ session: data.session, profile: null, donorProfile: null, nextStep: "contact" });
   }
 }));
 
 // ─── Complete verification (Google OAuth users — NO OTP, NO password) ───────
-// Rev 3: ensures a profile exists from the Google identity (email/name) and
-// links it. Phone/intent no longer required here — onboarding collects them.
-// Account linking: Google email == existing profile email → auto-link.
 router.post("/auth/complete-verification", rateLimitMiddleware(10, 60_000), validate(completeVerificationSchema), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const googleEmail = (req.body?.email || authUser.email || "").toString().toLowerCase().trim();
   const googleName = String(req.body?.fullName || authUser.user_metadata?.full_name || "").trim();
   const supabase = getServerSupabase();
 
   try {
-    // Duplicate prevention: existing profile with the Google email? Auto-link.
     const { data: existing } = await supabase
       .from("profiles").select("*").eq("email", googleEmail).maybeSingle();
 
@@ -459,7 +471,6 @@ router.post("/auth/complete-verification", rateLimitMiddleware(10, 60_000), vali
       } catch { /* ignore duplicate link */ }
     }
 
-    // Optional immediate enrichments (pre-onboarding) when provided.
     const phone = req.body?.phone;
     const normalized = phone ? normalizePhone(String(phone)) : null;
     const patch: Record<string, unknown> = { updated_at: nowISO() };
@@ -492,8 +503,7 @@ router.post("/auth/complete-verification", rateLimitMiddleware(10, 60_000), vali
       nextStep: nextOnboardingStep(linked),
     });
   } catch (error) {
-    console.error("[Auth] complete-verification failed:", error);
-    return res.status(500).json({ error: "Unable to complete your profile. Try again." });
+    return sendErrorResponse(res, error, "Unable to complete your profile. Try again.");
   }
 }));
 

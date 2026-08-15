@@ -126,7 +126,10 @@ export async function findEligibleDonors(
     // Emergency-only restriction removed: all requests match available donors
     // if (d.emergency_only && request.urgency_level !== "critical") return false;
 
-    // Self-match prevention
+    // Self-match prevention.
+    // normalizePhone(null|undefined) → "" (see helpers/phone.ts: String(phone || "")),
+    // which will never equal a valid requester phone (91XXXXXXXXXX format).
+    // Donors with phone=null are therefore NOT excluded from matching by this guard.
     if (normalizePhone(d.phone) === normalizePhone(request.requester_phone)) return false;
     if (d.whatsapp_number && normalizePhone(d.whatsapp_number) === normalizePhone(request.requester_phone)) return false;
     if (d.email && request.requester_email && d.email.toLowerCase().trim() === request.requester_email.toLowerCase().trim()) return false;
@@ -290,7 +293,15 @@ async function notifyDonor(
   const whatsappPhone = donor.whatsapp_number || donor.phone;
   // Pass the capability token so the donor's WhatsApp link uses matchToken= (S-1 fix).
   const sosMessage = buildDonorSosMessage(request, donor, match.id, match.public_token);
-  const waOk = await sendWhatsApp(whatsappPhone, sosMessage);
+  // Null-safety: donors who signed up via Google/email without adding a phone
+  // will have no whatsapp_number/phone. Skip WhatsApp gracefully instead of
+  // sending to an empty string (which WAHA would reject or silently drop).
+  let waOk = false;
+  if (whatsappPhone) {
+    waOk = await sendWhatsApp(whatsappPhone, sosMessage);
+  } else {
+    console.warn(`[Notify] Donor ${donor.id} (${donor.full_name}) has no WhatsApp number — skipping WA notification.`);
+  }
 
   let emailOk = false;
   if (donor.email && donor.email.includes("@") && !donor.email.endsWith(".local")) {

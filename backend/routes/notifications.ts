@@ -22,6 +22,7 @@ import {
 import { buildRequesterConfirmEmailHTML } from "../src/lib/email";
 import { sendEmailViaResend } from "../services/notificationService";
 import { createNextDonorMatch } from "../services/matchingEngine";
+import { sendErrorResponse, UnauthorizedError, ValidationError, ForbiddenError, ServiceUnavailableError } from "../helpers/errors";
 import type { BloodRequest, Match, User } from "../src/types";
 
 const router = Router();
@@ -39,15 +40,13 @@ const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, 
 };
 
 // ─── POST /api/send-email — legacy client notification utility ───────────────
-// Authenticated utility for legacy client notifications. Recipients are restricted
-// to the signed-in account or the fixed platform operations address.
 router.post("/api/send-email", rateLimitMiddleware(10, 60_000), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser?.email) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser?.email) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
 
   const { to, subject, text } = req.body || {};
   if (typeof to !== "string" || typeof subject !== "string" || typeof text !== "string") {
-    return res.status(400).json({ error: "Missing: to, subject, text" });
+    return sendErrorResponse(res, new ValidationError("Missing: to, subject, text"));
   }
   const recipient = to.toLowerCase().trim();
   let recipientAllowed = recipient === "admin@raktdaan.org" || recipient === authUser.email.toLowerCase();
@@ -59,19 +58,20 @@ router.post("/api/send-email", rateLimitMiddleware(10, 60_000), wrap(async (req,
       .eq("email", recipient)
       .limit(1);
     if (profileErr) {
-      return res.status(503).json({ error: "Unable to validate email recipient." });
+      return sendErrorResponse(res, profileErr, "Unable to validate email recipient.", 503, "SERVICE_UNAVAILABLE");
     }
     recipientAllowed = Boolean(profileMatch?.length);
   }
   if (!recipientAllowed) {
-    return res.status(403).json({ error: "Email recipient is not registered." });
+    return sendErrorResponse(res, new ForbiddenError("Email recipient is not registered."));
   }
   if (subject.length > 200 || text.length > 10_000) {
-    return res.status(400).json({ error: "Email content is too long." });
+    return sendErrorResponse(res, new ValidationError("Email content is too long."));
   }
 
   const ok = await sendEmailViaResend(recipient, subject, `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`, text);
-  return res.status(ok ? 200 : 502).json({ success: ok, emailSent: ok });
+  if (!ok) return sendErrorResponse(res, new ServiceUnavailableError("Failed to send email message."));
+  return res.json({ success: true, emailSent: true });
 }));
 
 // ─── POST /api/waha/webhook — donor YES/NO WhatsApp replies ──────────────────
@@ -248,7 +248,7 @@ router.post("/api/notifications", wrap(async (req, res) => {
 // Now requires signed-in user; "all" is scoped to that user.
 router.delete("/api/notifications/:notifId", wrap(async (req, res) => {
   const user = await getAuthenticatedUser(req);
-  if (!user) return res.status(401).json({ error: "Sign in to manage notifications." });
+  if (!user) return sendErrorResponse(res, new UnauthorizedError("Sign in to manage notifications."));
   const userId = user.id;
   try {
     const supabase = getServerSupabase();

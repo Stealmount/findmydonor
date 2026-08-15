@@ -36,9 +36,11 @@ import {
   matchAndNotifyRequest,
   findEligibleDonors,
 } from "../services/matchingEngine";
+import { sendErrorResponse, UnauthorizedError, NotFoundError, ForbiddenError, AppError } from "../helpers/errors";
 import type { BloodRequest, Match, User } from "../src/types";
 
 const router = Router();
+
 
 // Express 4 does not forward rejected async handlers to its error middleware.
 const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, res, next) => {
@@ -111,31 +113,33 @@ export async function declineMatchById(
 // ─── POST /api/matches/:matchId/approve ───────────────────────────────────────
 router.post("/api/matches/:matchId/approve", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match || match.donor_id !== authUser.id) return res.status(404).json({ error: "Match not found or unauthorized" });
+  if (!match || match.donor_id !== authUser.id) return sendErrorResponse(res, new NotFoundError("Match not found or unauthorized"));
   const result = await approveMatchById(req.params.matchId, req.body?.responseTimestamp);
-  return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? result.data : { error: result.error });
+  if (!result.ok) return sendErrorResponse(res, new AppError(result.error || "Failed to approve match", result.status || 500));
+  return res.json(result.data);
 }));
 
 // ─── POST /api/matches/:matchId/decline ───────────────────────────────────────
 router.post("/api/matches/:matchId/decline", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match || match.donor_id !== authUser.id) return res.status(404).json({ error: "Match not found or unauthorized" });
+  if (!match || match.donor_id !== authUser.id) return sendErrorResponse(res, new NotFoundError("Match not found or unauthorized"));
   const result = await declineMatchById(req.params.matchId, req.body?.responseTimestamp);
-  return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { success: true } : { error: result.error });
+  if (!result.ok) return sendErrorResponse(res, new AppError(result.error || "Failed to decline match", result.status || 500));
+  return res.json({ success: true });
 }));
 
 // ─── POST /api/notify-match (deprecated 410) ──────────────────────────────────
 router.post("/api/notify-match", rateLimitMiddleware(30, 60_000), wrap(async (_req, res) => {
-  return res.status(410).json({ error: "Deprecated. Requests now start matching through POST /api/requests." });
+  return sendErrorResponse(res, new AppError("Deprecated. Requests now start matching through POST /api/requests.", 410, "GONE"));
 }));
 
 // ─── POST /api/request/match-and-notify (deprecated 410) ─────────────────────
 router.post("/api/request/match-and-notify", rateLimitMiddleware(20, 60_000), wrap(async (_req, res) => {
-  return res.status(410).json({ error: "Deprecated. Requests now start matching through POST /api/requests." });
+  return sendErrorResponse(res, new AppError("Deprecated. Requests now start matching through POST /api/requests.", 410, "GONE"));
 }));
 
 // ─── GET /api/requests/:requestId/status ─────────────────────────────────────
@@ -144,7 +148,7 @@ router.get("/api/requests/:requestId/status", wrap(async (req, res) => {
   const cached = await cacheGet(cacheKey);
   if (cached) { res.setHeader("X-Cache", "HIT"); return res.json(cached); }
   const request = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", req.params.requestId);
-  if (!request) return res.status(404).json({ error: "Request not found" });
+  if (!request) return sendErrorResponse(res, new NotFoundError("Request not found"));
   const payload = { status: request.status };
   await cacheSet(cacheKey, payload, 15);
   res.setHeader("X-Cache", "MISS");
@@ -157,7 +161,7 @@ router.get("/api/matches/:matchId/status", wrap(async (req, res) => {
   const cached = await cacheGet(cacheKey);
   if (cached) { res.setHeader("X-Cache", "HIT"); return res.json(cached); }
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match) return res.status(404).json({ error: "Match not found" });
+  if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const payload = { donor_response: match.donor_response };
   await cacheSet(cacheKey, payload, 15);
   res.setHeader("X-Cache", "MISS");
@@ -167,12 +171,11 @@ router.get("/api/matches/:matchId/status", wrap(async (req, res) => {
 // ─── POST /api/matches/:matchId/notification-sent ────────────────────────────
 router.post("/api/matches/:matchId/notification-sent", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Authentication required" });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match) return res.status(404).json({ error: "Match not found" });
-  // Ownership: only the assigned donor or an admin may mark notification sent
+  if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
+  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     notification_sent_at: nowISO(),
@@ -181,12 +184,9 @@ router.post("/api/matches/:matchId/notification-sent", wrap(async (req, res) => 
 }));
 
 // ─── POST /api/matches/respond-public ────────────────────────────────────────
-// Public donor response via opaque capability token (not raw matchId).
 router.post("/api/matches/respond-public", rateLimitMiddleware(10, 60_000), validate(respondPublicSchema), wrap(async (req, res) => {
   const { response, token } = req.body;
 
-  // Scan all matches to find the one whose public_token matches.
-  // timingSafeEqualStr on every candidate to avoid timing attacks.
   const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
   let match: Match | null = null;
   for (const m of allMatches) {
@@ -196,25 +196,25 @@ router.post("/api/matches/respond-public", rateLimitMiddleware(10, 60_000), vali
     }
   }
 
-  if (!match) return res.status(403).json({ error: "Invalid or expired capability token" });
+  if (!match) return sendErrorResponse(res, new ForbiddenError("Invalid or expired capability token"));
   if (match.donor_response !== "pending")
-    return res.status(409).json({ error: "Already resolved" });
+    return sendErrorResponse(res, new AppError("Already resolved", 409, "ALREADY_RESOLVED"));
 
   const result = response === "approved"
     ? await approveMatchById(match.id)
     : await declineMatchById(match.id);
-  return res.status(result.status || (result.ok ? 200 : 500)).json(result.ok ? { ok: true } : { error: result.error });
+  if (!result.ok) return sendErrorResponse(res, new AppError(result.error || "Failed to respond", result.status || 500));
+  return res.json({ ok: true });
 }));
 
 // ─── POST /api/matches/:matchId/reminder-sent ────────────────────────────────
 router.post("/api/matches/:matchId/reminder-sent", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Authentication required" });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match) return res.status(404).json({ error: "Match not found" });
-  // Ownership: only the assigned donor or an admin may mark reminder sent
+  if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
+  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     reminder_sent_at: req.body?.sentAt || nowISO(),
@@ -225,12 +225,11 @@ router.post("/api/matches/:matchId/reminder-sent", wrap(async (req, res) => {
 // ─── POST /api/matches/:matchId/timeout ──────────────────────────────────────
 router.post("/api/matches/:matchId/timeout", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Authentication required" });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match) return res.status(404).json({ error: "Match not found" });
-  // Ownership: only the assigned donor or an admin may timeout a match
+  if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
+  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     donor_response: "timed_out",
@@ -241,17 +240,15 @@ router.post("/api/matches/:matchId/timeout", wrap(async (req, res) => {
 
 // ─── POST /api/matches/:matchId/confirm-donation ─────────────────────────────
 router.post("/api/matches/:matchId/confirm-donation", wrap(async (req, res) => {
-  // Auth guard: this endpoint permanently changes donor status (90-day cooldown).
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Authentication required" });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match) return res.status(404).json({ error: "Match not found" });
+  if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const donor = await getLocalOrFirestoreDoc<User>("users", match.donor_id);
-  if (!donor) return res.status(404).json({ error: "Donor not found" });
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
 
-  // Ownership: only the assigned donor or an admin may confirm their own donation
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return res.status(403).json({ error: "Not authorized" });
+  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
 
   const confirmedAt  = req.body?.confirmedAt || nowISO();
   const donationDate = confirmedAt.split("T")[0];
@@ -301,9 +298,9 @@ router.post("/api/matches/:matchId/confirm-donation", wrap(async (req, res) => {
 // ─── POST /api/matches/:matchId/donation-not-completed ───────────────────────
 router.post("/api/matches/:matchId/donation-not-completed", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Authentication required" });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match) return res.status(404).json({ error: "Match not found" });
+  if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     outcome: "not_donated",
@@ -317,9 +314,9 @@ router.post("/api/matches/:matchId/donation-not-completed", wrap(async (req, res
 // ─── POST /api/requests/:requestId/next-donor ────────────────────────────────
 router.post("/api/requests/:requestId/next-donor", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Authentication required" });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
   const request = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", req.params.requestId);
-  if (!request) return res.status(404).json({ error: "Request not found" });
+  if (!request) return sendErrorResponse(res, new NotFoundError("Request not found"));
   const result = await createNextDonorMatch(request, req.body?.declinedMatchId || req.body?.timedOutMatchId);
   return res.json({ success: !!result, match: result || null });
 }));

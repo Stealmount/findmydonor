@@ -17,6 +17,7 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
   // Signup steps: 'main' = enter details, 'otp' = enter 6-digit OTP, 'donor-profile' = donor info, 'google-phone' = Google user adds phone
   const [signupStep, setSignupStep] = useState<'main' | 'otp' | 'google-phone' | 'donor-profile'>('main');
   const [signupChannel, setSignupChannel] = useState<'phone' | 'email'>('phone');
+  const [signinChannel, setSigninChannel] = useState<'phone' | 'email'>('phone');
   const [intent, setIntent] = useState<SignupIntent>(initialIntent);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -80,39 +81,65 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
       setEmail(user.email || '');
     }
 
-    if (!state.profile) {
-      // No profile yet — Google users need to add WhatsApp number
-      setMode('signup');
+    // No profile yet for a Google user — call complete-verification to create/link
+    // the profile automatically, then fall through to dashboard routing below.
+    // Phone is NOT required here; contact info is collected post-auth via the
+    // ContactInfoBanner on the dashboard (see AGENTS.md rule: phone must never
+    // block dashboard access).
+    if (!state.profile && isGoogle && user) {
       const pending = sessionStorage.getItem('findmydonor_oauth_pending');
+      let savedIntent = intent;
       if (pending) {
         try {
           const saved = JSON.parse(pending) as { intent: typeof intent };
-          if (saved.intent) setIntent(saved.intent);
+          if (saved.intent) { setIntent(saved.intent); savedIntent = saved.intent; }
         } catch { /* ignore */ }
         sessionStorage.removeItem('findmydonor_oauth_pending');
       }
-      if (isGoogle) {
-        setSignupStep('google-phone');
-      } else {
-        setSignupStep('main');
+      try {
+        await authenticatedApi<{ profile: unknown; nextStep: string }>('/api/auth/complete-verification', {
+          fullName: String(user.user_metadata?.full_name || user.user_metadata?.name || '').trim(),
+          email: user.email || undefined,
+          // intent optional — user can update this from profile settings later
+          intent: savedIntent || undefined,
+        });
+      } catch (cvErr) {
+        console.error('[Auth] complete-verification failed:', cvErr);
+        setError('Account setup failed. Please try again.');
+        return false;
       }
+      // Re-fetch /me now that the profile exists
+      const refreshed = await authenticatedApi<AuthState>('/api/auth/me', undefined, 'GET').catch(() => null);
+      if (refreshed?.profile) {
+        // Profile is now linked — fall through with the refreshed state
+        return resolveProfileToCallback(refreshed, isGoogle);
+      }
+      // complete-verification succeeded but /me still has no profile — surface error
+      setError('Profile setup incomplete. Please try again.');
       return false;
     }
 
-    if (state.nextStep === 'donor-profile') {
+    // No profile and not a Google user → show the signup form
+    if (!state.profile) {
       setMode('signup');
-      setSignupStep('donor-profile');
+      setSignupStep('main');
       return false;
     }
 
-    if (state.nextStep !== 'complete') {
-      setMode('signup');
-      setSignupStep(isGoogle ? 'google-phone' : 'main');
-      return false;
-    }
+    // AUTHENTICATION ≠ PROFILE COMPLETION (per task spec).
+    // donor-profile and google-phone steps are POST-AUTH profile completion;
+    // they must NEVER block dashboard access. Route to dashboard regardless of
+    // onboarding_step or nextStep value.
+    return resolveProfileToCallback(state, isGoogle);
+  };
 
-    // Profile complete — navigate to dashboard
-    // Legacy dashboard callbacks stay available until all dashboard reads move to profiles.
+  /**
+   * Routes an authenticated user with a resolved profile to the correct dashboard
+   * callback. Phone/WhatsApp/donor-profile are NOT required; the dashboard
+   * ContactInfoBanner and CompleteProfileModal handle post-auth completion.
+   */
+  const resolveProfileToCallback = (state: AuthState, _isGoogle: boolean): boolean => {
+    if (!state.profile) return false;
     if (state.profile.can_donate) {
       signals.onLoginSuccessDonor({
         id: state.authUser.id, full_name: state.profile.full_name, email: state.profile.email || '', phone: state.profile.phone,
@@ -120,11 +147,15 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
         last_donation_date: state.donorProfile?.last_donation_date || null, cooldown_until: state.donorProfile?.cooldown_until || null,
         pincode: state.donorProfile?.pincode || '', area: state.donorProfile?.area || '', city: state.donorProfile?.city || '',
         availability_status: state.donorProfile?.is_available ? 'available' : 'unavailable', number_sharing_pref: 'on_approval',
-        emergency_only: false, account_status: 'active', whatsapp_verified: true, profile_complete: state.donorProfile?.profile_complete,
+        emergency_only: false, account_status: 'active', whatsapp_verified: state.profile.whatsapp_verified ?? false,
+        profile_complete: state.donorProfile?.profile_complete,
         is_available: state.donorProfile?.is_available, created_at: state.profile.created_at, updated_at: state.profile.updated_at,
       });
     } else {
-      signals.onLoginSuccessRequester({ id: state.authUser.id, full_name: state.profile.full_name, email: state.profile.email || '', phone: state.profile.phone, created_at: state.profile.created_at, updated_at: state.profile.updated_at });
+      signals.onLoginSuccessRequester({
+        id: state.authUser.id, full_name: state.profile.full_name, email: state.profile.email || '',
+        phone: state.profile.phone, created_at: state.profile.created_at, updated_at: state.profile.updated_at,
+      });
     }
     return true;
   };
@@ -142,6 +173,30 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
       if (!response.ok) throw new Error(payload.error || 'Unable to sign in.');
 
       // Set the session in the Supabase client so subsequent authenticatedApi calls work
+      if (payload.session) {
+        await supabase.auth.setSession({
+          access_token: payload.session.access_token,
+          refresh_token: payload.session.refresh_token,
+        });
+      }
+      await resolveSignedInState();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to sign in.');
+    } finally { setLoading(false); }
+  };
+
+  // ─── Email + Password Sign In ──────────────────────────────────────────
+  const handleEmailSignIn = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setLoading(true);
+    try {
+      const response = await fetch('/api/auth/email-signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || (isHi ? 'अमान्य ईमेल या पासवर्ड।' : 'Invalid email or password.'));
+
       if (payload.session) {
         await supabase.auth.setSession({
           access_token: payload.session.access_token,
@@ -452,14 +507,14 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
   };
 
   return {
-    t, isHi, mode, setMode, signupStep, setSignupStep, signupChannel, setSignupChannel, intent, setIntent,
+    t, isHi, mode, setMode, signupStep, setSignupStep, signupChannel, setSignupChannel, signinChannel, setSigninChannel, intent, setIntent,
     phone, setPhone, password, setPassword, fullName, setFullName, email, setEmail, otpInput, setOtpInput,
     devBypassNotice, setDevBypassNotice, loading, setLoading, error, setError, infoMessage, setInfoMessage,
     signinMode, setSigninMode, instStep, setInstStep,
     bloodGroup, setBloodGroup, donorPincode, setDonorPincode, donorArea, setDonorArea, donorCity, setDonorCity,
     weightKg, setWeightKg, lastDonationDate, setLastDonationDate, neverDonated, setNeverDonated,
     healthDeclaration, setHealthDeclaration, emergencyOnly, setEmergencyOnly,
-    handlePhoneSignIn, handleSendOtpForSignUp, handleVerifyOtpAndSignUp, handleSendEmailOtpForSignUp,
+    handlePhoneSignIn, handleEmailSignIn, handleSendOtpForSignUp, handleVerifyOtpAndSignUp, handleSendEmailOtpForSignUp,
     handleVerifyEmailOtpAndSignUp, handleInstitutionSendOtp, handleInstitutionVerifyAndSignIn, handleGoogle,
     handleGooglePhoneSubmit, submitDonorProfile,
   };

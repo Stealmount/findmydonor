@@ -58,6 +58,7 @@ import rateLimitMiddleware from "./middleware/rateLimiter";
 import { applySecurityMiddleware } from "./middleware/security";
 import { sendEmailViaResend } from "./services/notificationService";
 import { matchAndNotifyRequest } from "./services/matchingEngine";
+import { sendErrorResponse, NotFoundError, ValidationError, ServiceUnavailableError, AppError } from "./helpers/errors";
 import { startMessageWorker } from "./src/lib/messageWorker";
 import { runBackgroundMatchWorker } from "./worker/sweepWorker";
 
@@ -400,7 +401,12 @@ async function startServer() {
 
   // ─── API catch-all: return 404 for unmatched /api/* routes ────────────────
   app.all("/api/*", (req, res) => {
-    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+    sendErrorResponse(res, new NotFoundError(`Route not found: ${req.method} ${req.path}`));
+  });
+
+  // ─── Global API Error Handler ──────────────────────────────────────────────
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    sendErrorResponse(res, err, "An internal server error occurred while processing your request.", 500, "INTERNAL_SERVER_ERROR");
   });
 
   // ─── Vite / Static ────────────────────────────────────────────────────────

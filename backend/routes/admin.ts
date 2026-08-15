@@ -10,6 +10,7 @@ import {
 } from "../src/lib/serverDb";
 import { getAuthenticatedUser } from "../middleware/auth";
 import { nowISO } from "../helpers/time";
+import { sendErrorResponse, ForbiddenError, NotFoundError, ValidationError } from "../helpers/errors";
 import type { BloodRequest, DonationLog, Match, NotificationLog, User } from "../src/types";
 
 const router = Router();
@@ -28,7 +29,7 @@ const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, 
 async function adminCheck(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser || (authUser.email !== "admin@raktdaan.org" && (authUser as any).role !== "admin")) {
-    return res.status(403).json({ error: "Access denied: Admin privileges required." });
+    return sendErrorResponse(res, new ForbiddenError("Access denied: Admin privileges required."));
   }
   (req as any).adminUser = authUser;
   next();
@@ -47,7 +48,7 @@ router.get("/api/admin/dashboard", adminCheck, wrap(async (req, res) => {
 
 router.patch("/api/admin/donors/:donorId/approve", adminCheck, wrap(async (req, res) => {
   const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
-  if (!donor) return res.status(404).json({ error: "Donor not found" });
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
   await saveLocalOrFirestoreDoc("users", donor.id, {
     ...donor,
     account_status: "active",
@@ -59,7 +60,7 @@ router.patch("/api/admin/donors/:donorId/approve", adminCheck, wrap(async (req, 
 
 router.patch("/api/admin/donors/:donorId/ban", adminCheck, wrap(async (req, res) => {
   const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
-  if (!donor) return res.status(404).json({ error: "Donor not found" });
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
   await saveLocalOrFirestoreDoc("users", donor.id, {
     ...donor,
     account_status: "banned",
@@ -82,7 +83,7 @@ router.patch("/api/admin/donors/:donorId/ban", adminCheck, wrap(async (req, res)
 
 router.post("/api/admin/donors/:donorId/log-donation", adminCheck, wrap(async (req, res) => {
   const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
-  if (!donor) return res.status(404).json({ error: "Donor not found" });
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
   const now = new Date();
   const cooldownEnd = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
   const cooldownStr = cooldownEnd.toISOString().split("T")[0];
@@ -113,7 +114,7 @@ router.post("/api/admin/matches", adminCheck, wrap(async (req, res) => {
   }
   const { matchId, payload } = req.body || {};
   if (!matchId || !payload) {
-    return res.status(400).json({ error: "matchId and payload required" });
+    return sendErrorResponse(res, new ValidationError("matchId and payload required"));
   }
   await saveLocalOrFirestoreDoc("matches", matchId, payload);
   if (payload.outcome === "donated") {
@@ -173,7 +174,7 @@ router.get("/api/admin/hospitals", adminCheck, wrap(async (req, res) => {
 
 router.patch("/api/admin/hospitals/:id/verify", adminCheck, wrap(async (req, res) => {
   const hospital = await getLocalOrFirestoreDoc<any>("hospitals", req.params.id);
-  if (!hospital) return res.status(404).json({ error: "Hospital not found" });
+  if (!hospital) return sendErrorResponse(res, new NotFoundError("Hospital not found"));
   const updated = {
     ...hospital,
     status: req.body.status || "verified",
@@ -186,7 +187,7 @@ router.patch("/api/admin/hospitals/:id/verify", adminCheck, wrap(async (req, res
 
 router.patch("/api/admin/blood-banks/:id/stock", adminCheck, wrap(async (req, res) => {
   const bank = await getLocalOrFirestoreDoc<any>("blood_banks", req.params.id);
-  if (!bank) return res.status(404).json({ error: "Blood bank not found" });
+  if (!bank) return sendErrorResponse(res, new NotFoundError("Blood bank not found"));
   const updated = {
     ...bank,
     stock: {

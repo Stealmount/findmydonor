@@ -13,7 +13,9 @@ import rateLimitMiddleware from "../middleware/rateLimiter";
 import { normalizePhone, isValidIndianPhone } from "../helpers/phone";
 import { nowISO } from "../helpers/time";
 import { matchAndNotifyRequest } from "../services/matchingEngine";
+import { sendErrorResponse, UnauthorizedError, NotFoundError, ForbiddenError, ValidationError, AppError } from "../helpers/errors";
 import type { BloodRequest, Match, User } from "../src/types";
+
 
 const router = Router();
 
@@ -57,23 +59,23 @@ router.post("/api/sos/requests", rateLimitMiddleware(10, 60_000), wrap(async (re
   const body = req.body || {};
   const { verificationToken, requester_name, requester_phone } = body;
   if (!verificationToken || !String(requester_name || "").trim() || !String(requester_phone || "").trim()) {
-    return res.status(400).json({ error: "Provide a verified SOS ticket, your name, and your WhatsApp number." });
+    return sendErrorResponse(res, new ValidationError("Provide a verified SOS ticket, your name, and your WhatsApp number."));
   }
   const normalizedContact = normalizePhone(String(requester_phone));
   if (!isValidIndianPhone(normalizedContact)) {
-    return res.status(400).json({ error: "Enter a valid Indian mobile number." });
+    return sendErrorResponse(res, new ValidationError("Enter a valid Indian mobile number."));
   }
   if (!await consumeOtpTicket(String(verificationToken), normalizedContact, "sos")) {
-    return res.status(403).json({ error: "WhatsApp verification expired. Request a new OTP." });
+    return sendErrorResponse(res, new ForbiddenError("WhatsApp verification expired. Request a new OTP."));
   }
   const bloodGroups = new Set(["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]);
   const units = Number(body.units_required);
   if (!body.patient_name || !bloodGroups.has(body.blood_type_needed) || !Number.isInteger(units) || units < 1 || units > 10 ||
     !body.hospital_name || !/^\d{6}$/.test(String(body.hospital_pincode)) || !body.hospital_area || !body.hospital_city) {
-    return res.status(400).json({ error: "Complete the patient, exact blood group, units, and hospital location fields." });
+    return sendErrorResponse(res, new ValidationError("Complete the patient, exact blood group, units, and hospital location fields."));
   }
   if (body.component_needed && !["Whole Blood (WB)", "Packed Red Blood Cells (PRBC)"].includes(body.component_needed)) {
-    return res.status(400).json({ error: "Component-specific matching requires blood-bank review. Use whole blood or PRBC for this pilot." });
+    return sendErrorResponse(res, new ValidationError("Component-specific matching requires blood-bank review. Use whole blood or PRBC for this pilot."));
   }
 
   const id = randomUUID();
@@ -129,12 +131,11 @@ router.post("/api/sos/requests", rateLimitMiddleware(10, 60_000), wrap(async (re
 router.get("/api/requests/:trackingCode", wrap(async (req, res) => {
   const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const request = all.find(r => r.tracking_code.toUpperCase() === req.params.trackingCode.toUpperCase().trim() || r.id === req.params.trackingCode);
-  if (!request) return res.status(404).json({ error: "No active blood request found with this tracking code. Please verify the code and try again." });
+  if (!request) return sendErrorResponse(res, new NotFoundError("No active blood request found with this tracking code. Please verify the code and try again."));
   const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
   const rawMatches = allMatches.filter(m => m.request_id === request.id);
   const allDonors = await getLocalOrFirestoreCollection<User>("users");
 
-  // Lazy backfill — mint public_token for any legacy match that lacks one
   for (const m of rawMatches) {
     if (!m.public_token) {
       m.public_token = randomBytes(16).toString("hex");
@@ -142,8 +143,6 @@ router.get("/api/requests/:trackingCode", wrap(async (req, res) => {
     }
   }
 
-  // Safe public projection — strip raw match UUID and donor UUID.
-  // matchToken is the opaque capability token; frontend joins donors[] by matchToken.
   const matches = rawMatches.map(m => {
     const d = allDonors.find(u => u.id === m.donor_id);
     return {
@@ -154,7 +153,6 @@ router.get("/api/requests/:trackingCode", wrap(async (req, res) => {
       distance_km:          m.distance_km,
       status:               m.donor_response,
       unit_slot:            m.unit_slot ?? null,
-      // Approved donors' contact info: kept for requester coordination (functional requirement)
       ...(m.donor_response === "approved" ? {
         donor_name:  d?.full_name,
         donor_phone: d?.whatsapp_number || d?.phone,
@@ -162,7 +160,6 @@ router.get("/api/requests/:trackingCode", wrap(async (req, res) => {
     };
   });
 
-  // Mask requester PII — tracking code is public but contact info is not
   const safeRequest = {
     ...request,
     requester_name:  undefined,
@@ -180,8 +177,8 @@ router.get("/api/requests/:trackingCode", wrap(async (req, res) => {
 router.patch("/api/requests/:trackingCode/cancel", wrap(async (req, res) => {
   const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const request = allRequests.find(r => r.tracking_code === req.params.trackingCode || r.id === req.params.trackingCode);
-  if (!request) return res.status(404).json({ error: "Request not found" });
-  if (!await checkRequesterAuth(req, request)) return res.status(403).json({ error: "Unauthorized" });
+  if (!request) return sendErrorResponse(res, new NotFoundError("Request not found"));
+  if (!await checkRequesterAuth(req, request)) return sendErrorResponse(res, new ForbiddenError("Unauthorized"));
   const updated = { ...request, status: "cancelled" as const, updated_at: nowISO() };
   await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
   await cacheInvalidatePrefix("req_status_");
@@ -193,8 +190,8 @@ router.patch("/api/requests/:trackingCode/cancel", wrap(async (req, res) => {
 router.patch("/api/requests/:trackingCode/reopen", wrap(async (req, res) => {
   const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const request = allRequests.find(r => r.tracking_code === req.params.trackingCode || r.id === req.params.trackingCode);
-  if (!request) return res.status(404).json({ error: "Request not found" });
-  if (!await checkRequesterAuth(req, request)) return res.status(403).json({ error: "Unauthorized" });
+  if (!request) return sendErrorResponse(res, new NotFoundError("Request not found"));
+  if (!await checkRequesterAuth(req, request)) return sendErrorResponse(res, new ForbiddenError("Unauthorized"));
   const updated = { ...request, status: "open" as const, updated_at: nowISO() };
   await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
   await cacheInvalidatePrefix("req_status_");
@@ -206,8 +203,8 @@ router.patch("/api/requests/:trackingCode/reopen", wrap(async (req, res) => {
 router.patch("/api/requests/:trackingCode/fulfill", wrap(async (req, res) => {
   const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const r = all.find(x => x.tracking_code === req.params.trackingCode || x.id === req.params.trackingCode);
-  if (!r) return res.status(404).json({ error: "Request not found" });
-  if (!await checkRequesterAuth(req, r)) return res.status(403).json({ error: "Unauthorized" });
+  if (!r) return sendErrorResponse(res, new NotFoundError("Request not found"));
+  if (!await checkRequesterAuth(req, r)) return sendErrorResponse(res, new ForbiddenError("Unauthorized"));
   await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, status: "fulfilled", fulfilled_at: nowISO() });
   logRequestEvent(r.id, "fulfilled", r.requester_id).catch(() => {});
   return res.json({ success: true });
@@ -217,8 +214,8 @@ router.patch("/api/requests/:trackingCode/fulfill", wrap(async (req, res) => {
 router.patch("/api/requests/:trackingCode/broadcast-toggle", wrap(async (req, res) => {
   const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const r = all.find(x => x.tracking_code === req.params.trackingCode || x.id === req.params.trackingCode);
-  if (!r) return res.status(404).json({ error: "Request not found" });
-  if (!await checkRequesterAuth(req, r)) return res.status(403).json({ error: "Unauthorized" });
+  if (!r) return sendErrorResponse(res, new NotFoundError("Request not found"));
+  if (!await checkRequesterAuth(req, r)) return sendErrorResponse(res, new ForbiddenError("Unauthorized"));
   await saveLocalOrFirestoreDoc("blood_requests", r.id, { ...r, broadcast_to_simulator: !r.broadcast_to_simulator });
   return res.json({ success: true });
 }));

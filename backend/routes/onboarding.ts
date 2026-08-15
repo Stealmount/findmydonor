@@ -18,6 +18,8 @@ import {
 import { enqueueWelcome } from "../services/notificationService";
 import { resolvePincode } from "./pincode";
 import { nowISO } from "../helpers/time";
+import { sendErrorResponse, UnauthorizedError, NotFoundError, ValidationError, AppError } from "../helpers/errors";
+
 
 const router = Router();
 
@@ -48,11 +50,11 @@ router.post(
   validate(onboardingBasicSchema),
   wrap(async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+    if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
     const linked = await getLinkedProfile(authUser.id);
-    if (!linked) return res.status(404).json({ error: "Profile not found." });
+    if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
     if (!isRev3Profile(linked.profile)) {
-      return res.status(409).json({ error: "Onboarding is not available for legacy profiles." });
+      return sendErrorResponse(res, new AppError("Onboarding is not available for legacy profiles.", 409, "LEGACY_PROFILE"));
     }
 
     const {
@@ -60,7 +62,6 @@ router.post(
       notificationChannel, verifyLater,
     } = req.body;
 
-    // Auto-resolve location from PIN when free-text location is omitted.
     let resolved = null;
     if (pincode) {
       resolved = await resolvePincode(pincode);
@@ -73,7 +74,6 @@ router.post(
     if (fullName !== undefined) update.full_name = fullName;
     if (whatsappPhone !== undefined) {
       update.whatsapp_phone = whatsappPhone;
-      // Changing the number resets verification (Rule: changing number resets verification).
       update.whatsapp_verified = false;
     }
     if (pincode !== undefined) update.pincode = pincode;
@@ -89,7 +89,7 @@ router.post(
 
     const { error } = await getServerSupabase()
       .from("profiles").update(update).eq("id", linked.profile.id);
-    if (error) return res.status(500).json({ error: "Failed to save basic profile." });
+    if (error) return sendErrorResponse(res, error, "Failed to save basic profile.");
 
     await cacheInvalidatePrefix(`me:${authUser.id}`);
     const refresh = await getLinkedProfile(authUser.id);
@@ -104,19 +104,17 @@ router.post(
 );
 
 // ─── POST /api/onboarding/intent — Screen 3: single-select intent ────────────
-// Captures the single-select intent plus inline donor/institution details,
-// sets onboarding_step → 'complete', and enqueues the welcome (idempotent).
 router.post(
   "/onboarding/intent",
   rateLimitMiddleware(10, 60_000),
   validate(onboardingIntentSchema),
   wrap(async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+    if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
     const linked = await getLinkedProfile(authUser.id);
-    if (!linked) return res.status(404).json({ error: "Profile not found." });
+    if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
     if (!isRev3Profile(linked.profile)) {
-      return res.status(409).json({ error: "Onboarding is not available for legacy profiles." });
+      return sendErrorResponse(res, new AppError("Onboarding is not available for legacy profiles.", 409, "LEGACY_PROFILE"));
     }
 
     const {
@@ -127,8 +125,8 @@ router.post(
     const profileId = linked.profile.id;
 
     if (intent === "donor") {
-      if (!bloodGroup) return res.status(400).json({ error: "Blood group is required for donor onboarding." });
-      if (healthSelfDeclaration !== true) return res.status(400).json({ error: "Health self-declaration is required for donor onboarding." });
+      if (!bloodGroup) return sendErrorResponse(res, new ValidationError("Blood group is required for donor onboarding."));
+      if (healthSelfDeclaration !== true) return sendErrorResponse(res, new ValidationError("Health self-declaration is required for donor onboarding."));
       await supabase.from("donor_profiles").upsert({
         profile_id: profileId,
         blood_group: bloodGroup,
@@ -149,7 +147,6 @@ router.post(
     await cacheInvalidatePrefix(`acct:${authUser.id}`);
     await cacheInvalidatePrefix(`me:${authUser.id}`);
 
-    // Welcome: enforce via profiles.update intent completed — enqueue once.
     const welcome = await enqueueWelcome(profileId);
 
     return res.json({
@@ -164,16 +161,14 @@ router.post(
 );
 
 // ─── POST /api/onboarding/completion-wizard ──────────────────────────────────
-// Client calls this at the end of onboarding to advance into the dashboard
-// shell and (re)confirm onboarding_step is 'complete'. Non-destructive.
 router.post(
   "/onboarding/completion-wizard",
   rateLimitMiddleware(10, 60_000),
   wrap(async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+    if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
     const linked = await getLinkedProfile(authUser.id);
-    if (!linked) return res.status(404).json({ error: "Profile not found." });
+    if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
 
     await getServerSupabase().from("profiles")
       .update({ onboarding_step: "complete", updated_at: nowISO() })

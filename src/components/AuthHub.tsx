@@ -22,14 +22,14 @@ interface AuthHubProps {
 export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLoginSuccessDonor, onLoginSuccessRequester, onLoginSuccessInstitution }: AuthHubProps) {
   const F = useAuthHub(initialMode, initialIntent, { onLoginSuccessDonor, onLoginSuccessRequester, onLoginSuccessInstitution });
   const {
-    t, isHi, mode, setMode, signupStep, setSignupStep, signupChannel, setSignupChannel, intent, setIntent,
+    t, isHi, mode, setMode, signupStep, setSignupStep, signupChannel, setSignupChannel, signinChannel, setSigninChannel, intent, setIntent,
     phone, setPhone, password, setPassword, fullName, setFullName, email, setEmail, otpInput, setOtpInput,
     devBypassNotice, loading, error, setError, infoMessage, setInfoMessage,
     signinMode, setSigninMode, instStep, setInstStep,
     bloodGroup, setBloodGroup, donorPincode, setDonorPincode, donorArea, setDonorArea, donorCity, setDonorCity,
     weightKg, setWeightKg, lastDonationDate, setLastDonationDate, neverDonated, setNeverDonated,
     healthDeclaration, setHealthDeclaration, emergencyOnly, setEmergencyOnly,
-    handlePhoneSignIn, handleSendOtpForSignUp, handleVerifyOtpAndSignUp, handleSendEmailOtpForSignUp,
+    handlePhoneSignIn, handleEmailSignIn, handleSendOtpForSignUp, handleVerifyOtpAndSignUp, handleSendEmailOtpForSignUp,
     handleVerifyEmailOtpAndSignUp, handleInstitutionSendOtp, handleInstitutionVerifyAndSignIn, handleGoogle,
     handleGooglePhoneSubmit, submitDonorProfile,
   } = F;
@@ -77,13 +77,14 @@ export function AuthHub({ initialMode = 'signin', initialIntent = 'donor', onLog
             mode={mode}
             signupStep={signupStep}
             signupChannel={signupChannel}
+            signinChannel={signinChannel}
             signinMode={signinMode}
             instStep={instStep}
             phone={phone} password={password} fullName={fullName} email={email} otpInput={otpInput} intent={intent}
-            loading={loading} setSignupChannel={setSignupChannel} setIntent={setIntent}
+            loading={loading} setSignupChannel={setSignupChannel} setSigninChannel={setSigninChannel} setIntent={setIntent}
             setPhone={setPhone} setPassword={setPassword} setFullName={setFullName} setEmail={setEmail} setOtpInput={setOtpInput}
             setSigninMode={setSigninMode} setInstStep={setInstStep} setError={setError} setInfoMessage={setInfoMessage}
-            onGoogle={handleGoogle} onPhoneSignIn={handlePhoneSignIn} onSendOtpForSignUp={handleSendOtpForSignUp}
+            onGoogle={handleGoogle} onPhoneSignIn={handlePhoneSignIn} onEmailSignIn={handleEmailSignIn} onSendOtpForSignUp={handleSendOtpForSignUp}
             onSendEmailOtpForSignUp={handleSendEmailOtpForSignUp} onInstitutionSendOtp={handleInstitutionSendOtp}
             onInstitutionVerifyAndSignIn={handleInstitutionVerifyAndSignIn} {...stepProps}
           />

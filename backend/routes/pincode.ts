@@ -7,8 +7,10 @@
 import express, { Router } from "express";
 import { cacheGet, cacheSet } from "../src/lib/redisCache";
 import rateLimitMiddleware from "../middleware/rateLimiter";
+import { sendErrorResponse, ValidationError, NotFoundError } from "../helpers/errors";
 
 const router = Router();
+
 
 // Express 4 does not forward rejected async handlers to its error middleware.
 const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, res, next) => {
@@ -84,14 +86,11 @@ router.get(
   wrap(async (req, res) => {
     const pin = String(req.params.pin || "").trim();
     if (!/^\d{6}$/.test(pin)) {
-      return res.status(400).json({ error: "Enter a valid 6-digit PIN code." });
+      return sendErrorResponse(res, new ValidationError("Enter a valid 6-digit PIN code."));
     }
     const result = await resolvePincode(pin);
     if (result.source === "none") {
-      return res.status(404).json({
-        error: "PIN code not found. Enter your city, district, and state manually.",
-        ...result,
-      });
+      return sendErrorResponse(res, new NotFoundError("PIN code not found. Enter your city, district, and state manually."));
     }
     return res.json(result);
   })

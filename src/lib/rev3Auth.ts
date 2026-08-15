@@ -2,6 +2,7 @@
 // Slices 1–5 all talk through these helpers so the API surface stays in one place
 // and the components stay declarative.
 import { supabase } from './supabase';
+import { ApiError } from './api';
 import type { Profile, DonorProfile, Institution, User } from '../types';
 
 export type Rev3NextStep = 'basic' | 'intent' | 'complete' | 'contact' | 'donor-profile';
@@ -20,14 +21,20 @@ async function postJson(path: string, body: unknown, token?: string) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error || 'Request failed. Please try again.');
+  if (!res.ok) {
+    const message = payload.error || payload.message || 'Request failed. Please try again.';
+    throw new ApiError(message, res.status, payload.code, payload.details);
+  }
   return payload as any;
 }
 
 async function getJson(path: string, token: string) {
   const res = await fetch(path, { method: 'GET', headers: { Authorization: `Bearer ${token}` } });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.error || 'Request failed. Please try again.');
+  if (!res.ok) {
+    const message = payload.error || payload.message || 'Request failed. Please try again.';
+    throw new ApiError(message, res.status, payload.code, payload.details);
+  }
   return payload as any;
 }
 

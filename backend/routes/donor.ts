@@ -13,8 +13,10 @@ import rateLimitMiddleware from "../middleware/rateLimiter";
 import { normalizePhone, isValidIndianPhone } from "../helpers/phone";
 import { nowISO, nowDate, daysFromNow } from "../helpers/time";
 import { sendWhatsApp, buildWelcomeMessage } from "../src/lib/waha";
-import { notifyOpenRequestsForNewDonor } from "../services/matchingEngine";
+import { validate } from "../validation";
+import { sendErrorResponse, UnauthorizedError, NotFoundError, ForbiddenError, ValidationError, AppError } from "../helpers/errors";
 import type { BloodRequest, DonationLog, Match, User } from "../src/types";
+
 
 const router = Router();
 
@@ -34,9 +36,9 @@ const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, 
 // ─── Donor profile update ────────────────────────────────────────────────────
 router.put("/api/donor-profile", rateLimitMiddleware(20, 60_000), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
-  if (!donor) return res.status(404).json({ error: "Donor profile not found" });
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor profile not found"));
 
   const body = req.body || {};
   const updated = {
@@ -60,11 +62,11 @@ router.put("/api/donor-profile", rateLimitMiddleware(20, 60_000), wrap(async (re
 // ─── Complete donor onboarding ────────────────────────────────────────────────
 router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
 
   const linked = await getLinkedProfile(authUser.id);
-  if (!linked) return res.status(404).json({ error: "Profile not found." });
-  if (!linked.profile.can_donate) return res.status(403).json({ error: "Donor role required." });
+  if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
+  if (!linked.profile.can_donate) return sendErrorResponse(res, new ForbiddenError("Donor role required."));
   let donorProfile = linked.donorProfile;
   if (!donorProfile) {
     const supabase = getServerSupabase();
@@ -82,10 +84,10 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
   const { blood_group, pincode, area, city, last_donation_date, health_self_declaration, emergency_only, number_sharing_pref } = req.body || {};
 
   const VALID_BLOOD_GROUPS = new Set(["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]);
-  if (!blood_group || !VALID_BLOOD_GROUPS.has(String(blood_group))) return res.status(400).json({ error: "Valid blood group required." });
-  if (!pincode || !/^\d{6}$/.test(String(pincode))) return res.status(400).json({ error: "Valid 6-digit pincode required." });
-  if (!area || !city) return res.status(400).json({ error: "Area and city are required." });
-  if (health_self_declaration !== true) return res.status(400).json({ error: "Health self-declaration is required." });
+  if (!blood_group || !VALID_BLOOD_GROUPS.has(String(blood_group))) return sendErrorResponse(res, new ValidationError("Valid blood group required."));
+  if (!pincode || !/^\d{6}$/.test(String(pincode))) return sendErrorResponse(res, new ValidationError("Valid 6-digit pincode required."));
+  if (!area || !city) return sendErrorResponse(res, new ValidationError("Area and city are required."));
+  if (health_self_declaration !== true) return sendErrorResponse(res, new ValidationError("Health self-declaration is required."));
 
   const cooldown_until = last_donation_date
     ? (() => {
@@ -119,8 +121,7 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
     .single();
 
   if (error) {
-    console.error("[DonorComplete] Update failed:", error);
-    return res.status(500).json({ error: "Unable to save donor profile." });
+    return sendErrorResponse(res, error, "Unable to save donor profile.");
   }
 
   const updatedDonorDoc: any = {
@@ -151,16 +152,13 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
 
   await cacheInvalidatePrefix("eligible_");
 
-  // Trigger immediate matching for open requests if donor is now available
-  if (is_available && data) {
-    notifyOpenRequestsForNewDonor(String(blood_group), String(pincode)).catch(() => {});
-  }
-
-  // Send gamified welcome WhatsApp — fire-and-forget
+  // Send gamified welcome WhatsApp — fire-and-forget, skipped if no phone set yet
   (async () => {
     try {
-      const message = buildWelcomeMessage(linked.profile.full_name);
-      await sendWhatsApp(linked.profile.whatsapp_phone, message);
+      if (linked.profile.whatsapp_phone) {
+        const message = buildWelcomeMessage(linked.profile.full_name);
+        await sendWhatsApp(linked.profile.whatsapp_phone, message);
+      }
     } catch (e: any) {
       console.error("[DonorComplete] Welcome WhatsApp failed:", e.message);
     }
@@ -172,43 +170,37 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
 // ─── Availability toggle ─────────────────────────────────────────────────────
 router.patch("/api/donor-profile/availability", rateLimitMiddleware(30, 60_000), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const linked = await getLinkedProfile(authUser.id);
-  if (!linked?.donorProfile || !linked.profile.whatsapp_verified) return res.status(403).json({ error: "Verified donor profile required." });
+  if (!linked?.donorProfile || !linked.profile.whatsapp_verified) return sendErrorResponse(res, new ForbiddenError("Verified donor profile required."));
   const available = req.body?.isAvailable === true;
-  if (available && !linked.donorProfile.profile_complete) return res.status(409).json({ error: "Complete donor profile before becoming available." });
+  if (available && !linked.donorProfile.profile_complete) return sendErrorResponse(res, new AppError("Complete donor profile before becoming available.", 409, "PROFILE_INCOMPLETE"));
   const today = nowDate();
   if (available && linked.donorProfile.cooldown_until && linked.donorProfile.cooldown_until >= today) {
-    return res.status(409).json({ error: `Donation cooldown active until ${linked.donorProfile.cooldown_until}.` });
+    return sendErrorResponse(res, new AppError(`Donation cooldown active until ${linked.donorProfile.cooldown_until}.`, 422, "COOLDOWN_ACTIVE"));
   }
   const { data, error } = await getServerSupabase().from("donor_profiles")
     .update({ is_available: available, updated_at: nowISO() }).eq("profile_id", linked.profile.id).select("*").single();
-  if (error) return res.status(400).json({ error: "Unable to update availability." });
+  if (error) return sendErrorResponse(res, error, "Unable to update availability.");
   await cacheInvalidatePrefix("eligible_");
-  // Trigger immediate matching for open requests when donor becomes available
-  if (available) {
-    notifyOpenRequestsForNewDonor(linked.donorProfile.blood_group || "", linked.donorProfile.pincode || "").catch(() => {});
-  }
   return res.json({ donorProfile: data });
 }));
 
 // ─── Legacy donor creation (disabled) ────────────────────────────────────────
-// Profiles are created by the API only after both Supabase Auth and WhatsApp OTP succeed.
 router.post("/api/profiles/donor", rateLimitMiddleware(10, 60_000), wrap(async (_req, res) => {
-  // DISABLED: Legacy OTP-gated donor creation. Use /api/auth/phone-signup + /api/donor-profile/complete.
-  return res.status(410).json({ error: "Legacy donor signup is disabled. Use the new auth flow." });
+  return sendErrorResponse(res, new AppError("Legacy donor signup is disabled. Use the new auth flow.", 410, "GONE"));
 }));
 
 // ─── Donor dashboard ─────────────────────────────────────────────────────────
 router.get("/api/dashboard/donor", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   const [donor, allMatches, allLogs] = await Promise.all([
     getLocalOrFirestoreDoc<User>("users", authUser.id),
     getLocalOrFirestoreCollection<Match>("matches"),
     getLocalOrFirestoreCollection<DonationLog>("donation_log"),
   ]);
-  if (!donor) return res.status(404).json({ error: "Donor profile not found." });
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor profile not found."));
   const matches = allMatches.filter((match) => match.donor_id === donor.id);
   const requestIds = new Set(matches.map((match) => match.request_id));
   const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
@@ -219,7 +211,7 @@ router.get("/api/dashboard/donor", wrap(async (req, res) => {
 // ─── Donor matches list ──────────────────────────────────────────────────────
 router.get("/api/donor/matches", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
-  if (!authUser) return res.status(401).json({ error: "Sign in is required." });
+  if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   let donorId = authUser.id;
   let donorProfileId: string | null = null;
   try {
@@ -261,7 +253,7 @@ router.get("/api/donors/by-phone/:phone/pending-matches", wrap(async (req, res) 
         normalizePhone(d.phone) === phone ||
         normalizePhone(d.whatsapp_number || "") === phone
     );
-    if (!donor) return res.status(404).json({ error: "Donor not found" });
+    if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
 
     const allMatches = await getLocalOrFirestoreCollection<Match>("matches");
     const pending = allMatches.filter(
@@ -283,7 +275,7 @@ router.get("/api/donors/by-phone/:phone/pending-matches", wrap(async (req, res) 
     res.setHeader("X-Cache", "MISS");
     return res.json(payload);
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return sendErrorResponse(res, err, "Failed to retrieve pending matches.");
   }
 }));
 
@@ -301,9 +293,9 @@ router.post("/api/donor/matches/:matchId/confirm", (req, res, next) => {
   // ─── Self-reported donation (weight milestone eligibility) ─────────────
   wrap(async (req, res) => {
     const authUser = await getAuthenticatedUser(req);
-    if (!authUser) return res.status(401).json({ error: "Sign in is required" });
+    if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required"));
     const donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
-    if (!donor) return res.status(404).json({ error: "Donor not found" });
+    if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
 
     const now = new Date();
     const cooldownEnd = daysFromNow(60);

@@ -9,8 +9,11 @@ import { nowISO } from "../helpers/time";
 import type { BloodType, User } from "../src/types";
 
 export type LinkedProfile = {
-  id: string; full_name: string; phone: string; whatsapp_phone: string; email: string | null;
+  id: string; full_name: string; phone: string | null; whatsapp_phone: string | null; email: string | null;
   whatsapp_verified: boolean; consent_accepted_at: string | null; can_donate: boolean; can_request: boolean;
+  auth_method?: string | null; onboarding_step?: string | null; intent?: string | null;
+  notification_channel?: string | null; welcome_sent_at?: string | null;
+  pincode?: string | null; city?: string | null; district?: string | null; state?: string | null; area?: string | null;
 };
 export type LinkedDonorProfile = {
   profile_id: string; blood_group: BloodType | null; latitude: number | null; longitude: number | null;

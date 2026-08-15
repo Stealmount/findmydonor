@@ -10,14 +10,87 @@
 
 import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { isOriginAllowed } from '../middleware/security';
+import { sanitizeErrorMessage, AppError, ValidationError, UnauthorizedError } from '../helpers/errors';
 
-const BASE = process.env.TEST_BASE_URL || 'https://raktdaan.duckdns.org';
+const BASE = process.env.TEST_BASE_URL || 'https://findmydonor.online';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function fetchAPI(path: string, opts: RequestInit = {}) {
   return fetch(`${BASE}${path}`, { ...opts, redirect: 'manual' });
 }
+
+// ─── Unit tests for error sanitization contract ──────────────────────────────
+
+describe('Error sanitization & structured contract unit tests', () => {
+  test('Sanitizes database relation errors and leaks no internal tables', () => {
+    const raw = 'relation "private_profiles" does not exist in schema "public"';
+    const clean = sanitizeErrorMessage(raw, 'Database query failed.');
+    assert.equal(clean, 'Database query failed.');
+    assert.equal(clean.includes('private_profiles'), false);
+  });
+
+  test('Sanitizes SQL injection/syntax error messages', () => {
+    const raw = 'syntax error at or near "SELECT" line 1';
+    const clean = sanitizeErrorMessage(raw, 'Operation failed.');
+    assert.equal(clean, 'Operation failed.');
+    assert.equal(clean.includes('SELECT'), false);
+  });
+
+  test('Sanitizes database connection strings containing credentials', () => {
+    const raw = 'connection to postgres://admin:secret123@db.supabase.co:5432 failed';
+    const clean = sanitizeErrorMessage(raw, 'Connection failed.');
+    assert.equal(clean, 'Connection failed.');
+    assert.equal(clean.includes('secret123'), false);
+  });
+
+  test('Preserves safe human-readable error messages', () => {
+    assert.equal(sanitizeErrorMessage('Sign in is required.', 'An error occurred.'), 'Sign in is required.');
+    assert.equal(sanitizeErrorMessage('Invalid OTP code provided. Please try again.', 'An error occurred.'), 'Invalid OTP code provided. Please try again.');
+    assert.equal(sanitizeErrorMessage('Enter a valid 6-digit PIN code.', 'An error occurred.'), 'Enter a valid 6-digit PIN code.');
+  });
+
+  test('AppError creates structured error object with code and status', () => {
+    const err = new ValidationError('Enter a valid email.');
+    assert.equal(err.statusCode, 400);
+    assert.equal(err.code, 'VALIDATION_ERROR');
+    assert.equal(err.message, 'Enter a valid email.');
+    assert.equal(err.isOperational, true);
+  });
+});
+
+// ─── Unit tests for isOriginAllowed ───────────────────────────────────────
+
+describe('isOriginAllowed unit tests', () => {
+  test('Allows production domain https://findmydonor.online', () => {
+    assert.equal(isOriginAllowed('https://findmydonor.online'), true);
+    assert.equal(isOriginAllowed('https://www.findmydonor.online'), true);
+  });
+
+  test('Allows localhost origins for development', () => {
+    assert.equal(isOriginAllowed('http://localhost:5173'), true);
+    assert.equal(isOriginAllowed('http://localhost:5000'), true);
+    assert.equal(isOriginAllowed('http://localhost:3000'), true);
+    assert.equal(isOriginAllowed('http://127.0.0.1:5173'), true);
+    assert.equal(isOriginAllowed('http://127.0.0.1:5000'), true);
+  });
+
+  test('Rejects wildcard origin (*)', () => {
+    assert.equal(isOriginAllowed('*'), false);
+  });
+
+  test('Rejects spoofed domain origins', () => {
+    assert.equal(isOriginAllowed('http://findmydonor.online.evil.com'), false);
+    assert.equal(isOriginAllowed('http://evil.com/findmydonor.online'), false);
+    assert.equal(isOriginAllowed('https://evil.example.com'), false);
+  });
+
+  test('Rejects empty or invalid origins', () => {
+    assert.equal(isOriginAllowed(''), false);
+    assert.equal(isOriginAllowed('not-a-url'), false);
+  });
+});
 
 // ─── Security Headers ───────────────────────────────────────────────────────
 
@@ -69,12 +142,12 @@ describe('CORS allowlist', () => {
 
   test('Approved origin receives Access-Control-Allow-Origin', async () => {
     const res = await fetchAPI('/api/health', {
-      headers: { 'Origin': `https://raktdaan.duckdns.org` },
+      headers: { 'Origin': `https://findmydonor.online` },
     });
     assert.equal(res.status, 200);
     assert.equal(
       res.headers.get('access-control-allow-origin'),
-      'https://raktdaan.duckdns.org',
+      'https://findmydonor.online',
       'Should echo approved origin',
     );
     assert.equal(res.headers.get('vary'), 'Origin', 'Should set Vary: Origin');
@@ -93,7 +166,7 @@ describe('CORS allowlist', () => {
     const res = await fetchAPI('/api/health', {
       method: 'OPTIONS',
       headers: {
-        'Origin': 'https://raktdaan.duckdns.org',
+        'Origin': 'https://findmydonor.online',
         'Access-Control-Request-Method': 'POST',
         'Access-Control-Request-Headers': 'Authorization,Content-Type',
       },
@@ -101,7 +174,7 @@ describe('CORS allowlist', () => {
     assert.equal(res.status, 204, 'Preflight should return 204');
     assert.equal(
       res.headers.get('access-control-allow-origin'),
-      'https://raktdaan.duckdns.org',
+      'https://findmydonor.online',
     );
     assert.ok(
       res.headers.get('access-control-allow-methods')?.includes('POST'),

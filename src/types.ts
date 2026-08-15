@@ -122,8 +122,8 @@ export type OnboardingStep = 'intent' | 'contact' | 'consent' | 'otp' | 'donor-p
 export interface Profile {
   id: string;
   full_name: string;
-  phone: string;
-  whatsapp_phone: string;
+  phone: string | null;
+  whatsapp_phone: string | null;
   is_whatsapp: boolean;
   email: string | null;
   whatsapp_verified: boolean;
@@ -133,6 +133,17 @@ export interface Profile {
   trust_report_count: number;
   created_at: string;
   updated_at: string;
+  // Rev 3 redesign columns (added by migration 005)
+  auth_method?: string | null;
+  onboarding_step?: string | null;
+  intent?: string | null;
+  notification_channel?: string | null;
+  welcome_sent_at?: string | null;
+  pincode?: string | null;
+  city?: string | null;
+  district?: string | null;
+  state?: string | null;
+  area?: string | null;
 }
 
 export interface AuthProfileLink {

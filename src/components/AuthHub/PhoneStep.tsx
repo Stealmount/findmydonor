@@ -1,12 +1,13 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Building2, Heart, Mail, Phone, ShieldCheck } from 'lucide-react';
 import { SignupIntent } from '../../types';
-import { SignupStep, SignupChannel, SigninMode, InstStep } from './useAuthHubTypes';
+import { SignupStep, SignupChannel, SigninChannel, SigninMode, InstStep } from './useAuthHubTypes';
 
 interface PhoneStepProps {
   mode: 'signin' | 'signup';
   signupStep: SignupStep;
   signupChannel: SignupChannel;
+  signinChannel: SigninChannel;
   signinMode: SigninMode;
   instStep: InstStep;
   phone: string;
@@ -22,6 +23,7 @@ interface PhoneStepProps {
   btnPrimary: string;
   btnGoogle: string;
   setSignupChannel: (c: SignupChannel) => void;
+  setSigninChannel: (c: SigninChannel) => void;
   setIntent: (i: SignupIntent) => void;
   setPhone: (v: string) => void;
   setPassword: (v: string) => void;
@@ -34,6 +36,7 @@ interface PhoneStepProps {
   setInfoMessage: (m: string) => void;
   onGoogle: () => void;
   onPhoneSignIn: (e: React.FormEvent) => void;
+  onEmailSignIn: (e: React.FormEvent) => void;
   onSendOtpForSignUp: (e: React.FormEvent) => void;
   onSendEmailOtpForSignUp: (e: React.FormEvent) => void;
   onInstitutionSendOtp: (e: React.FormEvent) => void;
@@ -42,12 +45,12 @@ interface PhoneStepProps {
 
 export default function PhoneStep(props: PhoneStepProps) {
   const {
-    mode, signupStep, signupChannel, signinMode, instStep,
+    mode, signupStep, signupChannel, signinChannel, signinMode, instStep,
     phone, password, fullName, email, otpInput, intent, loading, isHi,
     card, field, btnPrimary, btnGoogle,
-    setSignupChannel, setIntent, setPhone, setPassword, setFullName, setEmail, setOtpInput,
+    setSignupChannel, setSigninChannel, setIntent, setPhone, setPassword, setFullName, setEmail, setOtpInput,
     setSigninMode, setInstStep, setError, setInfoMessage,
-    onGoogle, onPhoneSignIn, onSendOtpForSignUp, onSendEmailOtpForSignUp, onInstitutionSendOtp, onInstitutionVerifyAndSignIn,
+    onGoogle, onPhoneSignIn, onEmailSignIn, onSendOtpForSignUp, onSendEmailOtpForSignUp, onInstitutionSendOtp, onInstitutionVerifyAndSignIn,
   } = props;
 
   const GoogleButton = () => (
@@ -63,17 +66,37 @@ export default function PhoneStep(props: PhoneStepProps) {
     <>
       {/* ─── SIGN IN ──────────────────────────────────────── */}
       {mode === 'signin' && signupStep === 'main' && signinMode === 'user' && (
-        <motion.form key="signin" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={card} onSubmit={onPhoneSignIn}>
+        <motion.form key="signin" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={card} onSubmit={signinChannel === 'email' ? onEmailSignIn : onPhoneSignIn}>
           <GoogleButton />
           <div className="my-5 flex items-center gap-3"><hr className="flex-1 border-ink-200" /><span className="text-[10px] font-bold text-ink-400">{isHi ? 'या' : 'OR'}</span><hr className="flex-1 border-ink-200" /></div>
-          <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'WhatsApp नंबर' : 'WhatsApp Number'}</label>
-          <div className="flex gap-2">
-            <div className="flex h-[46px] items-center rounded-xl border border-ink-200 bg-ink-50 px-3 text-sm font-bold text-ink-600 select-none">91</div>
-            <input id="signin-phone" className={field} required inputMode="numeric" maxLength={10} placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} />
+          
+          {/* Sign In Channel Selector */}
+          <div className="mb-4 flex rounded-xl border border-ink-200 bg-ink-50 p-1">
+            <button id="signin-tab-phone" type="button" onClick={() => setSigninChannel('phone')} className={`flex-1 rounded-lg py-2 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${signinChannel === 'phone' ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'}`}>
+              <Phone className="h-3.5 w-3.5" /> WhatsApp / Phone
+            </button>
+            <button id="signin-tab-email" type="button" onClick={() => setSigninChannel('email')} className={`flex-1 rounded-lg py-2 text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 ${signinChannel === 'email' ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'}`}>
+              <Mail className="h-3.5 w-3.5 text-blood-600" /> Email & Password
+            </button>
           </div>
+
+          {signinChannel === 'email' ? (
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'ईमेल पता' : 'Email Address'}
+              <input id="signin-email" className={`${field} mt-1`} required type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+            </label>
+          ) : (
+            <>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'WhatsApp नंबर' : 'WhatsApp Number'}</label>
+              <div className="flex gap-2">
+                <div className="flex h-[46px] items-center rounded-xl border border-ink-200 bg-ink-50 px-3 text-sm font-bold text-ink-600 select-none">91</div>
+                <input id="signin-phone" className={field} required inputMode="numeric" maxLength={10} placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} />
+              </div>
+            </>
+          )}
+
           <label className="mb-2 mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'पासवर्ड' : 'Password'}</label>
           <input id="signin-password" className={field} required type="password" value={password} onChange={e => setPassword(e.target.value)} />
-          <button id="signin-submit" disabled={loading || phone.length !== 10} className={btnPrimary}>{loading ? (isHi ? 'साइन इन हो रहा है…' : 'Signing in…') : <>{isHi ? 'साइन इन करें' : 'Sign in'} <ArrowRight className="h-4 w-4" /></>}</button>
+          <button id="signin-submit" disabled={loading || (signinChannel === 'phone' ? phone.length !== 10 : !email.includes('@')) || !password} className={btnPrimary}>{loading ? (isHi ? 'साइन इन हो रहा है…' : 'Signing in…') : <>{isHi ? 'साइन इन करें' : 'Sign in'} <ArrowRight className="h-4 w-4" /></>}</button>
           <button id="signin-institution-toggle" type="button" onClick={() => { setSigninMode('institution'); setInstStep('email'); setOtpInput(''); setError(''); setInfoMessage(''); }}
             className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blood-300 bg-blood-50/50 text-sm font-bold text-blood-700 hover:bg-blood-50 transition cursor-pointer">
             <Building2 className="h-4 w-4" />{isHi ? 'अस्पताल / ब्लड बैंक साथी? ईमेल OTP से साइन इन करें' : 'Hospital / blood bank partner? Sign in with email OTP'}
