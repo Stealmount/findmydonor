@@ -22,6 +22,7 @@ import { normalizePhone } from "../helpers/phone";
 import { nowISO, daysFromNow } from "../helpers/time";
 import {
   sendWhatsApp,
+  sendDonorWhatsApp,
   buildDonorConfirmedDetailsMessage,
   buildRequesterConfirmMessage,
   buildDonorDeclineAckMessage,
@@ -278,12 +279,12 @@ router.post("/api/matches/:matchId/confirm-donation", wrap(async (req, res) => {
     }),
   ]);
 
-  await sendWhatsApp(
-    donor.whatsapp_number || donor.phone,
+  await sendDonorWhatsApp(
+    donor,
     buildDonorThankYouMessage(donor, match.request_id, cooldownEnd)
   );
-  await sendWhatsApp(
-    donor.whatsapp_number || donor.phone,
+  await sendDonorWhatsApp(
+    donor,
     buildDonorReferralMessage(donor.full_name)
   );
 

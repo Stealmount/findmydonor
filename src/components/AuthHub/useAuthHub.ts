@@ -48,7 +48,7 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
     setMode(initialMode);
     setIntent(initialIntent);
 
-    // Check if returning from Google OAuth redirect
+    // Check if returning from Google OAuth redirect or existing session
     void supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         const isGoogle = user.app_metadata?.provider === 'google' || Boolean(sessionStorage.getItem('findmydonor_oauth_pending'));
@@ -59,6 +59,17 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
         void resolveSignedInState();
       }
     });
+
+    // Subscribe to auth state changes to catch async OAuth hash token parsing (SIGNED_IN / INITIAL_SESSION)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        void resolveSignedInState();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMode, initialIntent]);
 
@@ -345,13 +356,12 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
       const { verificationToken } = verifyPayload;
       if (!verificationToken) throw new Error('Email verification failed. Try again.');
 
-      const signupRes = await fetch('/api/auth/email-signup', {
+      const signupRes = await fetch('/api/auth/email-complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
-          password,
-          full_name: fullName.trim(),
+          fullName: fullName.trim(),
           intent,
           verificationToken,
         }),
@@ -441,9 +451,14 @@ export default function useAuthHub(initialMode: 'signin' | 'signup', initialInte
     setError(''); setLoading(true);
     sessionStorage.setItem('findmydonor_oauth_pending', JSON.stringify({ intent }));
     try {
+      // Route the OAuth callback back to an auth-aware page (not the bare
+      // origin) so resolveSignedInState() completes the Google profile and
+      // redirects the authenticated user to their dashboard. The bare origin
+      // ("/") has no OAuth handler and strands the user on the home page.
+      const callback = `${window.location.origin}${mode === 'signup' ? '/auth/signup' : '/auth/signin'}`;
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}` },
+        options: { redirectTo: callback },
       });
       if (authError) throw authError;
     } catch (caught) {

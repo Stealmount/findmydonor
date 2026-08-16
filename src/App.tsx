@@ -168,10 +168,10 @@ function AppRoutes() {
       <Route path="/auth/rev3" element={<Rev3AuthRoute nav={nav} />} />
       <Route path="/auth/rev3/onboarding" element={<Rev3OnboardingRoute nav={nav} />} />
 
-      <Route path="/auth/signin" element={<AuthRoute nav={nav} mode="signin" intent="donor" />} />
-      <Route path="/auth/signup" element={<AuthRoute nav={nav} mode="signup" intent="donor" />} />
-      <Route path="/auth/donor-register" element={<AuthRoute nav={nav} mode="signup" intent="donor" />} />
-      <Route path="/auth/requester-register" element={<AuthRoute nav={nav} mode="signup" intent="requester" />} />
+      <Route path="/auth/signin" element={<Rev3AuthRoute nav={nav} />} />
+      <Route path="/auth/signup" element={<Rev3AuthRoute nav={nav} intent="donor" />} />
+      <Route path="/auth/donor-register" element={<Rev3AuthRoute nav={nav} intent="donor" />} />
+      <Route path="/auth/requester-register" element={<Rev3AuthRoute nav={nav} intent="requester" />} />
 
       <Route path="/hospital/register" element={
         <FullScreenRoute nav={nav}>
@@ -316,6 +316,18 @@ function AuthRoute({ nav, mode, intent }: {
   const navigate = useNavigate();
   const auth = useAuth();
 
+  // If user is already authenticated (e.g. via AuthContext session resolution),
+  // auto-redirect to dashboard instead of stranding user on auth screens.
+  useEffect(() => {
+    if (auth.loggedInUser) {
+      navigate('/donor-dashboard', { replace: true });
+    } else if (auth.loggedInRequester) {
+      navigate('/requester-portal', { replace: true });
+    } else if (auth.loggedInHospital || auth.loggedInInstitution) {
+      navigate('/hospital/dashboard', { replace: true });
+    }
+  }, [auth.loggedInUser, auth.loggedInRequester, auth.loggedInHospital, auth.loggedInInstitution, navigate]);
+
   return (
     <AppShell nav={nav} activeView={mode === 'signin' ? 'auth-signin' : intent === 'requester' ? 'requester-register' : 'auth-signup'}>
       <AuthHub
@@ -343,13 +355,24 @@ function AuthRoute({ nav, mode, intent }: {
   );
 }
 
-// Rev 3 authentication route (Phase 5). After sign-in, resolve the user's next
-// step from /me and route to onboarding, a dashboard, or the completion wizard.
-function Rev3AuthRoute({ nav }: { nav: (view: string, push?: boolean, code?: string) => void }) {
+// Rev 3 authentication route. After sign-in, resolve the user's profile from /me
+// and route to the correct user dashboard (donor, requester, or hospital).
+function Rev3AuthRoute({ nav, intent }: { nav: (view: string, push?: boolean, code?: string) => void; intent?: 'donor' | 'requester' }) {
   const navigate = useNavigate();
   const auth = useAuth();
 
-  const handleContinue = async (step: string) => {
+  // Auto-redirect authenticated users away from auth screens to their dashboard
+  useEffect(() => {
+    if (auth.loggedInUser) {
+      navigate('/donor-dashboard', { replace: true });
+    } else if (auth.loggedInRequester) {
+      navigate('/requester-portal', { replace: true });
+    } else if (auth.loggedInHospital || auth.loggedInInstitution) {
+      navigate('/hospital/dashboard', { replace: true });
+    }
+  }, [auth.loggedInUser, auth.loggedInRequester, auth.loggedInHospital, auth.loggedInInstitution, navigate]);
+
+  const handleContinue = async (_step: string) => {
     let me: Awaited<ReturnType<typeof fetchMe>> | undefined;
     try {
       me = await fetchMe();
@@ -365,31 +388,20 @@ function Rev3AuthRoute({ nav }: { nav: (view: string, push?: boolean, code?: str
     if (legacy.donor) {
       auth.setLoggedInUser(legacy.donor);
       auth.setLoggedInRequester(null);
+      navigate('/donor-dashboard');
+      return;
     } else if (legacy.requester) {
       auth.setLoggedInRequester(legacy.requester);
       auth.setLoggedInUser(null);
-    }
-    // Onboarding pending — hand the user to the onboarding flow (Slice 2).
-    if (me.profile && !(me.profile as unknown as { onboarding_step?: string }).onboarding_step) {
-      navigate('/auth/rev3');
+      navigate('/requester-portal');
       return;
     }
-    // Route by backend-served next step.
-    switch (me.nextStep) {
-      case 'basic':
-      case 'intent':
-        navigate('/auth/rev3/onboarding');
-        break;
-      default:
-        nav(legacy.institution ? 'hospital-dashboard'
-          : legacy.donor ? 'donor-dashboard'
-          : 'requester-portal');
-    }
+    nav('home');
   };
 
   return (
     <AppShell nav={nav} activeView="auth-signin">
-      <Rev3AuthScreen onContinue={(step) => { void handleContinue(step); }} />
+      <Rev3AuthScreen onContinue={(step) => { void handleContinue(step); }} initialIntent={intent} />
     </AppShell>
   );
 }

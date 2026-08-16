@@ -69,13 +69,13 @@ router.patch("/api/admin/donors/:donorId/ban", adminCheck, wrap(async (req, res)
   const notifId = `notif_ban_${donor.id}`;
   await saveLocalOrFirestoreDoc("notifications", notifId, {
     id: notifId,
-    type: "in_app",
+    type: "failed",
     recipient_type: "donor",
     recipient_id: donor.id,
     trigger_event: "account_banned",
     message_body: `Account Banned. Reason: ${req.body.banReason || "Policy violation."}`,
-    status: "sent",
-    sent_at: nowISO(),
+    status: "failed",
+    sent_at: null,
     created_at: nowISO(),
   });
   return res.json({ success: true });

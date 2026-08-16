@@ -290,17 +290,17 @@ async function notifyDonor(
   request: BloodRequest,
   donor: User
 ): Promise<NotifyResult> {
-  const whatsappPhone = donor.whatsapp_number || donor.phone;
+  const whatsappPhone = donor.whatsapp_number;
   // Pass the capability token so the donor's WhatsApp link uses matchToken= (S-1 fix).
   const sosMessage = buildDonorSosMessage(request, donor, match.id, match.public_token);
-  // Null-safety: donors who signed up via Google/email without adding a phone
-  // will have no whatsapp_number/phone. Skip WhatsApp gracefully instead of
-  // sending to an empty string (which WAHA would reject or silently drop).
+  // PRODUCT RULE: only the explicitly stored WhatsApp number may be used as a
+  // WhatsApp destination. NEVER fall back to donor.phone. If no WhatsApp number
+  // exists, skip dispatch, log a structured warning, and continue safely.
   let waOk = false;
   if (whatsappPhone) {
     waOk = await sendWhatsApp(whatsappPhone, sosMessage);
   } else {
-    console.warn(`[Notify] Donor ${donor.id} (${donor.full_name}) has no WhatsApp number — skipping WA notification.`);
+    console.warn(`[Notify] Skipping WhatsApp notification: donor ${donor.id} (${donor.full_name}) has no WhatsApp number (request ${request.id}). Phone is never used as a WhatsApp destination.`);
   }
 
   let emailOk = false;
@@ -333,7 +333,7 @@ async function notifyDonor(
   const notifId = randomUUID();
   await saveLocalOrFirestoreDoc("notifications", notifId, {
     id: notifId,
-    type: waOk ? "whatsapp" : emailOk ? "email" : "in_app",
+    type: waOk ? "whatsapp" : emailOk ? "email" : "failed",
     recipient_type: "donor",
     recipient_id: donor.id,
     trigger_event: "match_found",
@@ -347,7 +347,7 @@ async function notifyDonor(
   await saveLocalOrFirestoreDoc("matches", match.id, {
     ...match,
     notification_sent_at: nowISO(),
-    notification_channel: waOk ? "whatsapp" : emailOk ? "email" : "failed",
+    notification_channel: waOk ? "whatsapp" : emailOk ? "email" : "failed", // honest: no in-app inbox exists — status carries the failure
   });
 
   console.log(`[Notify] Donor ${donor.full_name} — WA:${waOk ? "sent" : "failed"} | Email:${emailOk ? "sent" : "failed"}`);

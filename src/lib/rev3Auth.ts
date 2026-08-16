@@ -56,8 +56,8 @@ export function verifyEmailOtp(email: string, otp: string) {
  * profile, and returns a Supabase session (or a magic link when internal creds
  * are unrecoverable).
  */
-export async function emailComplete(email: string, verificationToken: string, fullName: string) {
-  const payload = await postJson('/api/auth/email-complete', { email, verificationToken, fullName });
+export async function emailComplete(email: string, verificationToken: string, fullName: string, intent?: string) {
+  const payload = await postJson('/api/auth/email-complete', { email, verificationToken, fullName, intent });
   if (payload.session?.access_token) {
     await supabase.auth.setSession(payload.session);
   }
@@ -71,10 +71,10 @@ export async function emailComplete(email: string, verificationToken: string, fu
 }
 
 // ── Google flow (Slice 1) ────────────────────────────────────────────────
-export async function googleSignIn() {
+export async function googleSignIn(callbackPath: string = window.location.pathname || '/auth/signin') {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${window.location.origin}/auth/signin` },
+    options: { redirectTo: `${window.location.origin}${callbackPath}` },
   });
   if (error) throw error;
 }

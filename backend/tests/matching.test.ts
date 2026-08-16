@@ -411,6 +411,18 @@ describe('Scenario 7: Notification idempotency', () => {
     assert.equal(totalSent, N, `Exactly ${N} notifications should fire`);
   });
 
+  // P2 guard: when both WhatsApp and email fail, the log must NOT claim a
+  // nonexistent 'in_app' channel. The honest record is type='failed', status='failed'.
+  test('All channels failed → no in_app type, honest failed log entry', () => {
+    const store = makeNotifStore();
+    const ok = store.record('n9', 'failed', 'donor_p2', 'match_found', 'failed');
+    assert.ok(ok, 'Failed notification should still be recorded for observability');
+    const { type, status } = store.logs[0];
+    assert.notEqual(type, 'in_app', 'No in-app channel exists — must not claim type in_app');
+    assert.equal(type, 'failed', 'Honest type: failed');
+    assert.equal(status, 'failed', 'Honest status: failed');
+  });
+
   test('Different trigger events for same recipient logged independently', () => {
     const store = makeNotifStore();
     store.record('n7', 'whatsapp', 'donor_4', 'match_found', 'sent');

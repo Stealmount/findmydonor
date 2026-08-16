@@ -86,7 +86,7 @@ router.post("/auth/email-complete", rateLimitMiddleware(10, 60_000), validate(em
 
     let profile = existingProfile || null;
     let isNewUser = !profile;
-
+    const intent = req.body?.intent;
     if (profile) {
       // Link the OTP auth identity to the existing profile (account linking rule).
       const { data: authByEmail } = await supabase.auth.admin.listUsers();
@@ -104,6 +104,36 @@ router.post("/auth/email-complete", rateLimitMiddleware(10, 60_000), validate(em
       // Brand-new: create auth user + profile via the shared helper.
       const created = await createAuthUserAndProfile(normalizedEmail, String(fullName || "").trim() || "User", "email");
       profile = created.profile;
+    }
+
+    if (intent && profile?.id) {
+      const canDonate = intent === "donor" || intent === "both";
+      const canRequest = intent === "requester" || intent === "both" || true;
+      try {
+        await supabase.from("profiles").update({
+          intent,
+          can_donate: canDonate,
+          can_request: canRequest,
+          updated_at: nowISO(),
+        }).eq("id", profile.id);
+      } catch { /* ignore */ }
+
+      if (canDonate) {
+        try { await supabase.from("donor_profiles").upsert({ profile_id: profile.id }, { onConflict: "profile_id" }); } catch { /* ignore duplicate */ }
+        try {
+          await supabase.from("users").upsert({
+            id: profile.id,
+            full_name: profile.full_name || fullName || "User",
+            email: normalizedEmail,
+            phone: profile.phone || null,
+            whatsapp_number: profile.whatsapp_phone || null,
+            blood_type: "ANY",
+            availability_status: "available",
+            account_status: "active",
+            created_at: nowISO(),
+          }, { onConflict: "id" });
+        } catch { /* ignore legacy users sync error */ }
+      }
     }
 
     // Sign in the OTP user to obtain a session.
@@ -180,10 +210,17 @@ router.post("/auth/phone-signup", rateLimitMiddleware(10, 60_000), validate(phon
 
   if (authError) {
     if (authError.message?.includes("already been registered")) {
-      // Account exists — never mutate the existing password. Return 409 so the
-      // client redirects to sign-in. An attacker knowing a phone number must NOT
-      // be able to overwrite another user's credential.
-      return sendErrorResponse(res, new AppError("This WhatsApp number is already registered. Sign in instead.", 409, "ACCOUNT_EXISTS"));
+      if (existingProfile) {
+        return sendErrorResponse(res, new AppError("This WhatsApp number is already registered. Sign in instead.", 409, "ACCOUNT_EXISTS"));
+      }
+      // Orphaned auth user exists without a profile — recover authUserId to link new profile
+      const { data: { users: matchingUsers } } = await supabase.auth.admin.listUsers();
+      const existingAuthUser = (matchingUsers as any[])?.find((u: any) => u.email === syntheticEmail);
+      if (existingAuthUser) {
+        authUserId = existingAuthUser.id;
+      } else {
+        return sendErrorResponse(res, new AppError("This WhatsApp number is already registered. Sign in instead.", 409, "ACCOUNT_EXISTS"));
+      }
     } else {
       return sendErrorResponse(res, authError, "Unable to create account. Please try again.");
     }
@@ -486,7 +523,20 @@ router.post("/auth/complete-verification", rateLimitMiddleware(10, 60_000), vali
       patch.can_donate = intent === "donor" || intent === "both";
       patch.can_request = intent === "requester" || intent === "both" || true;
       if (patch.can_donate) {
-        try { await supabase.from("donor_profiles").insert({ profile_id: profile.id }); } catch { /* ignore duplicate */ }
+        try { await supabase.from("donor_profiles").upsert({ profile_id: profile.id }, { onConflict: "profile_id" }); } catch { /* ignore duplicate */ }
+        try {
+          await supabase.from("users").upsert({
+            id: profile.id,
+            full_name: profile.full_name || googleName || "Donor",
+            email: profile.email || googleEmail || "",
+            phone: profile.phone || null,
+            whatsapp_number: profile.whatsapp_phone || null,
+            blood_type: "ANY",
+            availability_status: "available",
+            account_status: "active",
+            created_at: nowISO(),
+          }, { onConflict: "id" });
+        } catch { /* ignore legacy users sync error */ }
       }
     }
     if (Object.keys(patch).length > 1) {

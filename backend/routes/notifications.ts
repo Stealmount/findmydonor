@@ -15,6 +15,7 @@ import { nowISO } from "../helpers/time";
 import { escapeHtml } from "../helpers/html";
 import {
   sendWhatsApp,
+  sendDonorWhatsApp,
   buildDonorConfirmedDetailsMessage,
   buildRequesterConfirmMessage,
   buildDonorDeclineAckMessage,
@@ -136,8 +137,8 @@ router.post("/api/waha/webhook", wrap(async (req, res) => {
           donor_response_at: nowISO(),
           outcome: "request_closed"
         });
-        await sendWhatsApp(
-          donor.whatsapp_number || donor.phone,
+        await sendDonorWhatsApp(
+          donor,
           "🙏 Thank you for responding! This emergency blood request has already been closed or fulfilled."
         );
         return;
@@ -155,8 +156,8 @@ router.post("/api/waha/webhook", wrap(async (req, res) => {
           donor_response_at: nowISO(),
           outcome: "fulfilled_by_other"
         });
-        await sendWhatsApp(
-          donor.whatsapp_number || donor.phone,
+        await sendDonorWhatsApp(
+          donor,
           "🙏 Thank you for responding! The required units for this emergency request have just been fulfilled by another donor nearby. We deeply appreciate your readiness to save lives!"
         );
         return;
@@ -181,8 +182,8 @@ router.post("/api/waha/webhook", wrap(async (req, res) => {
       }
 
       // Notify donor confirmation with full requester details
-      await sendWhatsApp(
-        donor.whatsapp_number || donor.phone,
+      await sendDonorWhatsApp(
+        donor,
         buildDonorConfirmedDetailsMessage(request, donor)
       );
 
@@ -221,8 +222,8 @@ router.post("/api/waha/webhook", wrap(async (req, res) => {
         donor_response_at: nowISO(),
       });
 
-      await sendWhatsApp(
-        donor.whatsapp_number || donor.phone,
+      await sendDonorWhatsApp(
+        donor,
         buildDonorDeclineAckMessage()
       );
 

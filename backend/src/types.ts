@@ -76,7 +76,7 @@ export type MatchStatus = 'pending' | 'approved' | 'declined' | 'timed_out';
 
 export type MatchOutcome = 'donated' | 'not_donated' | null;
 
-export type NotificationType = 'whatsapp' | 'email' | 'sms' | 'in_app';
+export type NotificationType = 'whatsapp' | 'email' | 'sms' | 'in_app' | 'failed';
 
 export type RecipientType = 'donor' | 'receiver';
 

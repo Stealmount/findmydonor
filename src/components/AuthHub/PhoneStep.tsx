@@ -182,9 +182,11 @@ export default function PhoneStep(props: PhoneStepProps) {
             </>
           )}
 
-          <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'पासवर्ड (कम से कम 8 अक्षर)' : 'Password (min 8 characters)'}
-            <input id="signup-password" className={`${field} mt-1`} required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} />
-          </label>
+          {signupChannel === 'phone' && (
+            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'पासवर्ड (कम से कम 8 अक्षर)' : 'Password (min 8 characters)'}
+              <input id="signup-password" className={`${field} mt-1`} required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} />
+            </label>
+          )}
 
           <div className="mt-5 space-y-2">
             <p className="text-xs font-bold uppercase tracking-wider text-ink-600">{isHi ? 'FindMyDonor™ का उपयोग कैसे करेंगे?' : 'How will you use FindMyDonor™?'}</p>
@@ -196,7 +198,7 @@ export default function PhoneStep(props: PhoneStepProps) {
             ))}
           </div>
 
-          <button id="signup-submit" disabled={loading || (signupChannel === 'phone' ? phone.length !== 10 : !email.includes('@')) || password.length < 8 || !fullName.trim()} className={btnPrimary}>
+          <button id="signup-submit" disabled={loading || (signupChannel === 'phone' ? (phone.length !== 10 || password.length < 8) : !email.includes('@')) || !fullName.trim()} className={btnPrimary}>
             {loading ? (isHi ? 'OTP भेजा जा रहा है…' : 'Sending OTP…') : <>{signupChannel === 'email' ? (isHi ? 'Email OTP प्राप्त करें' : 'Get Email OTP') : (isHi ? 'WhatsApp OTP प्राप्त करें' : 'Get WhatsApp OTP')} <ArrowRight className="h-4 w-4" /></>}
           </button>
         </motion.form>

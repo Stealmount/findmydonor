@@ -12,6 +12,7 @@ import type { Rev3NextStep } from '../../lib/rev3Auth';
 
 interface Rev3AuthProps {
   onContinue: (step: Rev3NextStep) => void;
+  initialIntent?: 'donor' | 'requester';
 }
 
 type Screen = 'choose' | 'email' | 'otp';
@@ -23,7 +24,7 @@ const field =
 const btnPrimary =
   'mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blood-600 to-blood-700 text-sm font-bold text-white shadow-lg shadow-blood-600/25 disabled:opacity-50 cursor-pointer';
 
-export function Rev3AuthScreen({ onContinue }: Rev3AuthProps) {
+export function Rev3AuthScreen({ onContinue, initialIntent }: Rev3AuthProps) {
   const [screen, setScreen] = useState<Screen>('choose');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -104,6 +105,7 @@ export function Rev3AuthScreen({ onContinue }: Rev3AuthProps) {
         submitted,
         verificationToken,
         fullName.trim() || 'User',
+        initialIntent,
       );
       // Magic-link fallback: no interactive session yet.
       if (result.magicLink && !result.session?.access_token) {
@@ -121,7 +123,7 @@ export function Rev3AuthScreen({ onContinue }: Rev3AuthProps) {
 
   async function handleGoogle() {
     setError(''); setLoading(true);
-    try { await googleSignIn(); }
+    try { await googleSignIn(window.location.pathname); }
     catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Google sign-in failed.');
       setLoading(false);

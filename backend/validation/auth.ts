@@ -70,6 +70,7 @@ export const emailCompleteSchema = z.object({
     .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Valid email address required."),
   verificationToken: z.string().min(1, "Verification token is required."),
   fullName: fullNameField.optional(), // used only when creating a brand-new account
+  intent: intentEnum.optional(),
 });
 
 // ─── POST /auth/complete-verification (Google OAuth) ─────────────────────────

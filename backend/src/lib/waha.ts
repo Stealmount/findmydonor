@@ -314,3 +314,24 @@ Help us reach more patients in emergency by sharing FindMyDonor with your friend
 "I just donated blood via FindMyDonor™! Join our emergency volunteer donor network here: https://findmydonor.online" 🩸`;
 }
 
+/**
+ * PRODUCT RULE: Only the explicitly stored WhatsApp number (donor.whatsapp_number /
+ * profiles.whatsapp_phone) may ever be used as a WhatsApp destination. Phone
+ * numbers are NEVER used for WhatsApp delivery. If no WhatsApp number exists,
+ * this logs a structured warning and returns false — it never crashes and never
+ * falls back to donor.phone.
+ */
+export async function sendDonorWhatsApp(
+  donor: { id: string; full_name?: string; whatsapp_number?: string },
+  message: string
+): Promise<boolean> {
+  const whatsappNumber = donor && donor.whatsapp_number;
+  if (!whatsappNumber) {
+    console.warn(
+      `[WAHA] Skipping WhatsApp notification: donor ${donor?.id} (${donor?.full_name || "unknown"}) has no WhatsApp number. Phone is never used as a WhatsApp destination.`
+    );
+    return false;
+  }
+  return sendWhatsApp(whatsappNumber, message);
+}
+
