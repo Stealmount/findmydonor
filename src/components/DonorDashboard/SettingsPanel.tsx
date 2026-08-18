@@ -447,7 +447,6 @@ function toDisplay(stored: string | null): string {
 function ContactInfoSection({ phone, whatsappPhone }: { phone: string | null; whatsappPhone: string | null }) {
   const [phoneInput, setPhoneInput] = useState(toDisplay(phone));
   const [waInput, setWaInput] = useState(toDisplay(whatsappPhone));
-  const [sameAsPhone, setSameAsPhone] = useState(!whatsappPhone || whatsappPhone === phone);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -455,14 +454,34 @@ function ContactInfoSection({ phone, whatsappPhone }: { phone: string | null; wh
     e.preventDefault();
     setFeedback(null);
     const phoneTrimmed = phoneInput.trim();
-    if (phoneTrimmed.length < 10) {
-      setFeedback({ msg: 'Enter a valid 10-digit number.', ok: false });
+    const waTrimmed = waInput.trim();
+
+    const payload: { phone?: string; whatsappPhone?: string } = {};
+
+    if (phoneTrimmed) {
+      if (phoneTrimmed.length < 10) {
+        setFeedback({ msg: 'Enter a valid 10-digit phone number.', ok: false });
+        return;
+      }
+      payload.phone = phoneTrimmed;
+    }
+
+    if (waTrimmed) {
+      if (waTrimmed.length < 10) {
+        setFeedback({ msg: 'Enter a valid 10-digit WhatsApp number.', ok: false });
+        return;
+      }
+      payload.whatsappPhone = waTrimmed;
+    }
+
+    if (!payload.phone && !payload.whatsappPhone) {
+      setFeedback({ msg: 'Enter at least one contact number (phone or WhatsApp).', ok: false });
       return;
     }
-    const waTrimmed = (sameAsPhone ? phoneTrimmed : waInput.trim()) || phoneTrimmed;
+
     setSaving(true);
     try {
-      await authenticatedApi('/api/profile/contact', { phone: phoneTrimmed, whatsappPhone: waTrimmed }, 'PATCH');
+      await authenticatedApi('/api/profile/contact', payload, 'PATCH');
       setFeedback({ msg: 'Contact info saved!', ok: true });
     } catch (err: any) {
       setFeedback({ msg: err.message || 'Save failed. Try again.', ok: false });
@@ -493,53 +512,32 @@ function ContactInfoSection({ phone, whatsappPhone }: { phone: string | null; wh
               inputMode="numeric"
               maxLength={10}
               value={phoneInput}
-              onChange={e => {
-                const v = e.target.value.replace(/\D/g, '').slice(0, 10);
-                setPhoneInput(v);
-                if (sameAsPhone) setWaInput(v);
-              }}
+              onChange={e => setPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
               placeholder="10-digit number"
               className="flex-1 bg-transparent text-white font-semibold placeholder-white/40 outline-none"
             />
           </div>
         </div>
 
-        {/* Same-as-phone toggle */}
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            id="settings-same-as-phone"
-            type="checkbox"
-            checked={sameAsPhone}
-            onChange={e => {
-              setSameAsPhone(e.target.checked);
-              if (e.target.checked) setWaInput(phoneInput);
-            }}
-            className="w-4 h-4 accent-white cursor-pointer"
-          />
-          <span className="text-[11px] text-white/70">WhatsApp number same as phone</span>
-        </label>
-
-        {/* WhatsApp (only when different) */}
-        {!sameAsPhone && (
-          <div className="space-y-2">
-            <label htmlFor="settings-whatsapp" className="text-[11px] font-semibold text-white/80 block uppercase tracking-wider">
-              WhatsApp Number
-            </label>
-            <div className="flex items-center rounded-2xl bg-white/10 ring-1 ring-white/20 px-4 h-12 gap-2">
-              <span className="text-white/60 font-mono text-xs">+91</span>
-              <input
-                id="settings-whatsapp"
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                value={waInput}
-                onChange={e => setWaInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="10-digit WhatsApp number"
-                className="flex-1 bg-transparent text-white font-semibold placeholder-white/40 outline-none"
-              />
-            </div>
+        {/* WhatsApp */}
+        <div className="space-y-2">
+          <label htmlFor="settings-whatsapp" className="text-[11px] font-semibold text-white/80 block uppercase tracking-wider">
+            WhatsApp Number
+          </label>
+          <div className="flex items-center rounded-2xl bg-white/10 ring-1 ring-white/20 px-4 h-12 gap-2">
+            <span className="text-white/60 font-mono text-xs">+91</span>
+            <input
+              id="settings-whatsapp"
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              value={waInput}
+              onChange={e => setWaInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="10-digit WhatsApp number"
+              className="flex-1 bg-transparent text-white font-semibold placeholder-white/40 outline-none"
+            />
           </div>
-        )}
+        </div>
 
         {feedback && (
           <p className={`text-[11px] font-semibold ${feedback.ok ? 'text-emerald-300' : 'text-red-300'}`}>
@@ -550,7 +548,12 @@ function ContactInfoSection({ phone, whatsappPhone }: { phone: string | null; wh
         <button
           id="btn-save-contact"
           type="submit"
-          disabled={saving || phoneInput.length < 10}
+          disabled={
+            saving ||
+            (!phoneInput && !waInput) ||
+            (phoneInput.length > 0 && phoneInput.length < 10) ||
+            (waInput.length > 0 && waInput.length < 10)
+          }
           className="w-full py-3.5 rounded-2xl bg-white text-blood-700 font-semibold text-[13px] transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:bg-white/90"
         >
           <Save className="w-4 h-4" />

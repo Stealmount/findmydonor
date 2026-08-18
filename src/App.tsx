@@ -7,6 +7,7 @@ import RequesterPortal from './components/RequesterPortal';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AuthHub } from './components/AuthHub';
 import { Rev3AuthScreen } from './components/rev3/Rev3AuthScreen';
+import AuthIntentSelector from './components/AuthHub/AuthIntentSelector';
 import { Rev3OnboardingWizard } from './components/rev3/Rev3OnboardingWizard';
 import NotificationSimulator from './components/NotificationSimulator';
 import { RaktdaanHome } from './components/home/RaktdaanHome';
@@ -360,48 +361,79 @@ function AuthRoute({ nav, mode, intent }: {
 function Rev3AuthRoute({ nav, intent }: { nav: (view: string, push?: boolean, code?: string) => void; intent?: 'donor' | 'requester' }) {
   const navigate = useNavigate();
   const auth = useAuth();
+  const [showIntentSelector, setShowIntentSelector] = React.useState(false);
 
-  // Auto-redirect authenticated users away from auth screens to their dashboard
-  useEffect(() => {
-    if (auth.loggedInUser) {
-      navigate('/donor-dashboard', { replace: true });
-    } else if (auth.loggedInRequester) {
-      navigate('/requester-portal', { replace: true });
-    } else if (auth.loggedInHospital || auth.loggedInInstitution) {
-      navigate('/hospital/dashboard', { replace: true });
-    }
-  }, [auth.loggedInUser, auth.loggedInRequester, auth.loggedInHospital, auth.loggedInInstitution, navigate]);
-
-  const handleContinue = async (_step: string) => {
+  const checkUserAndRoute = async () => {
     let me: Awaited<ReturnType<typeof fetchMe>> | undefined;
     try {
       me = await fetchMe();
-    } catch { /* keep signing in */ }
-    if (!me || !me.authUser) return;
+    } catch { /* not signed in */ }
+    if (!me || !me.authUser || !me.profile) return false;
+
+    const profile = me.profile as { intent?: string; can_donate?: boolean; can_request?: boolean };
+    if (!profile.intent) {
+      setShowIntentSelector(true);
+      return true;
+    }
+
     const legacy = toLegacy(me);
     if (legacy.institution) {
       auth.setLoggedInInstitution(legacy.institution);
       auth.setLoggedInHospital(institutionToHospitalUser(legacy.institution));
-      navigate('/hospital/dashboard');
-      return;
+      navigate('/hospital/dashboard', { replace: true });
+      return true;
     }
-    if (legacy.donor) {
+    if (legacy.donor && legacy.requester) {
+      auth.setLoggedInUser(legacy.donor);
+      auth.setLoggedInRequester(legacy.requester);
+      navigate('/donor-dashboard', { replace: true });
+      return true;
+    } else if (legacy.donor) {
       auth.setLoggedInUser(legacy.donor);
       auth.setLoggedInRequester(null);
-      navigate('/donor-dashboard');
-      return;
+      navigate('/donor-dashboard', { replace: true });
+      return true;
     } else if (legacy.requester) {
       auth.setLoggedInRequester(legacy.requester);
       auth.setLoggedInUser(null);
-      navigate('/requester-portal');
-      return;
+      navigate('/requester-portal', { replace: true });
+      return true;
     }
     nav('home');
+    return true;
+  };
+
+  useEffect(() => {
+    if (auth.loggedInHospital || auth.loggedInInstitution) {
+      navigate('/hospital/dashboard', { replace: true });
+    } else if (auth.loggedInUser && !auth.loggedInRequester) {
+      navigate('/donor-dashboard', { replace: true });
+    } else if (auth.loggedInRequester && !auth.loggedInUser) {
+      navigate('/requester-portal', { replace: true });
+    } else if (!auth.loggedInUser && !auth.loggedInRequester) {
+      void checkUserAndRoute();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.loggedInUser, auth.loggedInRequester, auth.loggedInHospital, auth.loggedInInstitution, navigate]);
+
+  const handleContinue = async (_step: string) => {
+    await checkUserAndRoute();
+  };
+
+  const handleIntentSelected = async (_selectedIntent: 'donor' | 'requester' | 'both') => {
+    setShowIntentSelector(false);
+    await checkUserAndRoute();
   };
 
   return (
     <AppShell nav={nav} activeView="auth-signin">
-      <Rev3AuthScreen onContinue={(step) => { void handleContinue(step); }} initialIntent={intent} />
+      {showIntentSelector ? (
+        <main className="min-h-[85vh] px-4 py-12 flex items-center justify-center relative overflow-hidden">
+          <AuthIntentSelector onIntentSelected={(selectedIntent) => { void handleIntentSelected(selectedIntent); }} />
+        </main>
+      ) : (
+        <Rev3AuthScreen onContinue={(step) => { void handleContinue(step); }} initialIntent={intent} />
+      )}
     </AppShell>
   );
 }
@@ -425,7 +457,10 @@ function Rev3OnboardingRoute({ nav }: { nav: (view: string, push?: boolean, code
         navigate('/hospital/dashboard');
         return;
       }
-      if (legacy.donor) {
+      if (legacy.donor && legacy.requester) {
+        auth.setLoggedInUser(legacy.donor);
+        auth.setLoggedInRequester(legacy.requester);
+      } else if (legacy.donor) {
         auth.setLoggedInUser(legacy.donor);
         auth.setLoggedInRequester(null);
       } else if (legacy.requester) {

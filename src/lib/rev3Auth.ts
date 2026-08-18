@@ -112,47 +112,48 @@ export function toLegacy(me: Rev3Me) {
       requester: null,
     } as const;
   }
-  if (profile?.can_donate) {
-    return {
-      institution: null,
-      donor: {
-        id: authUser.id,
-        full_name: profile.full_name,
-        email: profile.email || '',
-        phone: profile.phone,
-        whatsapp_number: profile.whatsapp_phone,
-        blood_type: (donorProfile?.blood_group as User['blood_type']) || 'O+',
-        donation_frequency: 'first_time',
-        last_donation_date: donorProfile?.last_donation_date || null,
-        cooldown_until: donorProfile?.cooldown_until || null,
-        pincode: donorProfile?.pincode || '',
-        area: donorProfile?.area || '',
-        city: donorProfile?.city || '',
-        availability_status: donorProfile?.is_available ? 'available' : 'unavailable',
-        number_sharing_pref: 'on_approval',
-        emergency_only: donorProfile?.emergency_only || false,
-        account_status: 'active',
-        whatsapp_verified: profile.whatsapp_verified,
-        profile_complete: donorProfile?.profile_complete,
-        is_available: donorProfile?.is_available,
-        created_at: profile.created_at,
-        updated_at: profile.updated_at,
-      },
-      requester: null,
-    } as const;
-  }
+  const isDonor = !!profile?.can_donate;
+  const isRequester = !!profile?.can_request || !profile?.can_donate;
+
+  const donorObj = isDonor ? {
+    id: authUser.id,
+    full_name: profile?.full_name || '',
+    email: profile?.email || '',
+    phone: profile?.phone || null,
+    whatsapp_number: profile?.whatsapp_phone || null,
+    blood_type: (donorProfile?.blood_group as User['blood_type']) || 'O+',
+    donation_frequency: 'first_time',
+    last_donation_date: donorProfile?.last_donation_date || null,
+    cooldown_until: donorProfile?.cooldown_until || null,
+    pincode: donorProfile?.pincode || '',
+    area: donorProfile?.area || '',
+    city: donorProfile?.city || '',
+    availability_status: donorProfile?.is_available ? 'available' : 'unavailable',
+    number_sharing_pref: 'on_approval',
+    emergency_only: donorProfile?.emergency_only || false,
+    account_status: 'active',
+    whatsapp_verified: profile?.whatsapp_verified || false,
+    profile_complete: donorProfile?.profile_complete,
+    is_available: donorProfile?.is_available,
+    created_at: profile?.created_at || new Date().toISOString(),
+    updated_at: profile?.updated_at || new Date().toISOString(),
+  } : null;
+
+  const requesterObj = isRequester ? {
+    id: authUser.id,
+    full_name: profile?.full_name || '',
+    email: profile?.email || '',
+    phone: profile?.phone || null,
+    whatsapp_number: profile?.whatsapp_phone || null,
+    created_at: profile?.created_at || new Date().toISOString(),
+    updated_at: profile?.updated_at || new Date().toISOString(),
+  } : null;
+
   return {
     institution: null,
-    donor: null,
-    requester: {
-      id: authUser.id,
-      full_name: profile?.full_name || '',
-      email: profile?.email || '',
-      phone: profile?.phone || '',
-      created_at: profile?.created_at || '',
-      updated_at: profile?.updated_at || '',
-    },
-  } as const;
+    donor: donorObj,
+    requester: requesterObj,
+  };
 }
 
 export async function rev3Logout() {

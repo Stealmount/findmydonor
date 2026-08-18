@@ -48,7 +48,6 @@ export default function ContactInfoBanner({ phone, whatsappPhone, onSaved }: Con
   const [visible, setVisible] = useState(!isDismissed() && (!phone || !whatsappPhone));
   const [phoneInput, setPhoneInput] = useState(toDisplay(phone));
   const [waInput, setWaInput] = useState(toDisplay(whatsappPhone));
-  const [sameAsPhone, setSameAsPhone] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -65,25 +64,43 @@ export default function ContactInfoBanner({ phone, whatsappPhone, onSaved }: Con
     setError(null);
 
     const phoneTrimmed = phoneInput.trim();
-    const waTrimmed = (sameAsPhone ? phoneInput : waInput).trim();
+    const waTrimmed = waInput.trim();
 
-    if (!phoneTrimmed || phoneTrimmed.length < 10) {
-      setError('Enter a valid 10-digit Indian mobile number.');
+    const payload: { phone?: string; whatsappPhone?: string } = {};
+
+    if (phoneTrimmed) {
+      if (phoneTrimmed.length < 10) {
+        setError('Enter a valid 10-digit Indian mobile number.');
+        return;
+      }
+      payload.phone = phoneTrimmed;
+    }
+
+    if (waTrimmed) {
+      if (waTrimmed.length < 10) {
+        setError('Enter a valid 10-digit WhatsApp number.');
+        return;
+      }
+      payload.whatsappPhone = waTrimmed;
+    }
+
+    if (!payload.phone && !payload.whatsappPhone) {
+      setError('Enter at least one contact number (phone or WhatsApp).');
       return;
     }
 
     setSaving(true);
     try {
-      const result = await authenticatedApi<{ success: boolean; phone: string; whatsapp_phone: string }>(
+      const result = await authenticatedApi<{ success: boolean; phone: string | null; whatsapp_phone: string | null }>(
         '/api/profile/contact',
-        {
-          phone: phoneTrimmed,
-          whatsappPhone: waTrimmed || phoneTrimmed,
-        },
+        payload,
         'PATCH'
       );
       setSaved(true);
-      onSaved(result.phone, result.whatsapp_phone);
+      onSaved(
+        result.phone ?? (phoneTrimmed || phone || ''),
+        result.whatsapp_phone ?? (waTrimmed || whatsappPhone || '')
+      );
       // Auto-dismiss after a brief success flash
       setTimeout(() => {
         dismiss();
@@ -143,50 +160,28 @@ export default function ContactInfoBanner({ phone, whatsappPhone, onSaved }: Con
                 inputMode="numeric"
                 maxLength={10}
                 value={phoneInput}
-                onChange={e => {
-                  const v = e.target.value.replace(/\D/g, '').slice(0, 10);
-                  setPhoneInput(v);
-                  if (sameAsPhone) setWaInput(v);
-                }}
-                placeholder="10-digit number"
+                onChange={e => setPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit phone"
                 className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none min-w-0"
-                required
               />
             </div>
           </div>
 
           {/* WhatsApp row */}
-          <div className="flex items-start gap-2">
-            <span className="flex-shrink-0 text-xs font-semibold text-amber-200/70 w-16 text-right mt-2">WhatsApp</span>
-            <div className="flex-1 space-y-1.5">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  id="contact-same-as-phone"
-                  type="checkbox"
-                  checked={sameAsPhone}
-                  onChange={e => {
-                    setSameAsPhone(e.target.checked);
-                    if (e.target.checked) setWaInput(phoneInput);
-                  }}
-                  className="w-3.5 h-3.5 accent-amber-400 cursor-pointer"
-                />
-                <span className="text-xs text-amber-200/80">Same as phone</span>
-              </label>
-              {!sameAsPhone && (
-                <div className="flex items-center rounded-xl bg-white/10 ring-1 ring-white/20 px-3 h-9 gap-1.5">
-                  <span className="text-xs text-amber-200/70 font-mono">+91</span>
-                  <input
-                    id="contact-whatsapp-input"
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    value={waInput}
-                    onChange={e => setWaInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="WhatsApp 10-digit"
-                    className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none min-w-0"
-                  />
-                </div>
-              )}
+          <div className="flex items-center gap-2">
+            <span className="flex-shrink-0 text-xs font-semibold text-amber-200/70 w-16 text-right">WhatsApp</span>
+            <div className="flex flex-1 items-center rounded-xl bg-white/10 ring-1 ring-white/20 px-3 h-9 gap-1.5">
+              <span className="text-xs text-amber-200/70 font-mono">+91</span>
+              <input
+                id="contact-whatsapp-input"
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={waInput}
+                onChange={e => setWaInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit WhatsApp"
+                className="flex-1 bg-transparent text-xs text-white placeholder:text-white/30 outline-none min-w-0"
+              />
             </div>
           </div>
 
@@ -205,7 +200,12 @@ export default function ContactInfoBanner({ phone, whatsappPhone, onSaved }: Con
             <button
               id="contact-banner-save"
               type="submit"
-              disabled={saving || phoneInput.length < 10}
+              disabled={
+                saving ||
+                (!phoneInput && !waInput) ||
+                (phoneInput.length > 0 && phoneInput.length < 10) ||
+                (waInput.length > 0 && waInput.length < 10)
+              }
               className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold text-black px-4 py-1.5 transition-colors cursor-pointer"
             >
               {saving ? (

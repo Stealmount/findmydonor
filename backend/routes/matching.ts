@@ -13,8 +13,7 @@ import {
   cacheSet,
   cacheInvalidatePrefix,
 } from "../src/lib/redisCache";
-import { getAuthenticatedUser } from "../middleware/auth";
-import { timingSafeEqualStr } from "../middleware/auth";
+import { getAuthenticatedUser, getLinkedProfile, timingSafeEqualStr } from "../middleware/auth";
 import rateLimitMiddleware from "../middleware/rateLimiter";
 import { validate } from "../validation";
 import { respondPublicSchema } from "../validation/matching";
@@ -115,8 +114,10 @@ export async function declineMatchById(
 router.post("/api/matches/:matchId/approve", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match || match.donor_id !== authUser.id) return sendErrorResponse(res, new NotFoundError("Match not found or unauthorized"));
+  if (!match || (match.donor_id !== authUser.id && match.donor_id !== profileId)) return sendErrorResponse(res, new NotFoundError("Match not found or unauthorized"));
   const result = await approveMatchById(req.params.matchId, req.body?.responseTimestamp);
   if (!result.ok) return sendErrorResponse(res, new AppError(result.error || "Failed to approve match", result.status || 500));
   return res.json(result.data);
@@ -126,8 +127,10 @@ router.post("/api/matches/:matchId/approve", wrap(async (req, res) => {
 router.post("/api/matches/:matchId/decline", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
-  if (!match || match.donor_id !== authUser.id) return sendErrorResponse(res, new NotFoundError("Match not found or unauthorized"));
+  if (!match || (match.donor_id !== authUser.id && match.donor_id !== profileId)) return sendErrorResponse(res, new NotFoundError("Match not found or unauthorized"));
   const result = await declineMatchById(req.params.matchId, req.body?.responseTimestamp);
   if (!result.ok) return sendErrorResponse(res, new AppError(result.error || "Failed to decline match", result.status || 500));
   return res.json({ success: true });
@@ -173,10 +176,12 @@ router.get("/api/matches/:matchId/status", wrap(async (req, res) => {
 router.post("/api/matches/:matchId/notification-sent", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
+  if (!isAdmin && match.donor_id !== authUser.id && match.donor_id !== profileId) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     notification_sent_at: nowISO(),
@@ -212,10 +217,12 @@ router.post("/api/matches/respond-public", rateLimitMiddleware(10, 60_000), vali
 router.post("/api/matches/:matchId/reminder-sent", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
+  if (!isAdmin && match.donor_id !== authUser.id && match.donor_id !== profileId) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     reminder_sent_at: req.body?.sentAt || nowISO(),
@@ -227,10 +234,12 @@ router.post("/api/matches/:matchId/reminder-sent", wrap(async (req, res) => {
 router.post("/api/matches/:matchId/timeout", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
+  if (!isAdmin && match.donor_id !== authUser.id && match.donor_id !== profileId) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
   await saveLocalOrFirestoreDoc("matches", req.params.matchId, {
     ...match,
     donor_response: "timed_out",
@@ -243,13 +252,15 @@ router.post("/api/matches/:matchId/timeout", wrap(async (req, res) => {
 router.post("/api/matches/:matchId/confirm-donation", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Authentication required"));
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
   const match = await getLocalOrFirestoreDoc<Match>("matches", req.params.matchId);
   if (!match) return sendErrorResponse(res, new NotFoundError("Match not found"));
   const donor = await getLocalOrFirestoreDoc<User>("users", match.donor_id);
   if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
 
   const isAdmin = (authUser as any).role === "admin" || authUser.id === "admin-id";
-  if (!isAdmin && match.donor_id !== authUser.id) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
+  if (!isAdmin && match.donor_id !== authUser.id && match.donor_id !== profileId) return sendErrorResponse(res, new ForbiddenError("Not authorized"));
 
   const confirmedAt  = req.body?.confirmedAt || nowISO();
   const donationDate = confirmedAt.split("T")[0];

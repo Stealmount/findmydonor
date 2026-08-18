@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('server.js',{force:true})\"",
     "lint": "tsc --noEmit",
-    "test": "tsx --test --test-force-exit backend/tests/auth.test.ts backend/tests/matching.test.ts backend/tests/simulator.test.ts backend/tests/hospital.test.ts backend/tests/admin.test.ts backend/tests/whatsapp-safety.test.ts",
+    "test": "tsx --test --test-force-exit backend/tests/p0-blockers.test.ts backend/tests/auth.test.ts backend/tests/matching.test.ts backend/tests/simulator.test.ts backend/tests/hospital.test.ts backend/tests/admin.test.ts backend/tests/whatsapp-safety.test.ts backend/tests/contact-profile.test.ts backend/tests/dashboard-onboarding.test.ts",
     "test:auth": "tsx --test --test-force-exit backend/tests/auth.test.ts",
     "test:matching": "tsx --test --test-force-exit backend/tests/matching.test.ts",
     "test:security": "tsx --test --test-force-exit backend/tests/security.test.ts",

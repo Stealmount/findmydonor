@@ -37,7 +37,12 @@ const wrap = (handler: express.RequestHandler): express.RequestHandler => (req, 
 router.put("/api/donor-profile", rateLimitMiddleware(20, 60_000), wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
-  const donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
+  let donor = await getLocalOrFirestoreDoc<User>("users", profileId);
+  if (!donor && authUser.id !== profileId) {
+    donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
+  }
   if (!donor) return sendErrorResponse(res, new NotFoundError("Donor profile not found"));
 
   const body = req.body || {};
@@ -54,7 +59,7 @@ router.put("/api/donor-profile", rateLimitMiddleware(20, 60_000), wrap(async (re
     emergency_only: body.emergency_only !== undefined ? Boolean(body.emergency_only) : donor.emergency_only,
     updated_at: nowISO(),
   };
-  await saveLocalOrFirestoreDoc("users", authUser.id, updated);
+  await saveLocalOrFirestoreDoc("users", profileId, updated);
   await cacheInvalidatePrefix("eligible_");
   return res.json({ success: true, donorProfile: updated });
 }));
@@ -195,17 +200,47 @@ router.post("/api/profiles/donor", rateLimitMiddleware(10, 60_000), wrap(async (
 router.get("/api/dashboard/donor", wrap(async (req, res) => {
   const authUser = await getAuthenticatedUser(req);
   if (!authUser) return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
-  const [donor, allMatches, allLogs] = await Promise.all([
-    getLocalOrFirestoreDoc<User>("users", authUser.id),
+  const linked = await getLinkedProfile(authUser.id);
+  const profileId = linked?.profile?.id || authUser.id;
+  let [donor, allMatches, allLogs] = await Promise.all([
+    getLocalOrFirestoreDoc<User>("users", profileId),
     getLocalOrFirestoreCollection<Match>("matches"),
     getLocalOrFirestoreCollection<DonationLog>("donation_log"),
   ]);
+  if (!donor && authUser.id !== profileId) {
+    donor = await getLocalOrFirestoreDoc<User>("users", authUser.id);
+  }
+  if (!donor && linked?.profile) {
+    donor = {
+      id: linked.profile.id,
+      full_name: linked.profile.full_name,
+      email: linked.profile.email || "",
+      phone: linked.profile.phone,
+      whatsapp_number: linked.profile.whatsapp_phone,
+      blood_type: (linked.donorProfile?.blood_group as User['blood_type']) || 'O+',
+      donation_frequency: 'first_time',
+      last_donation_date: linked.donorProfile?.last_donation_date || null,
+      cooldown_until: linked.donorProfile?.cooldown_until || null,
+      pincode: linked.donorProfile?.pincode || '',
+      area: linked.donorProfile?.area || '',
+      city: linked.donorProfile?.city || '',
+      availability_status: linked.donorProfile?.is_available ? 'available' : 'unavailable',
+      number_sharing_pref: 'on_approval',
+      emergency_only: (linked.donorProfile as any)?.emergency_only || false,
+      account_status: 'active',
+      whatsapp_verified: linked.profile.whatsapp_verified,
+      profile_complete: linked.donorProfile?.profile_complete,
+      is_available: linked.donorProfile?.is_available,
+      created_at: linked.profile.consent_accepted_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
   if (!donor) return sendErrorResponse(res, new NotFoundError("Donor profile not found."));
-  const matches = allMatches.filter((match) => match.donor_id === donor.id);
+  const matches = allMatches.filter((match) => match.donor_id === profileId || match.donor_id === authUser.id);
   const requestIds = new Set(matches.map((match) => match.request_id));
   const allRequests = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
   const requests = allRequests.filter((request) => requestIds.has(request.id));
-  return res.json({ donor, matches, requests, donationLogs: allLogs.filter((log) => log.donor_id === donor.id) });
+  return res.json({ donor, matches, requests, donationLogs: allLogs.filter((log) => log.donor_id === profileId || log.donor_id === authUser.id) });
 }));
 
 // ─── Donor matches list ──────────────────────────────────────────────────────

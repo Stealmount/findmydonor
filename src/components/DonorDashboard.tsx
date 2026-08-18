@@ -52,9 +52,15 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
   const [editBloodGroup, setEditBloodGroup] = useState<BloodType>('A+');
   const [editWeightKg, setEditWeightKg] = useState<string>(currentUser?.weight_kg ? String(currentUser.weight_kg) : '');
   const [healthDeclaration, setHealthDeclaration] = useState<boolean>(true);
-  const [showCompleteProfileModal, setShowCompleteProfileModal] = useState<boolean>(
-    Boolean(currentUser && (!currentUser.profile_complete || !currentUser.blood_type || !currentUser.pincode))
-  );
+  const [showCompleteProfileModal, setShowCompleteProfileModal] = useState<boolean>(false);
+  const [donorBannerDismissed, setDonorBannerDismissed] = useState<boolean>(() => {
+    try { return sessionStorage.getItem('donor_completion_banner_dismissed') === '1'; } catch { return false; }
+  });
+
+  const handleDismissDonorBanner = () => {
+    try { sessionStorage.setItem('donor_completion_banner_dismissed', '1'); } catch { /* ignore */ }
+    setDonorBannerDismissed(true);
+  };
 
   const [locationSearch, setLocationSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -305,6 +311,55 @@ export default function DonorDashboard({ currentUser, onLoginSuccess, onLogout, 
           showToast('Contact info saved! WhatsApp notifications are now enabled.', 'success');
         }}
       />
+
+      {/* Donor Medical Profile Completion Banner — shown when blood group or pincode is missing */}
+      {(!currentUser?.blood_type || !currentUser?.pincode) && !donorBannerDismissed && (
+        <div
+          id="donor-completion-banner"
+          className="relative rounded-2xl border border-amber-400/30 bg-amber-500/10 backdrop-blur-md p-4 sm:p-5 mb-6 animate-in slide-in-from-top-2 duration-300"
+          role="region"
+          aria-label="Complete donor profile"
+        >
+          <button
+            type="button"
+            onClick={handleDismissDonorBanner}
+            aria-label="Dismiss"
+            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-amber-200 hover:bg-white/20 transition-colors text-xs font-bold cursor-pointer"
+          >
+            &#x2715;
+          </button>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center text-lg">
+              &#x1FA78;
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-100">Complete your donor medical profile</p>
+              <p className="text-xs text-amber-200/80 mt-0.5">
+                {isHi
+                  ? 'आपकी जीवनरक्षक मैचिंग के लिए आपका ब्लड ग्रुप और पिनकोड आवश्यक है।'
+                  : 'Your blood group and pincode are required for local emergency matching.'}
+              </p>
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  id="btn-donor-banner-complete"
+                  onClick={() => setShowCompleteProfileModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-black px-4 py-1.5 transition-colors cursor-pointer shadow-md"
+                >
+                  {isHi ? 'प्रोफ़ाइल पूरी करें →' : 'Complete Profile →'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDismissDonorBanner}
+                  className="text-xs text-amber-200/60 hover:text-amber-200 transition-colors cursor-pointer"
+                >
+                  {isHi ? 'बाद में करें' : 'Remind me later'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <ProfileCard
         user={currentUser}
         matches={matches}

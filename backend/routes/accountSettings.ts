@@ -246,6 +246,7 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
 
   const rawPhone = req.body?.phone !== undefined ? String(req.body.phone || "").trim() : undefined;
   const rawWaPhone = req.body?.whatsappPhone !== undefined ? String(req.body.whatsappPhone || "").trim() : undefined;
+  const verificationToken = req.body?.verificationToken ? String(req.body.verificationToken).trim() : undefined;
 
   if (rawPhone === undefined && rawWaPhone === undefined) {
     return sendErrorResponse(res, new ValidationError("Provide at least one of phone or whatsappPhone."));
@@ -261,6 +262,18 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
       if (!isValidIndianPhone(normalized)) {
         return sendErrorResponse(res, new ValidationError("Enter a valid Indian mobile number (10 digits, starting with 6–9)."));
       }
+      const existingPhone = linked.profile.phone ? normalizePhone(linked.profile.phone) : null;
+      if (existingPhone && existingPhone !== normalized) {
+        if (!verificationToken) {
+          return sendErrorResponse(res, new ForbiddenError("OTP verification token required to change existing phone number."));
+        }
+        let ok = await consumeOtpTicket(verificationToken, normalized, "verify");
+        if (!ok) ok = await consumeOtpTicket(verificationToken, normalized, "signup");
+        if (!ok) ok = await consumeOtpTicket(verificationToken, normalized, "sos");
+        if (!ok) {
+          return sendErrorResponse(res, new ForbiddenError("Phone OTP verification expired or invalid. Request a new OTP."));
+        }
+      }
       patch.phone = normalized;
     }
   }
@@ -274,13 +287,21 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
       if (!isValidIndianPhone(normalized)) {
         return sendErrorResponse(res, new ValidationError("Enter a valid Indian WhatsApp number (10 digits, starting with 6–9)."));
       }
-      patch.whatsapp_phone = normalized;
-      if (linked.profile.whatsapp_phone && linked.profile.whatsapp_phone !== normalized) {
-        patch.whatsapp_verified = false;
+      const existingWaPhone = linked.profile.whatsapp_phone ? normalizePhone(linked.profile.whatsapp_phone) : null;
+      if (existingWaPhone && existingWaPhone !== normalized) {
+        if (!verificationToken) {
+          return sendErrorResponse(res, new ForbiddenError("OTP verification token required to change existing WhatsApp number."));
+        }
+        let ok = await consumeOtpTicket(verificationToken, normalized, "verify");
+        if (!ok) ok = await consumeOtpTicket(verificationToken, normalized, "signup");
+        if (!ok) ok = await consumeOtpTicket(verificationToken, normalized, "sos");
+        if (!ok) {
+          return sendErrorResponse(res, new ForbiddenError("WhatsApp OTP verification expired or invalid. Request a new OTP."));
+        }
+        patch.whatsapp_verified = true;
       }
+      patch.whatsapp_phone = normalized;
     }
-  } else if (patch.phone && !linked.profile.whatsapp_phone) {
-    patch.whatsapp_phone = patch.phone;
   }
 
   const supabase = getServerSupabase();
@@ -295,8 +316,8 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
   await cacheInvalidatePrefix(`me:${authUser.id}`);
   return res.json({
     success: true,
-    phone: patch.phone ?? linked.profile.phone ?? null,
-    whatsapp_phone: patch.whatsapp_phone ?? linked.profile.whatsapp_phone ?? null,
+    phone: patch.phone !== undefined ? patch.phone : (linked.profile.phone ?? null),
+    whatsapp_phone: patch.whatsapp_phone !== undefined ? patch.whatsapp_phone : (linked.profile.whatsapp_phone ?? null),
   });
 }));
 
