@@ -14,7 +14,7 @@
  * Message builders are re-exported so callers import from ONE place.
  */
 import { enqueueMessage } from "../src/lib/messaging";
-import { getServerSupabase } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { sendWhatsApp as sendWhatsAppDirect } from "../src/lib/waha";
 import { sendEmailViaResend as sendEmailViaResendDirect } from "../src/lib/resend";
 import { buildWelcomeMessage } from "../src/lib/waha";
@@ -62,8 +62,8 @@ const welcomeDelaySeconds = (): number => {
  */
 export async function enqueueWelcome(profileId: string): Promise<{ enqueued: boolean; channel: string | null }> {
   try {
-    const supabase = getServerSupabase();
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", profileId).maybeSingle();
+    const profileDoc = await db.collection("profiles").doc(profileId).get();
+    const profile = profileDoc.exists ? { id: profileDoc.id, ...profileDoc.data() } as any : null;
     if (!profile) {
       console.warn(`[Welcome] profile ${profileId} not found — welcome skipped`);
       return { enqueued: false, channel: null };
@@ -105,7 +105,7 @@ export async function enqueueWelcome(profileId: string): Promise<{ enqueued: boo
     // Idempotency guard: the queue owns delivery; we only guarantee
     // enqueue-once semantics, so mark welcome_sent_at once we've enqueued.
     if (enqueued) {
-      await supabase.from("profiles").update({ welcome_sent_at: new Date().toISOString() }).eq("id", profileId);
+      await db.collection("profiles").doc(profileId).update({ welcome_sent_at: new Date().toISOString() });
     } else {
       console.warn(`[Welcome] profile ${profileId} has no reachable channel — welcome skipped`);
     }

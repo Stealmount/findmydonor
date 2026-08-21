@@ -78,8 +78,8 @@ export const emailCompleteSchema = z.object({
 // identity and links it. Phone/WhatsApp/intent are optional — the basic-profile
 // and intent steps run in onboarding, not here.
 export const completeVerificationSchema = z.object({
-  phone: phoneField.optional(),
-  whatsappPhone: phoneField.optional(),
+  phone: phoneField.optional().nullable(),
+  whatsappPhone: phoneField.optional().nullable(),
   fullName: fullNameField.optional(),
   email: emailField,
   intent: intentEnum.optional(),

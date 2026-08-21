@@ -10,12 +10,8 @@ import type { BloodBank } from '../src/types';
 
 async function saveRecord(bank: BloodBank) {
   try {
-    const { saveDoc, getServerSupabase } = await import('../src/lib/serverDb');
+    const { saveDoc } = await import('../src/lib/serverDb');
     await saveDoc('blood_banks', bank.id, bank);
-    try {
-      const supabase = getServerSupabase();
-      await supabase.from('blood_banks').upsert(bank, { onConflict: 'id' });
-    } catch { /* ignore if Supabase table not created */ }
   } catch {
     const dataDir = path.join(process.cwd(), 'data');
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });

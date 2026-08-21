@@ -29,9 +29,8 @@ import { createServer as createViteServer } from "vite";
 import {
   getCollection as getLocalOrFirestoreCollection,
   saveDoc as saveLocalOrFirestoreDoc,
-  getServerSupabase,
-  SupabaseUnavailableError,
 } from "./src/lib/serverDb";
+import { db } from "./src/lib/firebase";
 import {
   cacheGet,
   cacheSet,
@@ -89,8 +88,9 @@ const requestContext = new AsyncLocalStorage<{ requestId: string }>();
 
 function validateEnvironmentVariables() {
   const missingCritical: string[] = [];
-  if (!process.env.SUPABASE_URL && !process.env.VITE_SUPABASE_URL) missingCritical.push("SUPABASE_URL");
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missingCritical.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!process.env.FIREBASE_PROJECT_ID) missingCritical.push("FIREBASE_PROJECT_ID");
+  if (!process.env.FIREBASE_CLIENT_EMAIL) missingCritical.push("FIREBASE_CLIENT_EMAIL");
+  if (!process.env.FIREBASE_PRIVATE_KEY) missingCritical.push("FIREBASE_PRIVATE_KEY");
   if (missingCritical.length > 0) {
     console.error("[Startup Warning] Missing critical server environment variables:", missingCritical.join(", "));
   }
@@ -393,9 +393,8 @@ async function startServer() {
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error("[API] Request failed:", error);
     if (res.headersSent) return;
-    const unavailable = error instanceof SupabaseUnavailableError;
-    res.status(unavailable ? 503 : 500).json({
-      error: unavailable ? "Matching service is temporarily unavailable. Please try again shortly." : "Unexpected server error.",
+    res.status(500).json({
+      error: "Unexpected server error.",
     });
   });
 
@@ -450,8 +449,11 @@ async function startServer() {
     // Auto-heal profiles: ensure all profiles have whatsapp_verified = true so no user is blocked by HTTP 403
     void (async () => {
       try {
-        const supabase = getServerSupabase();
-        await supabase.from("profiles").update({ whatsapp_verified: true }).eq("whatsapp_verified", false);
+        if (!db) return;
+        const snap = await db.collection("profiles").where("whatsapp_verified", "==", false).get();
+        const batch = db.batch();
+        snap.docs.forEach((doc) => batch.set(doc.ref, { whatsapp_verified: true }, { merge: true }));
+        await batch.commit();
         console.log("[DB Auto-Heal] Auto-verified unverified profiles.");
       } catch (e: any) {
         console.warn("[DB Auto-Heal] Notice:", e?.message || e);

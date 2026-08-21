@@ -1,6 +1,3 @@
 // Shared step-machine types for AuthHub sub-components.
-export type SignupStep = 'main' | 'otp' | 'google-phone' | 'donor-profile';
-export type SignupChannel = 'phone' | 'email';
-export type SigninChannel = 'phone' | 'email';
-export type SigninMode = 'user' | 'institution';
-export type InstStep = 'email' | 'otp';
+// 'initial' = show Google sign-in button; 'google-phone' = post-auth WhatsApp form.
+export type SignupStep = 'initial' | 'google-phone';

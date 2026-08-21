@@ -5,8 +5,8 @@ import {
   getCollection as getLocalOrFirestoreCollection,
   getDoc as getLocalOrFirestoreDoc,
   saveDoc as saveLocalOrFirestoreDoc,
-  getServerSupabase,
 } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { cacheSetNX, cacheGet, cacheSet } from "../src/lib/redisCache";
 import { getAuthenticatedUser, getLinkedProfile, consumeOtpTicket } from "../middleware/auth";
 import rateLimitMiddleware from "../middleware/rateLimiter";
@@ -88,7 +88,7 @@ async function resolveRequester(
     return req;
   }
 
-  // 4. Fall back to inline body phone (no Supabase session required)
+  // 4. Fall back to inline body phone (no session required)
   if (body && isValidIndianPhone(normalizePhone(String(body.requester_phone || "")))) {
     const now = nowISO();
     const email = body.requester_email as string | undefined;
@@ -111,7 +111,7 @@ async function resolveRequester(
 }
 
 // ─── Legacy requester creation (disabled) ─────────────────────────────────────
-// Profiles are created by the API only after both Supabase Auth and WhatsApp OTP succeed.
+// Profiles are created by the API only after both Auth and WhatsApp OTP succeed.
 router.post("/api/profiles/requester", rateLimitMiddleware(10, 60_000), wrap(async (_req, res) => {
   // DISABLED: Legacy OTP-gated requester creation. Use /api/auth/phone-signup.
   return res.status(410).json({ error: "Legacy requester signup is disabled. Use the new auth flow." });
@@ -225,7 +225,7 @@ router.post("/api/requests", rateLimitMiddleware(10, 60_000), validate(bloodRequ
     }
     return res.status(201).json({ requestId: id, trackingCode: request.tracking_code, status: "broadcasting", matched });
   } catch (err: any) {
-    if (err?.name === "SupabaseUnavailableError" || err?.code?.startsWith?.("42") || err?.code === "PGRST116") {
+    if (err?.name === "FirebaseUnavailableError" || err?.code?.startsWith?.("42") || err?.code === "PGRST116") {
       return sendErrorResponse(res, err, "Database is temporarily unavailable. Please try again in a few seconds.", 503, "SERVICE_UNAVAILABLE");
     }
     return sendErrorResponse(res, err, "A failure occurred while saving your blood request. Please try again.");
@@ -258,15 +258,31 @@ router.post("/api/requests/:id/broadcast", rateLimitMiddleware(10, 60_000), wrap
 
 // ─── Public feed of opt-in live requests ──────────────────────────────────────
 router.get("/api/live-requests", rateLimitMiddleware(60, 60_000), wrap(async (_req, res) => {
-  const { data, error } = await getServerSupabase()
-    .from("blood_requests")
-    .select("blood_type_needed, units_required, hospital_city, urgency_level, created_at")
-    .eq("showcase_opt_in", true)
-    .in("status", ["open", "matching", "partially_matched"])
-    .order("created_at", { ascending: false })
-    .limit(12);
-  if (error) return sendErrorResponse(res, error, "Unable to load live requests.");
-  return res.json({ requests: data || [] });
+  try {
+    let requestsData: any[] = [];
+    try {
+      const snap = await db.collection("blood_requests").limit(50).get();
+      requestsData = snap.docs.map(d => d.data());
+    } catch {
+      requestsData = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");
+    }
+    const activeStatuses = new Set(["open", "matching", "partially_matched", "broadcasting"]);
+    const filtered = requestsData
+      .filter((r: any) => r && r.showcase_opt_in && activeStatuses.has(r.status))
+      .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 12)
+      .map((r: any) => ({
+        blood_type_needed: r.blood_type_needed,
+        units_required: r.units_required,
+        hospital_city: r.hospital_city,
+        urgency_level: r.urgency_level,
+        created_at: r.created_at,
+      }));
+    return res.json({ requests: filtered });
+  } catch (error) {
+    console.warn("[live-requests] error:", (error as Error)?.message || error);
+    return res.json({ requests: [] });
+  }
 }));
 
 // ─── Requester dashboard ───────────────────────────────────────────────────────

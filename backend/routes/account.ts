@@ -1,6 +1,6 @@
 // Account routes — self-service account deletion (Section 9)
 import express, { Router } from "express";
-import { getServerSupabase } from "../src/lib/serverDb";
+import { db, auth as firebaseAuth } from "../src/lib/firebase";
 import { cacheInvalidatePrefix } from "../src/lib/redisCache";
 import { getAuthenticatedUser } from "../middleware/auth";
 import rateLimitMiddleware from "../middleware/rateLimiter";
@@ -27,24 +27,21 @@ router.post("/api/account/delete", rateLimitMiddleware(5, 60_000), wrap(async (r
     return sendErrorResponse(res, new UnauthorizedError("Sign in is required."));
   }
 
-  const supabase = getServerSupabase();
   const authUserId = authUser.id;
 
-  const { data: link } = await supabase
-    .from("auth_profile_links")
-    .select("auth_user_id")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle();
+  const linkSnap = await db.collection("auth_profile_links").where("auth_user_id", "==", authUserId).limit(1).get();
+  const link = linkSnap.empty ? null : linkSnap.docs[0].data();
 
   if (!link) {
-    await supabase.from("users").update({ account_status: "deleted" }).eq("id", authUserId);
-    await supabase.from("requesters").update({ account_status: "deleted" }).eq("id", authUserId);
+    await db.collection("users").doc(authUserId).update({ account_status: "deleted" });
+    await db.collection("requesters").doc(authUserId).update({ account_status: "deleted" });
     await cacheInvalidatePrefix(`acct_deleted:${authUserId}`);
     return res.json({ ok: true, mode: "soft" });
   }
 
-  const { error } = await supabase.auth.admin.deleteUser(link.auth_user_id);
-  if (error) {
+  try {
+    await firebaseAuth.deleteUser(link.auth_user_id);
+  } catch (error: any) {
     return sendErrorResponse(res, error, "Failed to delete account. Please try again later.");
   }
 

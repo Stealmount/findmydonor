@@ -1,5 +1,6 @@
 // e-RaktKosh Synchronization & Normalization Engine (All-India Directory)
-import { getServerSupabase, getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc } from '../src/lib/serverDb';
+import { getCollection as getLocalOrFirestoreCollection, saveDoc as saveLocalOrFirestoreDoc } from '../src/lib/serverDb';
+import { db } from '../src/lib/firebase';
 import { cacheSet, cacheGet } from '../src/lib/redisCache';
 import { ALL_INDIA_SEED_BLOOD_BANKS, ALL_INDIA_SEED_CAMPS, INDIAN_STATES_AND_UT } from '../../src/data/allIndiaBloodBankSeed';
 import type { BloodBank, DonationCamp } from '../src/types';
@@ -41,7 +42,7 @@ function inferCoordinates(city: string, state: string): { latitude: number; long
   return { latitude: 20.5937, longitude: 78.9629 }; // India geographical center fallback
 }
 
-/** Record log entry to Supabase eraktkosh_sync_logs table or Redis cache */
+/** Record log entry to Firestore eraktkosh_sync_logs collection or Redis cache */
 async function recordSyncLog(log: {
   sync_type: 'blood_banks' | 'camps' | 'full';
   status: 'completed' | 'failed' | 'partial';
@@ -53,8 +54,7 @@ async function recordSyncLog(log: {
   completed_at: string;
 }) {
   try {
-    const supabase = getServerSupabase();
-    await supabase.from('eraktkosh_sync_logs').insert(log);
+    await db.collection('eraktkosh_sync_logs').add(log);
   } catch (err: any) {
     console.warn('[Sync Log] Remote DB log insert skipped:', err?.message || err);
   }
@@ -117,8 +117,6 @@ export async function syncBloodBanks(): Promise<SyncResult> {
     recordsFetched = combinedList.length;
 
     // 3. Deduplicate and Upsert
-    const supabase = getServerSupabase();
-
     for (const bankItem of combinedList) {
       if (!bankItem.name || !bankItem.state || !bankItem.city) continue;
 
@@ -165,10 +163,10 @@ export async function syncBloodBanks(): Promise<SyncResult> {
       // Save to local/Firestore storage
       await saveLocalOrFirestoreDoc('blood_banks', normalizedBank.id, normalizedBank);
 
-      // Upsert to Supabase PostgreSQL table
+      // Upsert to Firestore
       try {
-        await supabase.from('blood_banks').upsert(normalizedBank, { onConflict: 'id' });
-      } catch { /* ignore if Supabase table not migrated yet */ }
+        await db.collection('blood_banks').doc(normalizedBank.id).set(normalizedBank, { merge: true });
+      } catch { /* ignore if Firestore table not ready yet */ }
 
       existingMap.set(dedupKey, normalizedBank);
     }

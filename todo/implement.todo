@@ -1,0 +1,532 @@
+# FindMyDonor — Execution Plan
+
+> **Three goals in one plan:**
+> 1. Remove ALL Supabase dead code from the entire project
+> 2. Simplify the UI — flat, clean, no shadows/glow/glass
+> 3. Execute the remaining items from todo-updated.md (product improvements)
+
+---
+
+## Current State Assessment
+
+### Firebase Migration: ~85% Complete
+Firebase is the **active backend**. All routes, auth, DB queries use Firestore + Firebase Auth.
+Supabase remnants are dead code: deprecated shims, compat aliases, migration scripts, test stubs.
+
+### UI: Shadow-Heavy / Decorative
+100+ shadow-premium / shadow-premium-lg usages, btn-glow, card-lift, glow-blob effects,
+glass morphism, brutalist styles, and 10+ duplicate legacy components. Needs flattening.
+
+### Product: Missing Features
+Public blood request page, live donor availability, institution CRM, admin panel completeness,
+tracking flow fixes, and unnecessary homepage sections.
+
+---
+
+## PHASE 1: Remove All Supabase Dead Code
+
+### 1A. Delete Deprecated Shim Files
+
+| File | Action | Reason |
+|------|--------|--------|
+| `src/lib/supabase.ts` | DELETE | Deprecated shim re-exporting firebase. No consumers. |
+| `backend/src/lib/supabase.ts` | DELETE | Deprecated shim re-exporting firebase. No consumers. |
+
+### 1B. Clean Backward-Compat Aliases in backend/src/lib/serverDb.ts
+
+File: `backend/src/lib/serverDb.ts`
+- Line 10: Remove `export const SupabaseUnavailableError = FirebaseUnavailableError;`
+- Line 16: Remove `export const getServerSupabase = getDb;`
+- Line 26: Remove `export const isSupabaseConfigured = isFirebaseConfigured;`
+- Keep: FirebaseUnavailableError, getDb, isFirebaseConfigured, mapProfile, getCollection, getDoc, saveDoc, deleteDoc
+
+Files importing old aliases (must update):
+- `backend/routes/requester.ts:228` — catches SupabaseUnavailableError → change to FirebaseUnavailableError
+
+### 1C. Delete Dead Migration/Utility Scripts
+
+| File | Action | Reason |
+|------|--------|--------|
+| `scripts/backfill_auth_metadata.ts` | DELETE | One-shot Supabase backfill. Migration complete. |
+| `scripts/clear_supabase.ts` | DELETE | Wipes Supabase tables. No longer relevant. |
+| `scripts/apply_auth_redesign_migration.mjs` | DELETE | DDL migration for Supabase PostgreSQL. Applied. |
+| `scripts/migrate-to-firestore.ts` | DELETE or archive | Completed migration script. Historical only. |
+
+### 1D. Remove @supabase/supabase-js and pg from package.json
+
+File: `package.json`
+- Remove `"@supabase/supabase-js": "^2.110.2"` from dependencies
+- Remove `"pg": "^8.22.0"` from dependencies (PostgreSQL driver, no longer needed)
+- Run `npm install` to update lockfile
+
+### 1E. Fix Test Backdoor Pattern (Supabase Stub URL → Clean Flag)
+
+Replace `process.env.VITE_SUPABASE_URL === "https://stub.supabase.co"` with
+`process.env.TEST_MODE === "1"` in 3 backend files:
+
+1. `backend/middleware/auth.ts` (lines 45-47)
+2. `backend/admin-server.ts` (~line 546)
+3. `backend/routes/admin.ts` (~line 112)
+
+File: `backend/tests/setup-env.ts`
+- Remove lines 18-21 (Supabase stub env vars)
+- Keep NODE_ENV = 'test' and TEST_MODE = '1'
+- Update comments to reference Firebase
+
+All test files that set VITE_SUPABASE_URL (remove that env var):
+- `backend/tests/auth.test.ts`
+- `backend/tests/account.test.ts`
+- `backend/tests/hospital.test.ts`
+- `backend/tests/simulator.test.ts`
+- `backend/tests/email-complete.test.ts`
+- `backend/tests/requests.test.ts`
+- `backend/tests/email-otp-match.test.ts`
+- `backend/tests/admin.test.ts` (also remove SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY)
+- `backend/tests/e2e-signup-match.test.ts`
+- `backend/tests/matching.test.ts` (update stale comment)
+
+### 1F. Clean backend/helpers/errors.ts
+
+- Line ~84: Keep the regex /supabase_service_role_key/i in sanitizeErrorMessage()
+  This is a defensive security pattern, NOT dead code. Keep as-is.
+
+### 1G. Delete Supabase SQL Schema/Migration Files
+
+Delete entire `database/` directory (21 files: 19 .sql + 2 .md)
+Delete `database/migrations/` (7 files)
+
+These document a database that no longer exists. In git history if needed.
+
+### 1H. Update Documentation
+
+| File | Change |
+|------|--------|
+| `README.md` | Remove @supabase/supabase-js refs. Update stack to Firebase Auth + Firestore. |
+| `backend/README.md` | Update serverDb.ts description to Firebase Admin Firestore. |
+| `docs/disaster-recovery.md` | Replace Supabase backup section with Firestore backup (gcloud firestore export). |
+| `src/components/PrivacyPolicy.tsx` | Replace "Supabase Postgres DB with RLS" with Firestore equivalent. |
+
+---
+
+## PHASE 2: Remove Legacy Duplicate Components
+
+### 2A. Delete Top-Level Legacy Duplicates
+
+None imported anywhere (confirmed by grep). All replaced by src/components/home/ versions:
+
+| File | DELETE |
+|------|--------|
+| `src/components/Hero.tsx` | Yes |
+| `src/components/Navbar.tsx` | Yes |
+| `src/components/Benefits.tsx` | Yes |
+| `src/components/CTA.tsx` | Yes |
+| `src/components/FAQ.tsx` | Yes |
+| `src/components/Features.tsx` | Yes |
+| `src/components/Impact.tsx` | Yes |
+| `src/components/Showcase.tsx` | Yes |
+| `src/components/Footer.tsx` | Yes |
+| `src/components/BloodGroupMarquee.tsx` | Yes |
+
+### 2B. Legacy Admin Panel — Keep But Isolate
+
+Still used by src/admin-main.tsx and by admin/views/AuditLog.tsx and Faq.tsx for types.
+Keep src/components/AdminPanel/ for now. Do NOT delete until legacy admin build is replaced.
+
+### 2C. Remove OTP/AuthHub Dead Code (Google-Only Auth)
+
+Files to DELETE:
+| File | Reason |
+|------|--------|
+| `src/components/AuthHub/PhoneStep.tsx` | Phone OTP — no longer used |
+| `src/components/AuthHub/OTPStep.tsx` | OTP verification — no longer used |
+| `src/components/AuthHub/ProfileStep.tsx` | Profile completion — merged into onboarding |
+
+Files to KEEP but UPDATE:
+| File | Reason |
+|------|--------|
+| `src/components/AuthHub.tsx` | Remove PhoneStep/OTPStep imports and render paths |
+| `src/components/AuthHub/AuthIntentSelector.tsx` | Still used by App.tsx |
+| `src/components/AuthHub/useAuthHub.ts` | Used by AuthHub.tsx |
+| `src/components/AuthHub/useAuthHubTypes.ts` | Types used by hook |
+
+Evaluate: If AuthRoute in App.tsx only serves legacy paths, consider removing entire AuthHub wrapper.
+
+---
+
+## PHASE 3: Simplify UI — Remove Shadows, Glow, Glass
+
+### Design System Change
+
+BEFORE: Premium glassmorphism with multi-layer shadows, blood-red glow effects, card lift animations.
+AFTER: Clean flat design. Borders for elevation. No decorative shadows.
+
+What stays: color palette, border radius, typography, subtle ambient backgrounds, grid patterns,
+functional layout.
+
+What goes:
+- shadow-premium, shadow-premium-lg → remove entirely
+- btn-glow class → remove entirely
+- card-lift class → remove entirely
+- glow-blob class → remove entirely
+- Custom shadow-[0_...] on buttons → replace with shadow-sm or nothing
+- backdrop-blur-xl / backdrop-blur-2xl → remove or reduce to backdrop-blur-sm
+- Brutalist styles → remove entirely
+
+### 3A. CSS Changes in src/index.css
+
+Remove these CSS classes entirely:
+- .btn-glow and variants (lines 234-251)
+- .card-lift (lines 271-277)
+- .shadow-premium (lines 280-285)
+- .shadow-premium-lg (lines 286-291 and 426-428)
+- .glow-blob (lines 294-300)
+- .btn-brutalist and all variants (lines 332-396)
+- .card-brutalist and .card-brutalist-accent (lines 367-396)
+- .nordic-label and .nordic-label-wide (lines 314-330)
+
+Keep: .ambient-bg, .glass (minimal), .subtle-border, .gradient-text, .noise,
+.grid-pattern, .shimmer, animations, .blood-drop-gradient, .marquee-mask,
+.section-fade-top, .no-scrollbar, .animate-fade-in
+
+### 3B. Global Replacement Patterns
+
+Light theme cards:
+  BEFORE: rounded-3xl bg-white/95 backdrop-blur-xl border border-ink-200/80 p-6 shadow-premium
+  AFTER:  rounded-3xl bg-white border border-ink-200 p-6
+
+Dark theme cards:
+  BEFORE: rounded-2xl border border-ink-800 bg-ink-900/60 backdrop-blur-xl p-4 shadow-premium-lg
+  AFTER:  rounded-2xl border border-ink-700 bg-ink-900 p-4
+
+Buttons (primary):
+  BEFORE: btn-glow bg-blood-600 text-white shadow-[0_14px_32px_-8px_rgba(244,63,87,0.5)]
+  AFTER:  bg-blood-600 text-white hover:bg-blood-700
+
+Decorative blobs:
+  BEFORE: <div className="glow-blob h-[500px] w-[500px] bg-blood-400/20 ..." />
+  AFTER:  (delete the entire element)
+
+### 3C. Component-by-Component Changes
+
+**Home page (src/components/home/):**
+
+| File | Changes |
+|------|---------|
+| Hero.tsx | Remove glow-blob divs. Remove btn-glow from CTA. Remove shadow-[0_14px_32px...]. Replace card shadows with border. |
+| Navbar.tsx | Remove shadow-premium from glass nav. Remove btn-glow from buttons. Remove shadow-[0_8px_20px...]. |
+| MobileBottomNav.tsx | Remove heavy shadow. Use border-t border-ink-200 instead. |
+| Features.tsx | Remove shadow-premium and card-lift from cards. |
+| Benefits.tsx | Remove shadow-premium-lg from dark CTA. Remove shadow-premium and card-lift. |
+| CTA.tsx | Remove glow-blob divs. Remove btn-glow. Remove shadow-[0_14px_32px...]. |
+| FAQ.tsx | Remove shadow-premium from accordion. |
+| Showcase.tsx | Remove glow-blob divs. Remove shadow-premium from cards. |
+| Leaderboard.tsx | Remove shadow-premium-lg from card. |
+| WhatFMDDoes.tsx | Remove shadow-premium and card-lift. |
+| Footer.tsx | Remove glow-blob div. |
+| Impact.tsx | Remove shadow-premium and card-lift from stat cards. |
+
+**Dashboard components:**
+
+| File | Changes |
+|------|---------|
+| DonorDashboard/ProfileCard.tsx | Remove shadow-premium from warning. Remove shadow-premium-lg from header. Remove btn-glow. Replace with border. |
+| DonorDashboard/LoginView.tsx | Remove shadow-premium-lg from login card. |
+| DonorDashboard/SettingsPanel.tsx | Remove shadow-premium-lg from modal. Remove btn-glow. |
+| DonorDashboard/MatchList.tsx | Remove shadow classes from match cards. |
+| RequesterPortal.tsx | Remove shadow-premium-lg from ALL cards. Remove btn-glow from buttons. |
+| RequestForm.tsx | Remove shadow-premium-lg from form card. Remove btn-glow from buttons. |
+| RequestTracking.tsx | Remove shadow-premium-lg from ALL tracking cards. Remove btn-glow. |
+
+**Admin components:**
+
+| File | Changes |
+|------|---------|
+| AdminShell.tsx | Remove shadow-premium-lg from header. |
+| admin/widgets/Shared.tsx | Remove shadow-premium-lg from StatCard and StatusPill. |
+| admin/views/Notifications.tsx | Remove shadow-premium-lg. |
+| admin/views/Roles.tsx | Remove shadow-premium-lg. |
+| admin/views/Settings.tsx | Remove shadow-premium-lg. |
+
+**Hospital components:**
+
+| File | Changes |
+|------|---------|
+| HospitalRegistration.tsx | Remove shadow-premium-lg from form card. |
+| hospital/widgets/EmergencyConsole.tsx | Remove btn-glow and shadow-[0_14px_32px...] from broadcast button. |
+| hospital/widgets/Shared.tsx | Remove shadow-premium-lg. |
+| hospital/views/LiveView.tsx | Remove shadow-premium-lg from sections. |
+| hospital/views/Worklist.tsx | Remove shadow-premium-lg from sections. |
+
+**Auth & standalone:**
+
+| File | Changes |
+|------|---------|
+| AuthHub.tsx | Remove shadow-premium-lg from card. |
+| FAQPage.tsx | Remove shadow-premium and btn-glow. |
+| BloodBankDirectory.tsx | Check and remove shadow classes. |
+| CityDonorDirectory.tsx | Check and remove shadow classes. |
+| BloodCompatibilityPage.tsx | Check and remove shadow classes. |
+| PrivacyPolicy.tsx | Check and remove shadows (also fix Supabase text). |
+| GuidesPage.tsx | Check and remove shadow classes. |
+| SupportPage.tsx | Check and remove shadow classes. |
+
+---
+
+## PHASE 4: Product Improvements (from todo-updated.md)
+
+### 4A. Donor Dashboard — Profile Completion Popup (Section 1)
+
+Create: `src/components/DonorDashboard/ProfileCompletionPopup.tsx`
+  - Modal for new/incomplete donor profiles
+  - Fields: blood group, weight, pincode, area/locality, city, WhatsApp (10 digits, +91 fixed)
+  - Client + server validation
+  - Dismiss after completion
+
+Modify: `src/components/DonorDashboard.tsx`
+  - Profile completion check on mount
+  - Show popup if incomplete
+  - Rework hierarchy: Profile Status → Availability → Emergency → Matches/Donations
+  - Fix spacing, alignment, card widths
+
+Modify: `src/components/DonorDashboard/ProfileCard.tsx`
+  - Remove scattered phone/WhatsApp banner
+
+Modify: `src/components/DonorDashboard/ContactInfoBanner.tsx`
+  - Remove or merge into profile completion flow
+
+### 4B. Requester Registration Simplification (Section 2)
+
+Modify: `src/components/RequestForm.tsx`
+  - Clear required vs optional fields
+  - Flow: Blood Group → Units → Patient Age → Pincode → Urgency → Contact → Broadcast
+  - Short labels, clear validation
+
+Modify: `src/components/RequesterPortal.tsx`
+  - Request progress in one place
+  - Distinguish: Draft/Active/Broadcasting/Responses/Fulfilled/Expired/Cancelled
+
+### 4C. Public Blood Request Detail Page (Section 3)
+
+Create: `src/components/PublicRequestView.tsx`
+  - Single-page view: blood group, units, age, pincode, urgency, status, time posted
+  - Protected info locked (phone, email, address)
+  - Unauthenticated → prompt sign up
+
+Modify: `backend/routes/tracking.ts`
+  - Endpoint for public request data (safe fields only)
+  - Server-side auth check for protected fields
+
+Modify: `src/App.tsx`
+  - Add route: /request/:id
+
+### 4D. Live Donor Availability (Section 4)
+
+Create: `src/components/home/LiveDonorAvailability.tsx`
+  - Blood group availability cards with real-time counts
+  - Safe preview only: blood group, area, availability, verification
+  - Contact locked for unauthenticated
+
+Modify: `backend/routes/donor.ts`
+  - Add: GET /api/donors/availability-counts
+
+Modify: `src/components/home/RaktdaanHome.tsx`
+  - Add LiveDonorAvailability section
+
+### 4E. Institutional Registration & Dashboard (Sections 5-6)
+
+Modify: `src/components/hospital/HospitalRegistration.tsx`
+  - Combined Hospital/Blood Bank/NGO flow
+  - First ask: institution type
+  - Type-specific fields
+  - Creates "Pending Approval" institution
+
+Modify: `src/components/hospital/HospitalDashboard.tsx`
+  - Light CRM: inventory, donors, requests, matches, activity
+
+Modify: `backend/routes/institutions.ts`
+  - Approval workflow: pending → verified/rejected/suspended
+
+### 4F. Admin Panel Improvements (Section 7)
+
+Modify: `src/components/admin/views/Institutions.tsx`
+  - Institution approval queue
+  - Approve/Reject/Suspend/Reactivate actions
+
+Modify: `src/components/admin/views/Overview.tsx`
+  - Show active broadcasts, matched donors, fulfilled, expired
+
+Modify: `backend/routes/admin.ts`
+  - Ensure admin can manage all entities
+  - Audit logging for sensitive actions
+
+### 4G. Google Sign-In Branding (Section 8)
+
+- Verify Google OAuth presents "FindMyDonor" not Supabase hostname
+- Check authDomain config in src/lib/firebase.ts
+- Check Rev3AuthScreen.tsx button text
+- Test redirect/callback URLs, production domain
+
+### 4H. Track Match / Track Code Fixes (Section 9)
+
+Modify: `src/components/RequestTracking.tsx`
+  - Fix navigation flow
+  - Handle: valid/invalid/missing/expired/fulfilled/cancelled codes
+  - Clear error messages
+
+Modify: `backend/routes/tracking.ts`
+  - Verify tracking code lookup end-to-end
+  - Proper error states for all edge cases
+
+### 4I. Remove Unnecessary Homepage Sections (Section 10)
+
+Evaluate in RaktdaanHome.tsx — remove decorative sections that don't help users:
+- Showcase.tsx (testimonials) — decorative
+- Impact.tsx — verify if data is real
+- Leaderboard.tsx — verify if data is real
+- LiveFeed.tsx — verify if data is real/simulated
+- BloodGroupMarquee.tsx — decorative
+- WhatFMDDoes.tsx — may overlap with Features
+
+Keep: trust signals, availability, matching, emergency, navigation, FAQ
+
+### 4J. Final UI Quality Pass (Section 12)
+
+Across ALL components:
+- Consistent spacing system
+- Standardize button/input heights, labels, card radius, typography
+- Fix scattered appearance
+- Reduce excessive vertical gaps
+- Keep related info together
+- Obvious primary actions
+- Empty/loading/success/error/locked/pending/disabled states
+- Balanced desktop layout
+- Correct mobile stacking
+
+---
+
+## PHASE 5: Security & Backend Hardening (Section 13)
+
+### 5A. Server-Side Data Protection
+
+Audit these files:
+- backend/routes/tracking.ts — phone/email/address never sent to unauthenticated
+- backend/routes/donor.ts — donor contact info protected
+- backend/middleware/auth.ts — authorization on all protected endpoints
+- backend/routes/admin.ts — admin-only data stays admin-only
+
+### 5B. Input Validation
+
+- Verify all routes validate input (Zod schemas in backend/validation/)
+- Client AND server validation for: WhatsApp (10 digits), phone, pincode, blood group
+
+---
+
+## PHASE 6: Testing & Verification
+
+### 6A. Update Test Environment
+- setup-env.ts — Supabase stubs removed (Phase 1E)
+- All test files — VITE_SUPABASE_URL removed (Phase 1E)
+- Verify tests pass with TEST_MODE flag only
+
+### 6B. Run Full Test Suite
+```
+npm run test:all
+```
+
+### 6C. Manual Verification Checklist
+
+- New donor → profile popup → complete profile → dashboard
+- Existing donor → dashboard → update availability
+- Donor WhatsApp → exactly 10 digits → save
+- Requester → simple registration → create request
+- Requester → broadcast → compatible donors notified
+- Donor → receives request → accepts/responds
+- Requester → sees donor response → tracks request
+- Public request page → safe info visible → protected locked
+- New user → tries to unlock → sign up required
+- Institution → select type → register → pending approval
+- Admin → review institution → approve/reject/suspend
+- Approved institution → dashboard → inventory/donors/requests
+- Admin → complete platform data visible
+- Google login → FindMyDonor flow → correct redirect
+- Track code → valid code returns correct request
+- Invalid tracking code → clear error
+- Donor availability → real counts update
+- Mobile and desktop → no broken layout
+
+### 6D. Lint & Type Check
+```
+npm run lint
+```
+
+---
+
+## Execution Order
+
+| Step | Phase | Effort | Depends On |
+|------|-------|--------|------------|
+| 1 | 1A-1D: Delete shims, scripts, deps | 30 min | Nothing |
+| 2 | 1E: Fix test backdoor pattern | 30 min | Nothing |
+| 3 | 1G: Delete database/ directory | 5 min | Nothing |
+| 4 | 2A: Delete legacy duplicate components | 10 min | Nothing |
+| 5 | 2C: Remove OTP dead code, update AuthHub | 30 min | Nothing |
+| 6 | 3A: CSS cleanup in index.css | 20 min | Nothing |
+| 7 | 3C: Shadow removal across all components | 2-3 hours | Step 6 |
+| 8 | 1H + 4G: Documentation + Google branding | 30 min | Step 1 |
+| 9 | 4A: Donor profile completion popup | 2-3 hours | Step 7 |
+| 10 | 4B: Requester form simplification | 2-3 hours | Step 7 |
+| 11 | 4C: Public request detail page | 3-4 hours | Step 7 |
+| 12 | 4D: Live donor availability | 3-4 hours | Step 7 |
+| 13 | 4E: Institution registration + dashboard | 4-5 hours | Step 7 |
+| 14 | 4F: Admin panel improvements | 3-4 hours | Step 7 |
+| 15 | 4H: Track match/code fixes | 2-3 hours | Step 7 |
+| 16 | 4I: Remove unnecessary homepage sections | 1-2 hours | Step 7 |
+| 17 | 4J: Final UI quality pass | 3-4 hours | Steps 9-16 |
+| 18 | 5: Security hardening | 2-3 hours | Steps 9-16 |
+| 19 | 6: Testing & verification | 2-3 hours | All steps |
+
+**Total estimated: 30-40 hours**
+
+---
+
+## Files Changed Summary
+
+### DELETED (26+ files)
+- src/lib/supabase.ts
+- backend/src/lib/supabase.ts
+- scripts/backfill_auth_metadata.ts
+- scripts/clear_supabase.ts
+- scripts/apply_auth_redesign_migration.mjs
+- scripts/migrate-to-firestore.ts
+- database/ (entire directory: 21 files)
+- src/components/Hero.tsx, Navbar.tsx, Benefits.tsx, CTA.tsx, FAQ.tsx, Features.tsx, Impact.tsx, Showcase.tsx, Footer.tsx, BloodGroupMarquee.tsx
+- src/components/AuthHub/PhoneStep.tsx, OTPStep.tsx, ProfileStep.tsx
+
+### MODIFIED (40+ files)
+- package.json (remove supabase + pg deps)
+- backend/src/lib/serverDb.ts (remove aliases)
+- backend/middleware/auth.ts (fix test backdoor)
+- backend/admin-server.ts (fix test backdoor)
+- backend/routes/admin.ts (fix test backdoor)
+- backend/routes/requester.ts (fix error name)
+- backend/routes/tracking.ts (public data endpoint)
+- backend/routes/donor.ts (availability counts)
+- backend/routes/institutions.ts (approval workflow)
+- backend/helpers/errors.ts (keep as-is)
+- backend/tests/setup-env.ts (remove stubs)
+- backend/tests/ (9 test files: remove VITE_SUPABASE_URL)
+- src/index.css (remove shadow/glow/brutalist classes)
+- src/App.tsx (add public request route)
+- src/components/PrivacyPolicy.tsx (fix Supabase text)
+- README.md, backend/README.md, docs/disaster-recovery.md
+- src/components/AuthHub.tsx (remove OTP imports)
+- All home/ components (shadow removal)
+- All dashboard components (shadow removal)
+- All admin components (shadow removal)
+- All hospital components (shadow removal)
+- All standalone page components (shadow removal)
+
+### CREATED (3-5 new files)
+- src/components/DonorDashboard/ProfileCompletionPopup.tsx
+- src/components/PublicRequestView.tsx
+- src/components/home/LiveDonorAvailability.tsx

@@ -1,7 +1,8 @@
 // Rev 3 frontend auth client — thin typed wrappers over the frozen backend contract.
 // Slices 1–5 all talk through these helpers so the API surface stays in one place
 // and the components stay declarative.
-import { supabase } from './supabase';
+import { signInWithPopup, signOut } from 'firebase/auth';
+import { auth, googleProvider } from './firebase';
 import { ApiError } from './api';
 import type { Profile, DonorProfile, Institution, User } from '../types';
 
@@ -39,47 +40,16 @@ async function getJson(path: string, token: string) {
 }
 
 async function getToken(): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || '';
+  if (!auth.currentUser) return '';
+  return auth.currentUser.getIdToken();
 }
 
-// ── Email OTP flow (Slice 1) ──────────────────────────────────────────────
-export function sendEmailOtp(email: string) {
-  return postJson('/api/email/send-otp', { email });
-}
-export function verifyEmailOtp(email: string, otp: string) {
-  return postJson('/api/email/verify-otp', { email, otp });
+// ── Google flow ───────────────────────────────────────────────────────────
+export async function googleSignIn() {
+  await signInWithPopup(auth, googleProvider);
 }
 
-/**
- * Complete an email sign-in: server decides new-vs-existing, creates/links the
- * profile, and returns a Supabase session (or a magic link when internal creds
- * are unrecoverable).
- */
-export async function emailComplete(email: string, verificationToken: string, fullName: string, intent?: string) {
-  const payload = await postJson('/api/auth/email-complete', { email, verificationToken, fullName, intent });
-  if (payload.session?.access_token) {
-    await supabase.auth.setSession(payload.session);
-  }
-  return payload as {
-    profile?: Profile | null;
-    session?: { access_token: string } | null;
-    magicLink?: string | null;
-    isNewUser?: boolean;
-    nextStep?: Rev3NextStep;
-  };
-}
-
-// ── Google flow (Slice 1) ────────────────────────────────────────────────
-export async function googleSignIn(callbackPath: string = window.location.pathname || '/auth/signin') {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: `${window.location.origin}${callbackPath}` },
-  });
-  if (error) throw error;
-}
-
-/** Ensure a Google identity has a profile + link. Called after OAuth return. */
+/** Ensure a Google identity has a profile + link. Called after popup sign-in. */
 export async function completeGoogle(email: string, fullName: string) {
   const token = await getToken();
   return postJson('/api/auth/complete-verification', { email, fullName }, token) as Promise<{
@@ -164,7 +134,7 @@ export async function rev3Logout() {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch { /* non-blocking */ }
-  await supabase.auth.signOut();
+  await signOut(auth);
 }
 
 // ── Onboarding (Slice 2) ──────────────────────────────────────────────────
@@ -193,25 +163,7 @@ export function completionWizard() {
   return postAuth('/api/onboarding/completion-wizard', {});
 }
 
-// ── Account settings (Slice 4) ─────────────────────────────────────────────
-export function waSendOtp(phone: string) {
-  return postJson('/api/wa/send-otp', { phone, purpose: 'verify' });
-}
-export function waVerify(phone: string, otp: string) {
-  return postJson('/api/wa/verify-otp', { phone, otp, purpose: 'verify' });
-}
-export function changeWhatsApp(verificationToken: string, newPhone: string) {
-  return postAuth('/api/account/change-whatsapp', { verificationToken, newPhone });
-}
-export function changeEmail(verificationToken: string, newEmail: string) {
-  return postAuth('/api/account/change-email', { verificationToken, newEmail });
-}
-export function linkGoogle(email: string) {
-  return postAuth('/api/account/link-google', { email });
-}
-export function unlinkGoogle() {
-  return postAuth('/api/account/unlink-google', {});
-}
+// ── Account settings ──────────────────────────────────────────────────────
 export function exportAccount() {
   return getAuth('/api/account/export');
 }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
-import { supabase } from './supabase';
+import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth';
+import { auth } from './firebase';
 import { authenticatedApi } from './api';
 import type { User as DonorUser, Requester, Profile, HospitalUser, Institution, AdminUser, AuthState } from '../types';
 
@@ -69,20 +69,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [loggedInHospital, setLoggedInHospital] = useState<HospitalUser | null>(null);
   const [loggedInAdmin, setLoggedInAdmin] = useState<AdminUser | null>(null);
-  // Canonical institution row (never mutated). loggedInHospital is the derived
-  // view-model used by HospitalDashboard; status flows through both.
   const [loggedInInstitution, setLoggedInInstitution] = useState<Institution | null>(null);
   const lastResolvedUserIdRef = useRef<string | null>(null);
 
-  async function handleAuthUser(authUser?: SupabaseAuthUser, forceRefresh = false) {
-    if (authUser && (forceRefresh || authUser.id !== lastResolvedUserIdRef.current)) {
+  async function handleAuthUser(authUser?: FirebaseUser, forceRefresh = false) {
+    if (authUser && (forceRefresh || authUser.uid !== lastResolvedUserIdRef.current)) {
       try {
-        lastResolvedUserIdRef.current = authUser.id;
+        lastResolvedUserIdRef.current = authUser.uid;
         const authState = await authenticatedApi<AuthState & { institution?: Institution | null }>(
           '/api/auth/me', undefined, 'GET'
         );
 
-        // Institution admin — set hospital view-model, do NOT set as donor/requester
         if (authState.institution) {
           setLoggedInInstitution(authState.institution);
           setLoggedInHospital(institutionToHospitalUser(authState.institution));
@@ -105,23 +102,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) void handleAuthUser(session.user);
+    if (auth.currentUser) void handleAuthUser(auth.currentUser);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) void handleAuthUser(user);
       setSessionLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) void handleAuthUser(session.user);
-    });
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const logout = async () => {
     try {
       lastResolvedUserIdRef.current = null;
-      await supabase.auth.signOut();
+      await signOut(auth);
     } catch (error) {
-      console.error('Supabase signOut failed:', error);
+      console.error('Firebase signOut failed:', error);
     }
     setLoggedInUser(null);
     setLoggedInRequester(null);
@@ -131,8 +126,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshSession = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) await handleAuthUser(session.user, true);
+    if (auth.currentUser) {
+      await auth.currentUser.getIdToken(true);
+      await handleAuthUser(auth.currentUser, true);
+    }
   };
 
   return (

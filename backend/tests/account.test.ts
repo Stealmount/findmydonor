@@ -23,7 +23,6 @@ describe('Account Deletion Endpoint (POST /api/account/delete)', () => {
         ...process.env,
         PORT,
         NODE_ENV: 'test',
-        VITE_SUPABASE_URL: 'https://stub.supabase.co'
       }
     });
 

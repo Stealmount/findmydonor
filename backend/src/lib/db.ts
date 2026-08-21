@@ -1,11 +1,10 @@
-import { supabase } from './supabase';
-import { User, BloodRequest, Match, NotificationLog, DonationLog, BloodType } from '../types';
+// Backend DB helpers — uses Firebase Admin Firestore (not client SDK).
+import { db } from './firebase';
 
 export async function getCollection<T>(collectionName: string): Promise<T[]> {
   try {
-    const { data, error } = await supabase.from(collectionName).select('*');
-    if (error) throw error;
-    return (data || []) as T[];
+    const snapshot = await db.collection(collectionName).get();
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as T));
   } catch (err) {
     console.error(`Error getting collection ${collectionName}:`, err);
     return [];
@@ -14,9 +13,9 @@ export async function getCollection<T>(collectionName: string): Promise<T[]> {
 
 export async function getDoc<T>(collectionName: string, id: string): Promise<T | null> {
   try {
-    const { data, error } = await supabase.from(collectionName).select('*').eq('id', id).maybeSingle();
-    if (error) throw error;
-    return (data || null) as T | null;
+    const docSnap = await db.collection(collectionName).doc(id).get();
+    if (!docSnap.exists) return null;
+    return { id: docSnap.id, ...docSnap.data()! } as T;
   } catch (err) {
     console.error(`Error getting doc ${collectionName}/${id}:`, err);
     return null;
@@ -25,20 +24,16 @@ export async function getDoc<T>(collectionName: string, id: string): Promise<T |
 
 export async function saveDoc(collectionName: string, id: string, data: any): Promise<void> {
   try {
-    // Supabase upsert requires the primary key in the payload. We ensure 'id' is present.
-    const payload = { ...data, id };
-    const { error } = await supabase.from(collectionName).upsert(payload);
-    if (error) throw error;
+    await db.collection(collectionName).doc(id).set({ ...data, id }, { merge: true });
   } catch (err) {
     console.error(`Error saving doc ${collectionName}/${id}:`, err);
-    throw err; // Re-throw to allow caller to handle
+    throw err;
   }
 }
 
 export async function deleteDoc(collectionName: string, id: string): Promise<void> {
   try {
-    const { error } = await supabase.from(collectionName).delete().eq('id', id);
-    if (error) throw error;
+    await db.collection(collectionName).doc(id).delete();
   } catch (err) {
     console.error(`Error deleting doc ${collectionName}/${id}:`, err);
   }

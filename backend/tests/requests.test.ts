@@ -16,7 +16,6 @@ describe('Blood Requests API Endpoints (/api/requests & /api/sos/requests)', () 
         ...process.env,
         PORT,
         NODE_ENV: 'test',
-        VITE_SUPABASE_URL: 'https://stub.supabase.co'
       }
     });
 

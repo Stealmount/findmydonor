@@ -15,7 +15,7 @@
 //   POST /account/logout            client-side session clear (no-op backend)
 import express, { Router } from "express";
 import { getAuthenticatedUser, getLinkedProfile, consumeOtpTicket, consumeEmailOtpTicket } from "../middleware/auth";
-import { getServerSupabase } from "../src/lib/serverDb";
+import { db, auth as firebaseAuth } from "../src/lib/firebase";
 import { cacheInvalidatePrefix } from "../src/lib/redisCache";
 import rateLimitMiddleware from "../middleware/rateLimiter";
 import { validate } from "../validation/index";
@@ -60,12 +60,11 @@ router.post("/account/wa-verify", rateLimitMiddleware(10, 60_000), validate(what
   const ok = await consumeOtpTicket(String(verificationToken), normalized, "verify");
   if (!ok) return sendErrorResponse(res, new ForbiddenError("WhatsApp verification expired. Request a new OTP."));
 
-  const supabase = getServerSupabase();
-  const { error } = await supabase
-    .from("profiles")
-    .update({ whatsapp_phone: normalized, whatsapp_verified: true, updated_at: nowISO() })
-    .eq("id", linked.profile.id);
-  if (error) return sendErrorResponse(res, error, "Failed to verify your WhatsApp number.");
+  await db.collection("profiles").doc(linked.profile.id).update({
+    whatsapp_phone: normalized,
+    whatsapp_verified: true,
+    updated_at: nowISO(),
+  });
 
   await cacheInvalidatePrefix(`me:${authUser.id}`);
   return res.json({ success: true, whatsapp_phone: normalized, whatsapp_verified: true });
@@ -87,12 +86,11 @@ router.post("/account/change-whatsapp", rateLimitMiddleware(5, 60_000), validate
   const ok = await consumeOtpTicket(String(verificationToken), normalized, "verify");
   if (!ok) return sendErrorResponse(res, new ForbiddenError("WhatsApp verification expired. Request a new OTP for the new number."));
 
-  const supabase = getServerSupabase();
-  const { error } = await supabase
-    .from("profiles")
-    .update({ whatsapp_phone: normalized, whatsapp_verified: true, updated_at: nowISO() })
-    .eq("id", linked.profile.id);
-  if (error) return sendErrorResponse(res, error, "Failed to update your WhatsApp number.");
+  await db.collection("profiles").doc(linked.profile.id).update({
+    whatsapp_phone: normalized,
+    whatsapp_verified: true,
+    updated_at: nowISO(),
+  });
 
   await cacheInvalidatePrefix(`me:${authUser.id}`);
   return res.json({ success: true, whatsapp_phone: normalized, whatsapp_verified: true });
@@ -111,23 +109,22 @@ router.post("/account/change-email", rateLimitMiddleware(5, 60_000), validate(ch
   const ok = await consumeEmailOtpTicket(String(verificationToken), normalized);
   if (!ok) return sendErrorResponse(res, new ForbiddenError("Email verification expired. Request a new OTP."));
 
-  const supabase = getServerSupabase();
-  const { data: existing } = await supabase
-    .from("profiles").select("id").eq("email", normalized).maybeSingle();
+  const existingSnap = await db.collection("profiles").where("email", "==", normalized).limit(1).get();
+  const existing = existingSnap.empty ? null : existingSnap.docs[0];
   if (existing && existing.id !== linked.profile.id) {
     return sendErrorResponse(res, new AppError("This email is already in use by another account.", 409, "ACCOUNT_EXISTS"));
   }
 
   try {
-    await supabase.auth.admin.updateUserById(authUser.id, { email: normalized });
+    await firebaseAuth.updateUser(authUser.id, { email: normalized });
   } catch (err: any) {
     console.warn("[Account] auth email update note:", err?.message || err);
   }
-  const { error } = await supabase
-    .from("profiles")
-    .update({ email: normalized, updated_at: nowISO() })
-    .eq("id", linked.profile.id);
-  if (error) return sendErrorResponse(res, error, "Failed to update your email.");
+
+  await db.collection("profiles").doc(linked.profile.id).update({
+    email: normalized,
+    updated_at: nowISO(),
+  });
 
   await cacheInvalidatePrefix(`me:${authUser.id}`);
   return res.json({ success: true, email: normalized });
@@ -148,12 +145,13 @@ router.post("/account/link-google", rateLimitMiddleware(5, 60_000), validate(lin
     return sendErrorResponse(res, new AppError("The Google account email does not match this profile. Linking requires a matching verified identity.", 409, "IDENTITY_MISMATCH"));
   }
 
-  const supabase = getServerSupabase();
   let googleAuthId: string | null = null;
   try {
-    const { data: { users } } = await supabase.auth.admin.listUsers();
-    const googleUser = (users as any[])?.find((u: any) => u.email === googleEmail && u.app_metadata?.provider === "google");
-    if (googleUser) googleAuthId = googleUser.id;
+    const listResult = await firebaseAuth.listUsers(1000);
+    const googleUser = listResult.users.find(
+      (u: any) => u.email === googleEmail && u.providerData?.some((p: any) => p.providerId === "google.com")
+    );
+    if (googleUser) googleAuthId = googleUser.uid;
   } catch (err: any) {
     console.warn("[Account] google identity lookup note:", err?.message || err);
   }
@@ -163,11 +161,11 @@ router.post("/account/link-google", rateLimitMiddleware(5, 60_000), validate(lin
   }
 
   try {
-    await supabase.from("auth_profile_links").upsert({
+    await db.collection("auth_profile_links").doc(googleAuthId).set({
       auth_user_id: googleAuthId,
       profile_id: linked.profile.id,
       provider: "google",
-    }, { onConflict: "auth_user_id" });
+    }, { merge: true });
   } catch { /* duplicate link ignored */ }
 
   await cacheInvalidatePrefix(`me:${authUser.id}`);
@@ -181,24 +179,18 @@ router.post("/account/unlink-google", rateLimitMiddleware(5, 60_000), wrap(async
   const linked = await getLinkedProfile(authUser.id);
   if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
 
-  const supabase = getServerSupabase();
+  const linksSnap = await db.collection("auth_profile_links")
+    .where("profile_id", "==", linked.profile.id).get();
+  const count = linksSnap.size;
 
-  const { count, error: countError } = await supabase
-    .from("auth_profile_links")
-    .select("auth_user_id", { count: "exact", head: true })
-    .eq("profile_id", linked.profile.id);
-  if (countError) return sendErrorResponse(res, countError, "Failed to verify your linked sign-in methods.");
-
-  if ((count ?? 0) <= 1) {
+  if (count <= 1) {
     return sendErrorResponse(res, new AppError("At least one sign-in method must remain linked to your account.", 409, "LAST_AUTH_PROVIDER"));
   }
 
-  const { error } = await supabase
-    .from("auth_profile_links")
-    .delete()
-    .eq("profile_id", linked.profile.id)
-    .eq("provider", "google");
-  if (error) return sendErrorResponse(res, error, "Failed to unlink Google.");
+  const googleLink = linksSnap.docs.find(d => d.data().provider === "google");
+  if (googleLink) {
+    await googleLink.ref.delete();
+  }
 
   await cacheInvalidatePrefix(`me:${authUser.id}`);
   return res.json({ success: true, linked: false });
@@ -212,11 +204,11 @@ router.get("/account/export", rateLimitMiddleware(10, 60_000), wrap(async (req, 
   if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
 
   try {
-    const supabase = getServerSupabase();
-    const { data: donorProfile } = await supabase
-      .from("donor_profiles").select("*").eq("profile_id", linked.profile.id).maybeSingle();
-    const { data: links } = await supabase
-      .from("institution_profile_links").select("*").eq("profile_id", linked.profile.id);
+    const dpSnap = await db.collection("donor_profiles").where("profile_id", "==", linked.profile.id).limit(1).get();
+    const donorProfile = dpSnap.empty ? null : { id: dpSnap.docs[0].id, ...dpSnap.docs[0].data() };
+
+    const linksSnap = await db.collection("institution_profile_links").where("profile_id", "==", linked.profile.id).get();
+    const links = linksSnap.docs.map(d => d.data());
 
     const profileCopy = { ...linked.profile };
     delete (profileCopy as Record<string, unknown>).id;
@@ -260,7 +252,7 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
     } else {
       const normalized = normalizePhone(rawPhone);
       if (!isValidIndianPhone(normalized)) {
-        return sendErrorResponse(res, new ValidationError("Enter a valid Indian mobile number (10 digits, starting with 6–9)."));
+        return sendErrorResponse(res, new ValidationError("Enter a valid Indian mobile number (10 digits, starting with 6-9)."));
       }
       const existingPhone = linked.profile.phone ? normalizePhone(linked.profile.phone) : null;
       if (existingPhone && existingPhone !== normalized) {
@@ -285,7 +277,7 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
     } else {
       const normalized = normalizePhone(rawWaPhone);
       if (!isValidIndianPhone(normalized)) {
-        return sendErrorResponse(res, new ValidationError("Enter a valid Indian WhatsApp number (10 digits, starting with 6–9)."));
+        return sendErrorResponse(res, new ValidationError("Enter a valid Indian WhatsApp number (10 digits, starting with 6-9)."));
       }
       const existingWaPhone = linked.profile.whatsapp_phone ? normalizePhone(linked.profile.whatsapp_phone) : null;
       if (existingWaPhone && existingWaPhone !== normalized) {
@@ -304,14 +296,7 @@ router.patch("/profile/contact", rateLimitMiddleware(20, 60_000), wrap(async (re
     }
   }
 
-  const supabase = getServerSupabase();
-  const { error } = await supabase
-    .from("profiles")
-    .update(patch)
-    .eq("id", linked.profile.id);
-  if (error) {
-    return sendErrorResponse(res, error, "Failed to update contact information.");
-  }
+  await db.collection("profiles").doc(linked.profile.id).update(patch);
 
   await cacheInvalidatePrefix(`me:${authUser.id}`);
   return res.json({

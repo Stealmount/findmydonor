@@ -5,8 +5,8 @@ import {
   getCollection as getLocalOrFirestoreCollection,
   getDoc as getLocalOrFirestoreDoc,
   saveDoc as saveLocalOrFirestoreDoc,
-  getServerSupabase,
 } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { cacheGet, cacheSet, cacheInvalidatePrefix } from "../src/lib/redisCache";
 import { getAuthenticatedUser, getLinkedProfile } from "../middleware/auth";
 import rateLimitMiddleware from "../middleware/rateLimiter";
@@ -74,15 +74,17 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
   if (!linked.profile.can_donate) return sendErrorResponse(res, new ForbiddenError("Donor role required."));
   let donorProfile = linked.donorProfile;
   if (!donorProfile) {
-    const supabase = getServerSupabase();
-    const { data: createdDP } = await supabase.from("donor_profiles").upsert({ profile_id: linked.profile.id }, { onConflict: "profile_id" }).select().maybeSingle();
+    const dpSnap = await db.collection("donor_profiles").doc(linked.profile.id).get();
+    const createdDP = dpSnap.exists ? { profile_id: linked.profile.id, ...dpSnap.data() } : null;
+    if (!createdDP) {
+      await db.collection("donor_profiles").doc(linked.profile.id).set({ profile_id: linked.profile.id }, { merge: true });
+    }
     donorProfile = createdDP || { profile_id: linked.profile.id, blood_group: null, pincode: null } as any;
   }
 
   // Ensure profile is marked verified
   if (!linked.profile.whatsapp_verified) {
-    const supabase = getServerSupabase();
-    await supabase.from("profiles").update({ whatsapp_verified: true }).eq("id", linked.profile.id);
+    await db.collection("profiles").doc(linked.profile.id).update({ whatsapp_verified: true });
     linked.profile.whatsapp_verified = true;
   }
 
@@ -105,29 +107,22 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
   const today = nowDate();
   const is_available = !cooldown_until || cooldown_until < today;
 
-  const { data, error } = await getServerSupabase()
-    .from("donor_profiles")
-    .update({
-      blood_group: String(blood_group),
-      pincode: String(pincode),
-      area: String(area),
-      city: String(city),
-      last_donation_date: last_donation_date || null,
-      cooldown_until,
-      health_self_declaration: true,
-      profile_complete: true,
-      is_available,
-      emergency_only: Boolean(emergency_only),
-      number_sharing_pref: number_sharing_pref || "on_approval",
-      updated_at: nowISO(),
-    })
-    .eq("profile_id", linked.profile.id)
-    .select("*")
-    .single();
-
-  if (error) {
-    return sendErrorResponse(res, error, "Unable to save donor profile.");
-  }
+  const dpUpdateData = {
+    blood_group: String(blood_group),
+    pincode: String(pincode),
+    area: String(area),
+    city: String(city),
+    last_donation_date: last_donation_date || null,
+    cooldown_until,
+    health_self_declaration: true,
+    profile_complete: true,
+    is_available,
+    emergency_only: Boolean(emergency_only),
+    number_sharing_pref: number_sharing_pref || "on_approval",
+    updated_at: nowISO(),
+  };
+  await db.collection("donor_profiles").doc(linked.profile.id).set(dpUpdateData, { merge: true });
+  const data = { profile_id: linked.profile.id, ...dpUpdateData };
 
   const updatedDonorDoc: any = {
     id: linked.profile.id,
@@ -150,7 +145,7 @@ router.patch("/api/donor-profile/complete", rateLimitMiddleware(10, 60_000), wra
   await saveLocalOrFirestoreDoc("users", linked.profile.id, updatedDonorDoc).catch(() => {});
 
   try {
-    await getServerSupabase().from("users").upsert(updatedDonorDoc, { onConflict: "id" });
+    await db.collection("users").doc(linked.profile.id).set(updatedDonorDoc, { merge: true });
   } catch (upsertErr: any) {
     console.warn("[DonorComplete] users table upsert fallback notice:", upsertErr?.message || upsertErr);
   }
@@ -184,9 +179,9 @@ router.patch("/api/donor-profile/availability", rateLimitMiddleware(30, 60_000),
   if (available && linked.donorProfile.cooldown_until && linked.donorProfile.cooldown_until >= today) {
     return sendErrorResponse(res, new AppError(`Donation cooldown active until ${linked.donorProfile.cooldown_until}.`, 422, "COOLDOWN_ACTIVE"));
   }
-  const { data, error } = await getServerSupabase().from("donor_profiles")
-    .update({ is_available: available, updated_at: nowISO() }).eq("profile_id", linked.profile.id).select("*").single();
-  if (error) return sendErrorResponse(res, error, "Unable to update availability.");
+  const availData = { is_available: available, updated_at: nowISO() };
+  await db.collection("donor_profiles").doc(linked.profile.id).update(availData);
+  const data = { profile_id: linked.profile.id, ...linked.donorProfile, ...availData };
   await cacheInvalidatePrefix("eligible_");
   return res.json({ donorProfile: data });
 }));

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { auth } from './firebase';
 
 export class ApiError extends Error {
   status: number;
@@ -16,19 +16,16 @@ export class ApiError extends Error {
 }
 
 export async function authenticatedApi<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
-  // Admin console routes authenticate via the ADMIN_AUTH_SECRET stored by the
-  // login screens (sessionStorage). Everything else uses the Supabase session.
-  const adminSecret = sessionStorage.getItem('fmd_admin_secret');
-  const token = path.startsWith('/api/admin') && adminSecret
-    ? adminSecret
-    : (session?.access_token || '');
+  let token = '';
+  if (auth.currentUser) {
+    token = await auth.currentUser.getIdToken();
+  }
 
   const response = await fetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

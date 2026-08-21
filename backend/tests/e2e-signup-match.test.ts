@@ -27,7 +27,6 @@ describe('E2E: Donor and Requester Signup & Match', () => {
         ...process.env,
         PORT,
         NODE_ENV: 'test',
-        VITE_SUPABASE_URL: 'https://stub.supabase.co',
         WAHA_BASE_URL: ''
       }
     });

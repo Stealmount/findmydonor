@@ -6,9 +6,8 @@ import {
   getCollection as getLocalOrFirestoreCollection,
   getDoc as getLocalOrFirestoreDoc,
   saveDoc as saveLocalOrFirestoreDoc,
-  getServerSupabase,
-  isSupabaseConfigured,
 } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import {
   cacheGet,
   cacheSet,
@@ -91,8 +90,8 @@ export async function findEligibleDonors(
   const cached = await cacheGet<(User & { distance_km: number; match_rank: number; is_exact_match: boolean })[]>(cacheKey);
   if (cached) return cached;
 
-  // Phase 6 (6.1): prefer Supabase pushdown (narrows candidate set in-DB) with
-  // the legacy full Firestore scan as automatic fallback (un-configured / error).
+  // Phase 6 (6.1): prefer Firestore pushdown (narrows candidate set in-DB) with
+  // the legacy full Firestore scan as automatic fallback (error).
   const dbCandidates = await findEligibleDonorsFromDB(request);
   const allDonors = dbCandidates !== null
     ? dbCandidates
@@ -108,28 +107,18 @@ export async function findEligibleDonors(
       .map(m => m.donor_id)
   );
 
-  // ── Hard filters ────────────────────────────────────────────────────────
   const eligible = allDonors.filter((d) => {
     if (d.account_status !== "active") return false;
     if (d.availability_status === "unavailable") return false;
     if (d.cooldown_until && d.cooldown_until >= today) return false;
 
-    // Anti-spam throttle: prevent rapid-fire repeated texts across requests
     if (recentAlertedDonors.has(d.id) && request.urgency_level !== "critical") return false;
 
-    // Blood compatibility: use the full ABO/Rh matrix, NOT exact-only.
     if (request.blood_type_needed !== 'ANY') {
       const donorType = (d.blood_type || '').toUpperCase().trim() as BloodType;
       if (!isBloodCompatible(donorType, request.blood_type_needed as BloodType)) return false;
     }
 
-    // Emergency-only restriction removed: all requests match available donors
-    // if (d.emergency_only && request.urgency_level !== "critical") return false;
-
-    // Self-match prevention.
-    // normalizePhone(null|undefined) → "" (see helpers/phone.ts: String(phone || "")),
-    // which will never equal a valid requester phone (91XXXXXXXXXX format).
-    // Donors with phone=null are therefore NOT excluded from matching by this guard.
     if (normalizePhone(d.phone) === normalizePhone(request.requester_phone)) return false;
     if (d.whatsapp_number && normalizePhone(d.whatsapp_number) === normalizePhone(request.requester_phone)) return false;
     if (d.email && request.requester_email && d.email.toLowerCase().trim() === request.requester_email.toLowerCase().trim()) return false;
@@ -201,23 +190,19 @@ export async function findEligibleDonors(
 }
 
 /**
- * Phase 6 (6.1): Supabase pushdown candidate fetch — replaces the full table
- * scan (getLocalOrFirestoreCollection("users") → SELECT * FROM profiles) with a
- * DB-side filtered query: donor_profiles.is_available = true AND blood_group IN
- * (compatible types) AND pincode IN (nearby pincodes clamped by PINCODE_COORDS).
+ * Phase 6 (6.1): Firestore pushdown candidate fetch — replaces the full table
+ * scan with a DB-side filtered query: donor_profiles.is_available = true AND
+ * blood_group IN (compatible types) AND pincode IN (nearby pincodes).
  *
  * Returns a flat candidate list mapped to the same User shape mapProfile()
  * produces; findEligibleDonors applies the remaining filters + 4-tier geo
- * ranking. Returns null when Supabase is unavailable so callers fall back to
+ * ranking. Returns null when Firestore is unavailable so callers fall back to
  * the full scan.
  */
 export async function findEligibleDonorsFromDB(
   request: BloodRequest
 ): Promise<(User & { distance_km: number; match_rank: number; is_exact_match: boolean })[] | null> {
-  if (!isSupabaseConfigured()) return null;
-
   try {
-    const supabase = getServerSupabase();
     // Compatible donor blood types for this request (ANY → all).
     const compatibleTypes = request.blood_type_needed === 'ANY'
       ? Object.keys(BLOOD_COMPATIBILITY_MATRIX)
@@ -235,31 +220,55 @@ export async function findEligibleDonorsFromDB(
       }
     }
 
-    // Query donor_profiles as the primary table so the LIMIT applies to
-    // already-filtered rows (is_available + blood_group + pincode).
-    // Querying profiles with embedded donor_profiles filters via PostgREST
-    // applies LIMIT to profiles BEFORE the embedded filter, potentially
-    // excluding eligible donors beyond position 200 in the profiles table.
-    let dpQuery = supabase
-      .from('donor_profiles')
-      .select('blood_group, pincode, is_available, emergency_only, cooldown_until, profiles(id, phone, whatsapp_phone, email, full_name, trust_report_count)')
-      .eq('is_available', true);
+    // Firestore `in` queries support max 30 values; batch if needed.
+    const pincodeArray = Array.from(nearbyPincodes);
+    const donorProfiles: any[] = [];
 
-    if (compatibleTypes.length > 0) {
-      dpQuery = dpQuery.in('blood_group', compatibleTypes);
-    }
-    if (nearbyPincodes.size > 0) {
-      dpQuery = dpQuery.in('pincode', Array.from(nearbyPincodes));
+    const pincodeBatches: string[][] = [];
+    if (pincodeArray.length <= 30) {
+      pincodeBatches.push(pincodeArray);
+    } else {
+      for (let i = 0; i < pincodeArray.length; i += 30) {
+        pincodeBatches.push(pincodeArray.slice(i, i + 30));
+      }
     }
 
-    const { data: rawData, error } = await dpQuery.limit(200);
-    // Reshape to match the profiles-with-donor_profiles structure mapProfile expects
-    const data = rawData?.map((dp: any) => ({
-      ...(dp.profiles || {}),
-      donor_profiles: [{ blood_group: dp.blood_group, pincode: dp.pincode, is_available: dp.is_available, emergency_only: dp.emergency_only, cooldown_until: dp.cooldown_until }],
-    }));
-    if (error) throw error;
-    if (!data || data.length === 0) return [];
+    const compatibleSet = new Set(compatibleTypes);
+    for (const batch of pincodeBatches) {
+      if (!batch.length) continue;
+      const query: any = db.collection('donor_profiles')
+        .where('is_available', '==', true)
+        .where('pincode', 'in', batch);
+      const snapshot = await query.limit(200).get();
+      const docs = snapshot.docs
+        .map((doc: any) => doc.data())
+        .filter((dp: any) => dp && dp.blood_group && compatibleSet.has(dp.blood_group));
+      donorProfiles.push(...docs);
+    }
+
+    if (donorProfiles.length === 0) return [];
+
+    // Fetch corresponding profiles from the profiles collection
+    const profileIds = [...new Set(donorProfiles.map((dp: any) => dp.profile_id).filter(Boolean))];
+    const profilesMap = new Map<string, any>();
+
+    for (let i = 0; i < profileIds.length; i += 30) {
+      const batch = profileIds.slice(i, i + 30);
+      if (batch.length === 0) continue;
+      const docs = await Promise.all(batch.map(id => getLocalOrFirestoreDoc<any>('profiles', id)));
+      docs.forEach((p) => {
+        if (p && p.id) profilesMap.set(p.id, p);
+      });
+    }
+
+    // Reshape to match the profiles-with-donor_profile structure mapProfile expects
+    const data = donorProfiles.map((dp: any) => {
+      const profile = profilesMap.get(dp.profile_id) || {};
+      return {
+        ...profile,
+        donor_profile: { blood_group: dp.blood_group, pincode: dp.pincode, is_available: dp.is_available, emergency_only: dp.emergency_only, cooldown_until: dp.cooldown_until },
+      };
+    });
 
     // Map to the same User shape mapProfile() produces. All filtering beyond
     // the DB-side availability/blood/pincode predicates (anti-spam, self-match,
@@ -290,7 +299,7 @@ async function notifyDonor(
   request: BloodRequest,
   donor: User
 ): Promise<NotifyResult> {
-  const whatsappPhone = donor.whatsapp_number;
+  const whatsappPhone = donor.whatsapp_number || (donor as any).whatsapp_phone || donor.phone;
   // Pass the capability token so the donor's WhatsApp link uses matchToken= (S-1 fix).
   const sosMessage = buildDonorSosMessage(request, donor, match.id, match.public_token);
   // PRODUCT RULE: only the explicitly stored WhatsApp number may be used as a

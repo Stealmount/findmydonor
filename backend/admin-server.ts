@@ -7,10 +7,9 @@ import { createServer as createViteServer } from "vite";
 import {
   getCollection as getLocalOrFirestoreCollection,
   getDoc as getLocalOrFirestoreDoc,
-  getServerSupabase,
-  isSupabaseConfigured,
   saveDoc as saveLocalOrFirestoreDoc,
 } from "./src/lib/serverDb";
+import { db, auth as firebaseAuth } from "./src/lib/firebase";
 import { enqueueMessage } from "./src/lib/messaging";
 import { cacheDel, cacheInvalidatePrefix } from "./src/lib/redisCache";
 import { signAdminToken, isAdminJwt } from "./middleware/jwt";
@@ -63,13 +62,12 @@ async function getAuthenticatedUser(req: express.Request) {
     return { id: "admin-id", email: "admin@raktdaan.org" } as any;
   }
 
-  // Real Supabase session (admin email must be in ADMIN_EMAILS).
+  // Real Firebase session (admin email must be in ADMIN_EMAILS).
   try {
-    const { data, error } = await getServerSupabase().auth.getUser(token);
-    if (error) return null;
-    return data?.user ?? null;
+    const decoded = await firebaseAuth.verifyIdToken(token);
+    return { id: decoded.uid, email: decoded.email ?? null } as any;
   } catch (error) {
-    console.warn("[Admin] Supabase unavailable:", error);
+    console.warn("[Admin] Firebase auth unavailable:", error);
     return null;
   }
 }
@@ -78,13 +76,9 @@ async function getAuthenticatedUser(req: express.Request) {
 // Local mode: profile id == auth user id, so fall back to the profile id itself.
 async function resolveAuthUserIdForProfile(profileId: string): Promise<string> {
   try {
-    if (isSupabaseConfigured()) {
-      const { data } = await getServerSupabase()
-        .from("auth_profile_links")
-        .select("auth_user_id")
-        .eq("profile_id", profileId)
-        .maybeSingle();
-      if (data?.auth_user_id) return data.auth_user_id;
+    if (db) {
+      const snap = await db.collection("auth_profile_links").where("profile_id", "==", profileId).limit(1).get();
+      if (!snap.empty) return snap.docs[0].data().auth_user_id;
     }
   } catch { /* fall through */ }
   return profileId;
@@ -427,18 +421,16 @@ async function startAdminServer() {
     const updatedDonor = { ...donor, ...patch, updated_at: nowISO() };
     await saveLocalOrFirestoreDoc("users", donor.id, updatedDonor);
 
-    // Mirror mapped fields to remote profiles + donor_profiles when Supabase is configured
-    // (same field mapping as serverDb.saveDoc for the users table).
-    if (isSupabaseConfigured()) {
+    // Mirror mapped fields to remote profiles + donor_profiles + users via Firestore
+    if (db) {
       try {
-        const supabase = getServerSupabase();
         const profilePatch: Record<string, unknown> = { updated_at: nowISO() };
         if (patch.full_name !== undefined) profilePatch.full_name = patch.full_name;
         if (patch.phone !== undefined) profilePatch.phone = patch.phone;
         if (patch.whatsapp_number !== undefined) profilePatch.whatsapp_phone = patch.whatsapp_number;
         if (patch.email !== undefined) profilePatch.email = patch.email;
         if (patch.whatsapp_verified !== undefined) profilePatch.whatsapp_verified = patch.whatsapp_verified;
-        await supabase.from("profiles").update(profilePatch).eq("id", donor.id);
+        await db.collection("profiles").doc(donor.id).set(profilePatch, { merge: true });
 
         const dpPatch: Record<string, unknown> = { updated_at: nowISO() };
         if (patch.blood_type !== undefined) dpPatch.blood_group = patch.blood_type;
@@ -450,11 +442,8 @@ async function startAdminServer() {
         if (patch.emergency_only !== undefined) dpPatch.emergency_only = patch.emergency_only;
         if (patch.number_sharing_pref !== undefined) dpPatch.number_sharing_pref = patch.number_sharing_pref;
         if (patch.cooldown_until !== undefined) dpPatch.cooldown_until = patch.cooldown_until;
-        await supabase.from("donor_profiles").update(dpPatch).eq("profile_id", donor.id);
-        // Gap 2 fix: mirror to the real users table too (serverDb.saveDoc only
-        // touches donor_profiles). id MUST be in the payload — upsert matches the
-        // conflict key from the payload itself; a trailing .eq() would only filter
-        // returned rows and silently do nothing.
+        await db.collection("donor_profiles").doc(donor.id).set(dpPatch, { merge: true });
+
         const usersPatch: Record<string, unknown> = { id: donor.id, updated_at: nowISO() };
         if (patch.account_status !== undefined) usersPatch.account_status = patch.account_status;
         if (patch.full_name !== undefined) usersPatch.full_name = patch.full_name;
@@ -468,9 +457,9 @@ async function startAdminServer() {
         if (patch.availability_status !== undefined) usersPatch.availability_status = patch.availability_status;
         if (patch.emergency_only !== undefined) usersPatch.emergency_only = patch.emergency_only;
         if (patch.cooldown_until !== undefined) usersPatch.cooldown_until = patch.cooldown_until;
-        await supabase.from("users").upsert(usersPatch, { onConflict: "id" });
+        await db.collection("users").doc(donor.id).set(usersPatch, { merge: true });
       } catch (err: any) {
-        console.warn("[Admin Donors PATCH] remote mirror notice:", err?.message || err);
+        console.warn("[Admin Donors PATCH] Firestore mirror notice:", err?.message || err);
       }
     }
 
@@ -501,16 +490,16 @@ async function startAdminServer() {
     const updatedRequester = { ...requester, ...patch, updated_at: nowISO() };
     await saveLocalOrFirestoreDoc("requesters", requester.id, updatedRequester);
 
-    if (isSupabaseConfigured()) {
+    if (db) {
       try {
         const profilePatch: Record<string, unknown> = { updated_at: nowISO() };
         if (patch.full_name !== undefined) profilePatch.full_name = patch.full_name;
         if (patch.phone !== undefined) profilePatch.phone = patch.phone;
         if (patch.whatsapp_number !== undefined) profilePatch.whatsapp_phone = patch.whatsapp_number;
         if (patch.email !== undefined) profilePatch.email = patch.email;
-        await getServerSupabase().from("profiles").update(profilePatch).eq("id", requester.id);
+        await db.collection("profiles").doc(requester.id).set(profilePatch, { merge: true });
       } catch (err: any) {
-        console.warn("[Admin Requesters PATCH] remote mirror notice:", err?.message || err);
+        console.warn("[Admin Requesters PATCH] Firestore mirror notice:", err?.message || err);
       }
     }
 
@@ -527,16 +516,15 @@ async function startAdminServer() {
     if (!donor) return res.status(404).json({ error: "Donor not found" });
     const updated = { ...donor, account_status: "deleted" as const, updated_at: nowISO() };
     await saveLocalOrFirestoreDoc("users", donor.id, updated);
-    // Gap 2 fix: mirror the soft-delete to the real users table too. id MUST be in
-    // the payload — upsert matches the conflict key from the payload itself.
-    if (isSupabaseConfigured()) {
+    // Mirror the soft-delete to the real users table via Firestore.
+    if (db) {
       try {
-        await getServerSupabase().from("users").upsert(
+        await db.collection("users").doc(donor.id).set(
           { id: donor.id, account_status: "deleted", updated_at: nowISO() },
-          { onConflict: "id" }
+          { merge: true }
         );
       } catch (err: any) {
-        console.warn("[Admin Donors DELETE] remote users mirror notice:", err?.message || err);
+        console.warn("[Admin Donors DELETE] Firestore users mirror notice:", err?.message || err);
       }
     }
     // Addition 1: bust linked_profile cache so the donor's session is rejected on next auth.
@@ -555,7 +543,7 @@ async function startAdminServer() {
   });
 
   app.post("/api/admin/matches", adminCheck, async (req, res) => {
-    if (req.header("authorization")?.includes("test-admin-token") && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
+    if (req.header("authorization")?.includes("test-admin-token") && (process.env.NODE_ENV === "test" || process.env.TEST_MODE === "1")) {
       return res.json({ success: true });
     }
     const { matchId, payload } = req.body;
@@ -638,15 +626,11 @@ async function startAdminServer() {
 
   // ─── Institution Governance & Approvals ──────────────────────────────────
   app.get("/api/admin/institutions", adminCheck, async (req, res) => {
-    if (!isSupabaseConfigured()) return res.status(503).json({ error: "Database not configured." });
+    if (!db) return res.status(503).json({ error: "Database not configured." });
     try {
-      const supabase = getServerSupabase();
-      const { data: institutions, error } = await supabase
-        .from("institutions")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return res.json({ institutions: institutions || [] });
+      const snap = await db.collection("institutions").orderBy("created_at", "desc").get();
+      const institutions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      return res.json({ institutions });
     } catch (err: any) {
       console.error("[Admin Institutions] Error:", err?.message);
       return res.status(500).json({ error: "Failed to load institutions." });
@@ -661,17 +645,13 @@ async function startAdminServer() {
     if (action === "reject" && !String(rejection_reason || "").trim()) {
       return res.status(400).json({ error: "rejection_reason is required when rejecting." });
     }
-    if (!isSupabaseConfigured()) return res.status(503).json({ error: "Database not configured." });
+    if (!db) return res.status(503).json({ error: "Database not configured." });
     try {
-      const supabase = getServerSupabase();
       const adminUser = (req as any).adminUser;
 
-      const { data: inst } = await supabase
-        .from("institutions")
-        .select("*")
-        .eq("id", req.params.id)
-        .maybeSingle();
-      if (!inst) return res.status(404).json({ error: "Institution not found." });
+      const instSnap = await db.collection("institutions").doc(req.params.id).get();
+      if (!instSnap.exists) return res.status(404).json({ error: "Institution not found." });
+      const inst = { id: instSnap.id, ...instSnap.data() } as any;
 
       const newStatus = action === "approve" ? "verified" : "rejected";
       const updatePayload: Record<string, unknown> = {
@@ -681,26 +661,18 @@ async function startAdminServer() {
         rejection_reason: action === "reject" ? String(rejection_reason).trim() : null,
       };
 
-      const { data: updated, error: updateErr } = await supabase
-        .from("institutions")
-        .update(updatePayload)
-        .eq("id", req.params.id)
-        .select()
-        .single();
-      if (updateErr) throw updateErr;
+      await db.collection("institutions").doc(req.params.id).set(updatePayload, { merge: true });
 
       // On approval: flip profiles.can_request = true for the linked profile
       if (action === "approve") {
-        const { data: iLink } = await supabase
-          .from("institution_profile_links")
-          .select("profile_id")
-          .eq("institution_id", req.params.id)
-          .maybeSingle();
-        if (iLink?.profile_id) {
-          await supabase
-            .from("profiles")
-            .update({ can_request: true, whatsapp_verified: true })
-            .eq("id", iLink.profile_id);
+        const linkSnap = await db.collection("institution_profile_links")
+          .where("institution_id", "==", req.params.id).limit(1).get();
+        if (!linkSnap.empty) {
+          const profileId = linkSnap.docs[0].data().profile_id;
+          await db.collection("profiles").doc(profileId).set(
+            { can_request: true, whatsapp_verified: true },
+            { merge: true }
+          );
         }
 
         // WhatsApp notification to institution contact (queued)
@@ -732,7 +704,7 @@ async function startAdminServer() {
         entity_id: inst.id,
         meta: inst.org_name,
       });
-      return res.json({ success: true, institution: updated });
+      return res.json({ success: true, institution: { id: req.params.id, ...updatePayload } });
     } catch (err: any) {
       console.error("[Admin Institutions Review] Error:", err?.message);
       return res.status(500).json({ error: "Failed to update institution status." });

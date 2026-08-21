@@ -186,8 +186,11 @@ export async function processMessage(row: OutgoingMessage): Promise<OutgoingMess
     return updated;
   }
 
-  const nextRetry = row.retry_count + 1;
-  if (nextRetry > row.max_retries) {
+  const currentRetry = typeof row?.retry_count === "number" ? row.retry_count : 0;
+  const limitRetries = typeof row?.max_retries === "number" ? row.max_retries : 5;
+  const nextRetry = currentRetry + 1;
+
+  if (nextRetry > limitRetries) {
     const updated: OutgoingMessage = {
       ...row,
       status: "failed",
@@ -202,7 +205,7 @@ export async function processMessage(row: OutgoingMessage): Promise<OutgoingMess
     return updated;
   }
 
-  const retryIn = backoffSeconds(row.retry_count);
+  const retryIn = backoffSeconds(currentRetry);
   const updated: OutgoingMessage = {
     ...row,
     status: "queued",

@@ -24,9 +24,8 @@ import { closeRedis } from '../src/lib/redisCache';
 //   cache asserts prove nothing.)
 process.env.TEST_IMPORT = '1';
 process.env.NODE_ENV = 'test';
+process.env.TEST_MODE = '1';
 process.env.ADMIN_PORT = process.env.ADMIN_PORT || '6101';
-process.env.VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://stub.supabase.co';
-process.env.VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'stub-anon-key';
 // Isolated local store — the dev server's data/ dir holds a ~500MB
 // db_users.json that would OOM the test runner on first load.
 process.env.DATA_DIR = path.join(process.cwd(), 'data-test');
@@ -176,16 +175,6 @@ describe('Admin endpoints', () => {
       PORT,
       NODE_ENV: 'test',
       TEST_MODE: '1',
-      SUPABASE_URL: '',
-      // Non-empty stub only — satisfies supabase.ts's import-time guard and,
-      // crucially, lets getServerSupabase() create a stub client instead of
-      // throwing SupabaseUnavailableError. The stub queries 127.0.0.1:54321,
-      // fail fast with an error (not a throw), and fall through to the local
-      // serverDb profile lookup above — making /api/auth/me return 200
-      // deterministically for the seeded test-admin-id profile. isSupabase-
-      // Configured() stays effectively false behaviourally for real ops.
-      SUPABASE_SERVICE_ROLE_KEY: 'test-stub-service-role-key',
-      VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
       DATA_DIR: process.env.DATA_DIR
     };
     delete childEnv.TEST_IMPORT;

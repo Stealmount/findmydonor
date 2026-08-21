@@ -127,6 +127,35 @@ router.post("/api/sos/requests", rateLimitMiddleware(10, 60_000), wrap(async (re
   });
 }));
 
+// ─── GET /api/requests/public/:id — safe public request detail ─────────────
+router.get("/api/requests/public/:id", wrap(async (req, res) => {
+  const r = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", req.params.id);
+  if (!r) return sendErrorResponse(res, new NotFoundError("Request not found."));
+
+  const safePublic: Record<string, unknown> = {
+    id: r.id,
+    code: r.tracking_code,
+    blood_group: r.blood_type_needed,
+    units_needed: r.units_required,
+    patient_age: r.patient_age ?? null,
+    urgency: r.urgency_level,
+    status: r.status,
+    hospital_pincode: r.hospital_pincode,
+    hospital_city: r.hospital_city,
+    created_at: r.created_at,
+  };
+
+  // Authenticated users get slightly more detail
+  const authUser = await getAuthenticatedUser(req);
+  if (authUser) {
+    safePublic.hospital_name = r.hospital_name;
+    // Partial address: area only, never the full street/landmark
+    safePublic.hospital_area = r.hospital_area;
+  }
+
+  return res.json({ request: safePublic });
+}));
+
 // ─── GET /api/requests/:trackingCode — public tracking lookup ────────────────
 router.get("/api/requests/:trackingCode", wrap(async (req, res) => {
   const all = await getLocalOrFirestoreCollection<BloodRequest>("blood_requests");

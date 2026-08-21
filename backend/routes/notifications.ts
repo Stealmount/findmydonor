@@ -5,8 +5,8 @@ import {
   getCollection as getLocalOrFirestoreCollection,
   getDoc as getLocalOrFirestoreDoc,
   saveDoc as saveLocalOrFirestoreDoc,
-  getServerSupabase,
 } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { cacheInvalidatePrefix } from "../src/lib/redisCache";
 import { getAuthenticatedUser } from "../middleware/auth";
 import rateLimitMiddleware from "../middleware/rateLimiter";
@@ -52,16 +52,8 @@ router.post("/api/send-email", rateLimitMiddleware(10, 60_000), wrap(async (req,
   const recipient = to.toLowerCase().trim();
   let recipientAllowed = recipient === "admin@raktdaan.org" || recipient === authUser.email.toLowerCase();
   if (!recipientAllowed) {
-    const supabase = getServerSupabase();
-    const { data: profileMatch, error: profileErr } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", recipient)
-      .limit(1);
-    if (profileErr) {
-      return sendErrorResponse(res, profileErr, "Unable to validate email recipient.", 503, "SERVICE_UNAVAILABLE");
-    }
-    recipientAllowed = Boolean(profileMatch?.length);
+    const profileSnap = await db.collection("profiles").where("email", "==", recipient).limit(1).get();
+    recipientAllowed = !profileSnap.empty;
   }
   if (!recipientAllowed) {
     return sendErrorResponse(res, new ForbiddenError("Email recipient is not registered."));
@@ -139,7 +131,7 @@ router.post("/api/waha/webhook", wrap(async (req, res) => {
         });
         await sendDonorWhatsApp(
           donor,
-          "🙏 Thank you for responding! This emergency blood request has already been closed or fulfilled."
+          "Thank you for responding! This emergency blood request has already been closed or fulfilled."
         );
         return;
       }
@@ -158,7 +150,7 @@ router.post("/api/waha/webhook", wrap(async (req, res) => {
         });
         await sendDonorWhatsApp(
           donor,
-          "🙏 Thank you for responding! The required units for this emergency request have just been fulfilled by another donor nearby. We deeply appreciate your readiness to save lives!"
+          "Thank you for responding! The required units for this emergency request have just been fulfilled by another donor nearby. We deeply appreciate your readiness to save lives!"
         );
         return;
       }
@@ -252,11 +244,16 @@ router.delete("/api/notifications/:notifId", wrap(async (req, res) => {
   if (!user) return sendErrorResponse(res, new UnauthorizedError("Sign in to manage notifications."));
   const userId = user.id;
   try {
-    const supabase = getServerSupabase();
     if (req.params.notifId === "all") {
-      await supabase.from("notifications").delete().eq("user_id", userId);
+      const snap = await db.collection("notifications").where("user_id", "==", userId).get();
+      const batch = db.batch();
+      snap.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
     } else {
-      await supabase.from("notifications").delete().eq("id", req.params.notifId).eq("user_id", userId);
+      const docSnap = await db.collection("notifications").doc(req.params.notifId).get();
+      if (docSnap.exists && docSnap.data()?.user_id === userId) {
+        await docSnap.ref.delete();
+      }
     }
   } catch { /* ignore fallback */ }
   return res.json({ success: true });

@@ -1,14 +1,18 @@
-import { supabase } from './supabase';
+import { auth } from './firebase';
 
 export async function authenticatedApi<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Please sign in again before continuing.');
+  let token = '';
+  if (auth) {
+    // Backend firebase admin auth doesn't have currentUser like client SDK
+    // This is for server-side API calls, typically use service account
+    token = '';
+  }
 
   const response = await fetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${session.access_token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

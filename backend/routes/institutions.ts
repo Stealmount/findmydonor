@@ -7,7 +7,7 @@
 // for institutions (enforced in the DB schema and here).
 import express, { Router } from "express";
 import { getAuthenticatedUser, getLinkedProfile } from "../middleware/auth";
-import { getServerSupabase } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { cacheInvalidatePrefix } from "../src/lib/redisCache";
 import rateLimitMiddleware from "../middleware/rateLimiter";
 import { validate } from "../validation/index";
@@ -44,20 +44,16 @@ router.get("/institutions/me", wrap(async (req, res) => {
   if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
 
   try {
-    const supabase = getServerSupabase();
-    const { data: links } = await supabase
-      .from("institution_profile_links")
-      .select("institution_id, role")
-      .eq("profile_id", linked.profile.id);
+    const linksSnap = await db.collection("institution_profile_links")
+      .where("profile_id", "==", linked.profile.id).get();
 
     const institutions: unknown[] = [];
-    for (const link of links || []) {
-      const { data: inst } = await supabase
-        .from("institutions")
-        .select("*")
-        .eq("id", link.institution_id)
-        .maybeSingle();
-      if (inst) institutions.push({ ...inst, role: link.role });
+    for (const linkDoc of linksSnap.docs) {
+      const link = linkDoc.data();
+      const instSnap = await db.collection("institutions").doc(link.institution_id).get();
+      if (instSnap.exists) {
+        institutions.push({ id: instSnap.id, ...instSnap.data(), role: link.role });
+      }
     }
 
     return res.json({ institutions, count: institutions.length });
@@ -86,62 +82,51 @@ router.post(
       return sendErrorResponse(res, new ValidationError("Enter a valid Indian phone number (e.g. 91XXXXXXXXXX)."));
     }
 
-    const supabase = getServerSupabase();
     const normalizedEmail = String(body.email || "").toLowerCase().trim();
     const profileId = linked.profile.id;
 
-    const { data: existing } = await supabase
-      .from("institutions")
-      .select("*")
-      .eq("phone", normalizedPhone)
-      .maybeSingle();
+    const existingSnap = await db.collection("institutions").where("phone", "==", normalizedPhone).limit(1).get();
+    const existingDoc = existingSnap.empty ? null : existingSnap.docs[0];
 
-    let institution = existing;
-    if (existing) {
-      const { data: updated, error: updateErr } = await supabase
-        .from("institutions")
-        .update({
-          type: body.type,
-          org_name: body.orgName,
-          registration_number: body.registrationNumber,
-          contact_person: body.contactPerson,
-          email: normalizedEmail,
-          address: body.address || null,
-          city: body.city,
-          pincode: body.pincode,
-          verification_status: "pending",
-          rejection_reason: null,
-          updated_at: nowISO(),
-        })
-        .eq("id", existing.id)
-        .select()
-        .single();
-      if (updateErr || !updated) return sendErrorResponse(res, updateErr, "Failed to update your institution registration.");
-      institution = updated;
+    let institution: any;
+    if (existingDoc) {
+      const updateData = {
+        type: body.type,
+        org_name: body.orgName,
+        registration_number: body.registrationNumber,
+        contact_person: body.contactPerson,
+        email: normalizedEmail,
+        address: body.address || null,
+        city: body.city,
+        pincode: body.pincode,
+        verification_status: "pending",
+        rejection_reason: null,
+        updated_at: nowISO(),
+      };
+      await existingDoc.ref.update(updateData);
+      institution = { id: existingDoc.id, ...existingDoc.data(), ...updateData };
     } else {
-      const { data: created, error: createErr } = await supabase
-        .from("institutions")
-        .insert({
-          type: body.type,
-          org_name: body.orgName,
-          registration_number: body.registrationNumber,
-          contact_person: body.contactPerson,
-          phone: normalizedPhone,
-          email: normalizedEmail,
-          address: body.address || null,
-          city: body.city,
-          pincode: body.pincode,
-          verification_status: "pending",
-        })
-        .select()
-        .single();
-      if (createErr || !created) return sendErrorResponse(res, createErr, "Failed to create your institution registration.");
-      institution = created;
+      const createData = {
+        type: body.type,
+        org_name: body.orgName,
+        registration_number: body.registrationNumber,
+        contact_person: body.contactPerson,
+        phone: normalizedPhone,
+        email: normalizedEmail,
+        address: body.address || null,
+        city: body.city,
+        pincode: body.pincode,
+        verification_status: "pending",
+      };
+      const createdRef = await db.collection("institutions").add(createData);
+      institution = { id: createdRef.id, ...createData };
     }
 
-    await supabase
-      .from("institution_profile_links")
-      .upsert({ profile_id: profileId, institution_id: institution.id, role: "admin" }, { onConflict: "profile_id" });
+    await db.collection("institution_profile_links").doc(profileId).set({
+      profile_id: profileId,
+      institution_id: institution.id,
+      role: "admin",
+    }, { merge: true });
 
     await cacheInvalidatePrefix(`me:${authUser.id}`);
 

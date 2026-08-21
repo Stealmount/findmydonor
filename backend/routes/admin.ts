@@ -11,7 +11,7 @@ import {
 import { getAuthenticatedUser } from "../middleware/auth";
 import { nowISO } from "../helpers/time";
 import { sendErrorResponse, ForbiddenError, NotFoundError, ValidationError } from "../helpers/errors";
-import type { BloodRequest, DonationLog, Match, NotificationLog, User } from "../src/types";
+import type { BloodRequest, DonationLog, Match, NotificationLog, Requester, User } from "../src/types";
 
 const router = Router();
 
@@ -109,7 +109,7 @@ router.post("/api/admin/donors/:donorId/log-donation", adminCheck, wrap(async (r
 }));
 
 router.post("/api/admin/matches", adminCheck, wrap(async (req, res) => {
-  if (req.header("authorization")?.includes("test-admin-token") && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
+  if (req.header("authorization")?.includes("test-admin-token") && (process.env.NODE_ENV === "test" || process.env.TEST_MODE === "1")) {
     return res.json({ success: true });
   }
   const { matchId, payload } = req.body || {};
@@ -153,7 +153,7 @@ router.post("/api/admin/broadcast-sos", adminCheck, wrap(async (req, res) => {
     recipient_type: "broadcast",
     recipient_id: `group_${city || pincode || "all"}`,
     trigger_event: "admin_sos_broadcast",
-    message_body: message_body || `🚨 EMERGENCY BLOOD BROADCAST (${blood_type || "ALL TYPES"}): Immediate donors needed at ${city || pincode || "your location"}.`,
+    message_body: message_body || `EMERGENCY BLOOD BROADCAST (${blood_type || "ALL TYPES"}): Immediate donors needed at ${city || pincode || "your location"}.`,
     status: "sent",
     sent_at: nowISO(),
     created_at: nowISO(),
@@ -268,6 +268,63 @@ router.get("/api/admin/sync/logs", adminCheck, wrap(async (req, res) => {
     success: true,
     last_sync: lastLog
   });
+}));
+
+router.get("/api/admin/metrics", adminCheck, wrap(async (req, res) => {
+  const [users, blood_requests, institutions, notifications] = await Promise.all([
+    getLocalOrFirestoreCollection<User>("users"),
+    getLocalOrFirestoreCollection<BloodRequest>("blood_requests"),
+    getLocalOrFirestoreCollection<any>("institutions"),
+    getLocalOrFirestoreCollection<NotificationLog>("notifications"),
+  ]);
+  const totalDonors = users.filter(u => u.blood_type).length;
+  const activeRequests = blood_requests.filter(r =>
+    ["open", "broadcasting", "matching", "partially_matched"].includes(r.status)
+  ).length;
+  const hospitals = institutions.filter(i => i.verification_status === "verified").length;
+  const totalUsers = users.length;
+  const recentActivity = [...notifications]
+    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+    .slice(0, 5)
+    .map(n => ({
+      id: n.id,
+      message: n.message_body,
+      event: n.trigger_event,
+      time: n.created_at,
+    }));
+  return res.json({
+    success: true,
+    metrics: { totalDonors, activeRequests, hospitals, totalUsers, recentActivity },
+  });
+}));
+
+router.patch("/api/admin/donors/:donorId", adminCheck, wrap(async (req, res) => {
+  const donor = await getLocalOrFirestoreDoc<User>("users", req.params.donorId);
+  if (!donor) return sendErrorResponse(res, new NotFoundError("Donor not found"));
+  const { status, account_status } = req.body || {};
+  const newStatus = status || account_status;
+  if (!newStatus || !["active", "banned", "cooldown", "inactive"].includes(newStatus)) {
+    return sendErrorResponse(res, new ValidationError("Valid status required: active, banned, cooldown, inactive"));
+  }
+  await saveLocalOrFirestoreDoc("users", donor.id, {
+    ...donor,
+    account_status: newStatus,
+    updated_at: nowISO(),
+  });
+  return res.json({ success: true });
+}));
+
+router.patch("/api/admin/requests/:requestId", adminCheck, wrap(async (req, res) => {
+  const request = await getLocalOrFirestoreDoc<BloodRequest>("blood_requests", req.params.requestId);
+  if (!request) return sendErrorResponse(res, new NotFoundError("Request not found"));
+  const { status } = req.body || {};
+  if (!status || !["open", "fulfilled", "cancelled", "broadcasting", "matching"].includes(status)) {
+    return sendErrorResponse(res, new ValidationError("Valid status required: open, fulfilled, cancelled, broadcasting, matching"));
+  }
+  const updated: Record<string, unknown> = { ...request, status, updated_at: nowISO() };
+  if (status === "fulfilled") updated.fulfilled_at = nowISO();
+  await saveLocalOrFirestoreDoc("blood_requests", request.id, updated);
+  return res.json({ success: true, request: updated });
 }));
 
 export default router;

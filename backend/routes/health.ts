@@ -1,7 +1,7 @@
 // Health & cache stats routes — instrumented for timing diagnosis (boundary measurement)
 import { Router, Request, Response, NextFunction } from "express";
 import { getCacheStats } from "../src/lib/redisCache";
-import { isSupabaseConfigured, getServerSupabase } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { nowISO } from "../helpers/time";
 
 const router = Router();
@@ -36,25 +36,19 @@ router.get("/health", async (req: Request, res: Response, next: NextFunction) =>
   const redisStats = getCacheStats();
   mark("cache-end");
 
-  // --- Database / Supabase check ---
+  // --- Database / Firestore check ---
   mark("db-start");
-  let supabaseStatus = "down";
+  let dbStatus = "down";
   let dbError: string | null = null;
-  if (isSupabaseConfigured()) {
-    try {
-      mark("db-query-start");
-      const { error } = await getServerSupabase().from("profiles").select("id").limit(1);
-      mark("db-query-end");
-      supabaseStatus = error ? "degraded" : "up";
-      if (error) dbError = error.message;
-    } catch (e) {
-      mark("db-query-end");
-      supabaseStatus = "down";
-      dbError = (e as Error).message;
-    }
-  } else {
+  try {
+    mark("db-query-start");
+    await db.collection("profiles").limit(1).get();
     mark("db-query-end");
-    dbError = "Supabase not configured";
+    dbStatus = "up";
+  } catch (e) {
+    mark("db-query-end");
+    dbStatus = "down";
+    dbError = (e as Error).message;
   }
   mark("db-end");
 
@@ -77,7 +71,7 @@ router.get("/health", async (req: Request, res: Response, next: NextFunction) =>
   mark("waha-end");
 
   mark("response-build-start");
-  const overallHealthy = supabaseStatus === "up";
+  const overallHealthy = dbStatus === "up";
   mark("response-build-end");
 
   // Calculate boundaries from marks
@@ -92,14 +86,14 @@ router.get("/health", async (req: Request, res: Response, next: NextFunction) =>
 
   // Log detailed timing
   console.log(`[HEALTH-${requestId}] BOUNDARIES:`, JSON.stringify(boundaries));
-  console.log(`[HEALTH-${requestId}] RESULTS: db=${supabaseStatus} waha=${wahaStatus} cache=${redisStats.backend}`);
+  console.log(`[HEALTH-${requestId}] RESULTS: db=${dbStatus} waha=${wahaStatus} cache=${redisStats.backend}`);
   if (dbError) console.log(`[HEALTH-${requestId}] DB ERROR:`, dbError);
 
   res.status(overallHealthy ? 200 : 503).json({
     status: overallHealthy ? "ok" : "degraded",
     timestamp: nowISO(),
     components: {
-      database: supabaseStatus,
+      database: dbStatus,
       whatsapp_waha: wahaStatus,
       cache: redisStats.backend,
     },

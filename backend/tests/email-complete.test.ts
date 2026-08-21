@@ -23,7 +23,6 @@ describe("Email-complete & unified auth (/api/auth/email-complete, /api/auth/me)
           ...process.env,
           PORT,
           NODE_ENV: "test",
-          VITE_SUPABASE_URL: "https://stub.supabase.co",
         },
       });
       for (let i = 0; i < 40; i++) {

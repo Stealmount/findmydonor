@@ -25,7 +25,6 @@ describe('EMAIL FLOW TEST: OTP Welcome -> SOS Match -> YES Reply -> Requester Pr
         ...process.env,
         PORT,
         NODE_ENV: 'test',
-        VITE_SUPABASE_URL: 'https://stub.supabase.co',
         WAHA_BASE_URL: ''
       }
     });

@@ -19,7 +19,6 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
             ...process.env,
             PORT,
             NODE_ENV: 'test',
-            VITE_SUPABASE_URL: 'https://stub.supabase.co'
           }
         });
 
@@ -116,8 +115,8 @@ describe('Authentication & Onboarding API Endpoints (/api/auth/* & /api/wa/*)', 
 
   // ── Regression tests: null-phone / phone-optional authentication rules ─
   // Tests use the test-valid-token stub (active when NODE_ENV=test or
-  // VITE_SUPABASE_URL=stub). They verify the API contract without a live DB.
-  // When the live Supabase DB is unavailable: 500/503 is acceptable.
+  // TEST_MODE=1). They verify the API contract without a live DB.
+  // When the live DB is unavailable: 500/503 is acceptable.
   // 400 "phone required" on any auth endpoint is always a bug, regardless of env.
 
   test('REGRESSION 1: GET /api/auth/me with stub token returns 200 or 503 (never 401)', async () => {

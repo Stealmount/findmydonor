@@ -7,7 +7,7 @@
 // exactly once when the user completes onboarding.
 import express, { Router } from "express";
 import { getAuthenticatedUser, getLinkedProfile } from "../middleware/auth";
-import { getServerSupabase } from "../src/lib/serverDb";
+import { db } from "../src/lib/firebase";
 import { cacheInvalidatePrefix } from "../src/lib/redisCache";
 import rateLimitMiddleware from "../middleware/rateLimiter";
 import { validate } from "../validation/index";
@@ -87,9 +87,7 @@ router.post(
     else if (resolved?.area) update.area = resolved.area;
     if (notificationChannel !== undefined) update.notification_channel = notificationChannel;
 
-    const { error } = await getServerSupabase()
-      .from("profiles").update(update).eq("id", linked.profile.id);
-    if (error) return sendErrorResponse(res, error, "Failed to save basic profile.");
+    await db.collection("profiles").doc(linked.profile.id).update(update);
 
     await cacheInvalidatePrefix(`me:${authUser.id}`);
     const refresh = await getLinkedProfile(authUser.id);
@@ -121,28 +119,27 @@ router.post(
       intent, bloodGroup, isAvailable, healthSelfDeclaration,
     } = req.body;
 
-    const supabase = getServerSupabase();
     const profileId = linked.profile.id;
 
     if (intent === "donor") {
       if (!bloodGroup) return sendErrorResponse(res, new ValidationError("Blood group is required for donor onboarding."));
       if (healthSelfDeclaration !== true) return sendErrorResponse(res, new ValidationError("Health self-declaration is required for donor onboarding."));
-      await supabase.from("donor_profiles").upsert({
+      await db.collection("donor_profiles").doc(profileId).set({
         profile_id: profileId,
         blood_group: bloodGroup,
         is_available: !!isAvailable,
         profile_complete: true,
         updated_at: nowISO(),
-      }, { onConflict: "profile_id" });
-      await supabase.from("profiles").update({ can_donate: true, can_request: true }).eq("id", profileId);
+      }, { merge: true });
+      await db.collection("profiles").doc(profileId).update({ can_donate: true, can_request: true });
       await cacheInvalidatePrefix("eligible_");
     }
 
-    await supabase.from("profiles").update({
+    await db.collection("profiles").doc(profileId).update({
       intent,
       onboarding_step: "complete",
       updated_at: nowISO(),
-    }).eq("id", profileId);
+    });
 
     await cacheInvalidatePrefix(`acct:${authUser.id}`);
     await cacheInvalidatePrefix(`me:${authUser.id}`);
@@ -170,9 +167,10 @@ router.post(
     const linked = await getLinkedProfile(authUser.id);
     if (!linked) return sendErrorResponse(res, new NotFoundError("Profile not found."));
 
-    await getServerSupabase().from("profiles")
-      .update({ onboarding_step: "complete", updated_at: nowISO() })
-      .eq("id", linked.profile.id);
+    await db.collection("profiles").doc(linked.profile.id).update({
+      onboarding_step: "complete",
+      updated_at: nowISO(),
+    });
 
     return res.json({
       success: true,

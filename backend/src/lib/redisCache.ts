@@ -122,8 +122,8 @@ export async function cacheSetNX(key: string, value: unknown, ttlSeconds = 60): 
       return result === 'OK';
     } catch { /* fall through */ }
   }
-  // Memory fallback: check-then-set (race possible but acceptable for local dev)
-  if (memoryCache.has(key)) return false;
+  // Memory fallback: check expiration cleanly
+  if (memGet(key) !== null) return false;
   memSet(key, value, ttlSeconds);
   return true;
 }

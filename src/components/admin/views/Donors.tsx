@@ -1,7 +1,8 @@
-import React from 'react';
-import { Users, Search, Download, Ban, RotateCcw, ShieldCheck, Clock4 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, Search, Download, Ban, RotateCcw, ShieldCheck, Clock4, AlertTriangle } from 'lucide-react';
 import { User } from '../../../types';
-import { StatusPill, EmptyState, EntityDrawer, downloadCSV, Badge } from '../widgets/Shared';
+import { StatusPill, EmptyState, EntityDrawer, downloadCSV, Badge, ConfirmModal } from '../widgets/Shared';
+import { authenticatedApi } from '../../../lib/api';
 
 interface DonorsProps {
   donors: User[];
@@ -19,6 +20,7 @@ interface DonorsProps {
   onLiftCooldown: (id: string) => void;
   onBulkApprove: (ids: string[]) => void;
   onBulkCooldown: (ids: string[]) => void;
+  onRefresh: () => void;
 }
 
 const BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -26,17 +28,20 @@ const BLOOD = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 export default function Donors({
   donors, allDonors, loading, showDeleted, bloodFilter, search, isHi,
   onToggleDeleted, onBloodFilterChange, onSearchChange, onOpenDetail,
-  onForceCooldown, onLiftCooldown, onBulkApprove, onBulkCooldown,
+  onForceCooldown, onLiftCooldown, onBulkApprove, onBulkCooldown, onRefresh,
 }: DonorsProps) {
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [sort, setSort] = React.useState<'name' | 'date' | 'blood'>('date');
+  const [banTarget, setBanTarget] = useState<User | null>(null);
+  const [unbanTarget, setUnbanTarget] = useState<User | null>(null);
+  const [banLoading, setBanLoading] = useState(false);
 
   const filtered = React.useMemo(() => {
     let list = donors;
     if (bloodFilter) list = list.filter(d => d.blood_type === bloodFilter);
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter(d => [d.full_name, d.phone, d.pincode, d.city, d.email].some(v => (v || '').toLowerCase().includes(q)));
+      list = list.filter(d => [d.full_name, d.phone, d.pincode, d.city, d.email, d.blood_type].some(v => (v || '').toLowerCase().includes(q)));
     }
     const sorted = [...list].sort((a, b) => {
       if (sort === 'name') return (a.full_name || '').localeCompare(b.full_name || '');
@@ -56,27 +61,49 @@ export default function Donors({
     setSelected(next);
   };
 
+  const handleBan = async () => {
+    if (!banTarget) return;
+    setBanLoading(true);
+    try {
+      await authenticatedApi(`/api/admin/donors/${banTarget.id}/ban`, { banReason: 'Admin ban from panel' }, 'PATCH');
+      setBanTarget(null);
+      onRefresh();
+    } catch {
+      setBanTarget(null);
+    } finally {
+      setBanLoading(false);
+    }
+  };
+
+  const handleUnban = async () => {
+    if (!unbanTarget) return;
+    setBanLoading(true);
+    try {
+      await authenticatedApi(`/api/admin/donors/${unbanTarget.id}/approve`, {}, 'PATCH');
+      setUnbanTarget(null);
+      onRefresh();
+    } catch {
+      setUnbanTarget(null);
+    } finally {
+      setBanLoading(false);
+    }
+  };
+
   const exportCsv = () => {
     downloadCSV(`donors_${new Date().toISOString().split('T')[0]}.csv`,
-      ['ID', 'Name', 'Phone', 'Blood', 'Pincode', 'City', 'Status', 'Last Donation'],
-      filtered.map(d => [d.id, d.full_name, d.phone, d.blood_type, d.pincode, d.city, d.account_status, d.last_donation_date || 'N/A']));
+      ['ID', 'Name', 'Phone', 'Blood', 'Pincode', 'City', 'Status', 'Last Donation', 'Last Active'],
+      filtered.map(d => [d.id, d.full_name, d.phone, d.blood_type, d.pincode, d.city, d.account_status, d.last_donation_date || 'N/A', d.updated_at || 'N/A']));
   };
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="rounded-2xl border border-ink-800 bg-ink-900/60 backdrop-blur-xl p-4 flex flex-wrap items-center gap-3">
+      <div className="rounded-2xl border border-ink-800 bg-ink-900/60 p-4 flex flex-wrap items-center gap-3">
         <div className="relative">
           <Search className="w-4 h-4 text-ink-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input value={search} onChange={e => onSearchChange(e.target.value)}
-            placeholder={isHi ? 'खोजें...' : 'Search name, phone, pincode'}
-            className="bg-ink-950/60 border border-ink-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-ink-500 focus:outline-none focus:border-blood-500/60 w-56" />
+            placeholder={isHi ? 'नाम, ईमेल, रक्त खोजें...' : 'Search name, email, blood group'}
+            className="bg-ink-950/60 border border-ink-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-ink-500 focus:outline-none focus:border-blood-500/60 w-64" />
         </div>
-        <select value={bloodFilter} onChange={e => onBloodFilterChange(e.target.value)} aria-label="blood filter"
-          className="bg-ink-950/60 border border-ink-700 rounded-xl px-3 py-2 text-xs text-white cursor-pointer">
-          <option value="">{isHi ? 'सभी रक्त समूह' : 'All blood groups'}</option>
-          {BLOOD.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
         <select value={sort} onChange={e => setSort(e.target.value as any)} aria-label="sort"
           className="bg-ink-950/60 border border-ink-700 rounded-xl px-3 py-2 text-xs text-white cursor-pointer">
           <option value="date">{isHi ? 'नवीनतम' : 'Newest'}</option>
@@ -109,8 +136,29 @@ export default function Donors({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-ink-800 bg-ink-900/60 backdrop-blur-xl overflow-hidden">
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => onBloodFilterChange('')}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer border ${
+            !bloodFilter ? 'bg-blood-600 text-white border-blood-500' : 'bg-ink-900/60 text-ink-400 border-ink-800 hover:text-white hover:border-ink-600'
+          }`}
+        >
+          {isHi ? 'सभी' : 'All'}
+        </button>
+        {BLOOD.map(b => (
+          <button
+            key={b}
+            onClick={() => onBloodFilterChange(bloodFilter === b ? '' : b)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer border ${
+              bloodFilter === b ? 'bg-blood-600 text-white border-blood-500' : 'bg-ink-900/60 text-ink-400 border-ink-800 hover:text-white hover:border-ink-600'
+            }`}
+          >
+            {b}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-ink-800 bg-ink-900/60 overflow-hidden">
         {loading ? (
           <div className="p-16 flex items-center justify-center">
             <span className="w-6 h-6 border-2 border-blood-500/30 border-t-blood-500 rounded-full animate-spin" />
@@ -130,6 +178,7 @@ export default function Donors({
                   <th className="px-4 py-3">{isHi ? 'शहर' : 'City'}</th>
                   <th className="px-4 py-3">{isHi ? 'स्थिति' : 'Status'}</th>
                   <th className="px-4 py-3">{isHi ? 'अंतिम दान' : 'Last Donation'}</th>
+                  <th className="px-4 py-3">{isHi ? 'अंतिम सक्रिय' : 'Last Active'}</th>
                   <th className="px-4 py-3 text-right">{isHi ? 'कार्रवाई' : 'Actions'}</th>
                 </tr>
               </thead>
@@ -146,7 +195,7 @@ export default function Donors({
                         </div>
                         <div className="min-w-0">
                           <div className="font-semibold text-white">{d.full_name || '—'}</div>
-                          <div className="text-[11px] text-ink-500">{d.phone || d.email}</div>
+                          <div className="text-[11px] text-ink-500">{d.email || d.phone}</div>
                         </div>
                       </div>
                     </td>
@@ -154,12 +203,26 @@ export default function Donors({
                     <td className="px-4 py-3 text-ink-300 text-xs">{d.city || '—'}</td>
                     <td className="px-4 py-3"><StatusPill status={d.account_status || 'pending'} isHi={isHi} /></td>
                     <td className="px-4 py-3 text-ink-400 text-xs">{d.last_donation_date || '—'}</td>
+                    <td className="px-4 py-3 text-ink-400 text-xs font-mono">{d.updated_at ? new Date(d.updated_at).toLocaleDateString() : '—'}</td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">
+                        {d.account_status === 'banned' ? (
+                          <button title={isHi ? 'अनबैन' : 'Unban'}
+                            onClick={() => setUnbanTarget(d)}
+                            className="p-1.5 rounded-lg text-ink-400 hover:text-emerald-300 hover:bg-white/5 transition cursor-pointer">
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button title={isHi ? 'बैन' : 'Ban'}
+                            onClick={() => setBanTarget(d)}
+                            className="p-1.5 rounded-lg text-ink-400 hover:text-red-400 hover:bg-white/5 transition cursor-pointer">
+                            <Ban className="w-4 h-4" />
+                          </button>
+                        )}
                         <button title={isHi ? 'कूलडाउन' : 'Cooldown'} onClick={() => onForceCooldown(d.id)}
                           className="p-1.5 rounded-lg text-ink-400 hover:text-amber-300 hover:bg-white/5 transition cursor-pointer"><Clock4 className="w-4 h-4" /></button>
                         <button title={isHi ? 'सक्रिय करें' : 'Reactivate'} onClick={() => onLiftCooldown(d.id)}
-                          className="p-1.5 rounded-lg text-ink-400 hover:text-emerald-300 hover:bg-white/5 transition cursor-pointer"><RotateCcw className="w-4 h-4" /></button>
+                          className="p-1.5 rounded-lg text-ink-400 hover:text-emerald-300 hover:bg-white/5 transition cursor-pointer"><ShieldCheck className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -170,6 +233,28 @@ export default function Donors({
         )}
       </div>
       <div className="text-[11px] text-ink-500 pl-1">{filtered.length} / {allDonors.length} {isHi ? 'दाता' : 'donors'}</div>
+
+      <ConfirmModal
+        open={!!banTarget}
+        title={isHi ? 'दाता को बैन करें?' : 'Ban this donor?'}
+        body={isHi ? `क्या आप ${banTarget?.full_name || ''} को बैन करना चाहते हैं? यह कार्रवाई पूर्ववत की जा सकती है।` : `Ban ${banTarget?.full_name || ''}? This can be reversed later.`}
+        confirmLabel={isHi ? 'बैन करें' : 'Ban Donor'}
+        busy={banLoading}
+        isHi={isHi}
+        onConfirm={handleBan}
+        onClose={() => setBanTarget(null)}
+      />
+
+      <ConfirmModal
+        open={!!unbanTarget}
+        title={isHi ? 'बैन हटाएं?' : 'Unban this donor?'}
+        body={isHi ? `क्या आप ${unbanTarget?.full_name || ''} का बैन हटाना चाहते हैं?` : `Unban ${unbanTarget?.full_name || ''} and restore active status?`}
+        confirmLabel={isHi ? 'अनबैन' : 'Unban Donor'}
+        busy={banLoading}
+        isHi={isHi}
+        onConfirm={handleUnban}
+        onClose={() => setUnbanTarget(null)}
+      />
     </div>
   );
 }

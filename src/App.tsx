@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth as firebaseAuth } from './lib/firebase';
 import RequestForm from './components/RequestForm';
 import RequestTracking from './components/RequestTracking';
 import DonorDashboard from './components/DonorDashboard';
@@ -25,12 +27,15 @@ import { CityDonorDirectory } from './components/CityDonorDirectory';
 import { BloodCompatibilityPage } from './components/BloodCompatibilityPage';
 import { GuidesPage } from './components/GuidesPage';
 import { SupportPage } from './components/SupportPage';
+import PublicRequestView from './components/PublicRequestView';
 import { LanguageProvider } from './lib/LanguageContext';
 import { useAuth, institutionToHospitalUser } from './lib/AuthContext';
 import { fetchMe, toLegacy } from './lib/rev3Auth';
 
 // View → path mapping. Components still call onNavigate(view) — nav() bridges it
 // to react-router navigate(). Added as Task 4.1; kept here for reference.
+const ADMIN_EMAIL = import.meta.env?.VITE_ADMIN_EMAIL || 'admin@findmydonor.online';
+
 const VIEW_PATHS: Record<string, string> = {
   'home': '/',
   'request': '/request',
@@ -41,6 +46,8 @@ const VIEW_PATHS: Record<string, string> = {
   'auth-signup': '/auth/signup',
   'hospital-register': '/hospital/register',
   'hospital-dashboard': '/hospital/dashboard',
+  'institution-register': '/institution/register',
+  'institution-dashboard': '/institution/dashboard',
   'admin-login': '/admin/login',
   'admin-dashboard': '/admin/dashboard',
   'admin': '/admin/login',
@@ -78,6 +85,16 @@ function LoadingScreen() {
 function AppRoutes() {
   const navigate = useNavigate();
   const auth = useAuth();
+
+  // Firebase auth state — track whether a Firebase admin user is signed in.
+  const [firebaseAdmin, setFirebaseAdmin] = useState(false);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setFirebaseAdmin(!!user && user.email === ADMIN_EMAIL);
+    });
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Legacy ?view=X / ?code=CODE URL redirect (WhatsApp links, old bookmarks).
   useEffect(() => {
@@ -126,6 +143,12 @@ function AppRoutes() {
       <Route path="/track/:code" element={
         <AppShell nav={nav} activeView="tracking">
           <TrackingView />
+        </AppShell>
+      } />
+
+      <Route path="/request/:requestId" element={
+        <AppShell nav={nav} activeView="request">
+          <PublicRequestView requestId={useParams<{ requestId: string }>().requestId!} />
         </AppShell>
       } />
 
@@ -183,6 +206,15 @@ function AppRoutes() {
         </FullScreenRoute>
       } />
 
+      <Route path="/institution/register" element={
+        <FullScreenRoute nav={nav}>
+          <HospitalRegistration
+            onRegister={(hosp) => { auth.setLoggedInHospital(hosp); nav('hospital-dashboard'); }}
+            onBack={() => nav('home')}
+          />
+        </FullScreenRoute>
+      } />
+
       <Route path="/hospital/dashboard" element={
         loggedInHospital ? (
           <FullScreenRoute nav={nav}>
@@ -198,6 +230,21 @@ function AppRoutes() {
         )
       } />
 
+      <Route path="/institution/dashboard" element={
+        loggedInHospital ? (
+          <FullScreenRoute nav={nav}>
+            <ErrorBoundary fallbackMessage="The institution dashboard hit an unexpected error. Your data is safe.">
+              <HospitalDashboard
+                hospital={loggedInHospital}
+                onLogout={() => { auth.setLoggedInHospital(null); nav('home'); }}
+              />
+            </ErrorBoundary>
+          </FullScreenRoute>
+        ) : (
+          <Navigate to="/institution/register" replace />
+        )
+      } />
+
       <Route path="/admin/login" element={
         <FullScreenRoute nav={nav}>
           <AdminLogin
@@ -208,7 +255,7 @@ function AppRoutes() {
       } />
 
       <Route path="/admin/dashboard" element={
-        loggedInAdmin ? (
+        (loggedInAdmin && firebaseAdmin) ? (
           <FullScreenRoute nav={nav}>
             <ErrorBoundary fallbackMessage="The admin dashboard hit an unexpected error. Your data is safe.">
               <AdminDashboard

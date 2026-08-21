@@ -1,7 +1,9 @@
 // Auth middleware — extracted from server.ts (Phase 3 decomposition)
+// Firebase Admin SDK migration: replaced Supabase with Firestore + Firebase Auth
 import express from "express";
-import { randomUUID, timingSafeEqual } from "node:crypto";
-import { getServerSupabase, getDoc as getLocalOrFirestoreDoc } from "../src/lib/serverDb";
+import { timingSafeEqual } from "node:crypto";
+import { db, auth } from "../src/lib/firebase";
+import { getDoc as getLocalOrFirestoreDoc } from "../src/lib/serverDb";
 import { cacheGet, cacheSet, cacheDel } from "../src/lib/redisCache";
 import { isAdminJwt } from "./jwt";
 import { normalizePhone } from "../helpers/phone";
@@ -17,7 +19,7 @@ export type LinkedProfile = {
 };
 export type LinkedDonorProfile = {
   profile_id: string; blood_group: BloodType | null; latitude: number | null; longitude: number | null;
-  address_text: string | null; pincode: string | null; area: string | null; city: string | null;
+  address_text: string | null; pincode: string | null; area: string | null; city?: string | null;
   last_donation_date: string | null; cooldown_until: string | null; health_self_declaration: boolean;
   profile_complete: boolean; is_available: boolean;
 };
@@ -38,23 +40,21 @@ export async function getAuthenticatedUser(req: express.Request) {
 
   let authUser: any = null;
   // Phase 7.2: short-lived admin JWT issued by /api/admin/verify-key.
-  // The raw ADMIN_AUTH_SECRET is no longer the bearer token for new sessions,
-  // but the legacy constant-time compare is kept for backward compatibility.
   if (isAdminJwt(token)) {
     authUser = { id: "admin-id", email: "admin@raktdaan.org", role: "admin" };
-  } else if (token === "test-valid-token" && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
+  } else if (token === "test-valid-token" && (process.env.NODE_ENV === "test" || process.env.TEST_MODE === "1")) {
     authUser = { id: "test-user-id", email: "test@example.com" };
-  } else if (token === "test-admin-token" && (process.env.NODE_ENV === "test" || process.env.VITE_SUPABASE_URL === "https://stub.supabase.co")) {
+  } else if (token === "test-admin-token" && (process.env.NODE_ENV === "test" || process.env.TEST_MODE === "1")) {
     authUser = { id: "test-admin-id", email: "admin@raktdaan.org" };
   } else if (timingSafeEqualStr(token, process.env.ADMIN_AUTH_SECRET || "")) {
     // Legacy: raw secret as bearer token (pre-7.2 sessions).
     authUser = { id: "admin-id", email: "admin@raktdaan.org", role: "admin" };
   } else {
     try {
-      const { data, error } = await getServerSupabase().auth.getUser(token);
-      if (!error && data.user) authUser = data.user;
+      const decoded = await auth.verifyIdToken(token);
+      authUser = { id: decoded.uid, email: decoded.email ?? null };
     } catch (error) {
-      console.warn("[Auth] Supabase unavailable:", error);
+      console.warn("[Auth] Firebase verifyIdToken failed:", error);
     }
   }
 
@@ -65,33 +65,50 @@ export async function getAuthenticatedUser(req: express.Request) {
 }
 
 export async function getLinkedProfile(authUserId: string): Promise<{ profile: LinkedProfile; donorProfile: LinkedDonorProfile | null } | null> {
-  const supabase = getServerSupabase();
-  let { data: link } = await supabase
-    .from("auth_profile_links").select("profile_id").eq("auth_user_id", authUserId).maybeSingle();
+  // Try legacy auth_profile_links first (backward compat), then fall back to direct doc lookup.
+  let profileId = authUserId;
+  try {
+    const linkDoc = await db.collection("auth_profile_links").doc(authUserId).get();
+    if (linkDoc.exists) {
+      const linkData = linkDoc.data();
+      if (linkData?.profile_id) profileId = linkData.profile_id;
+    }
+  } catch { /* ignore — collection may not exist */ }
 
-  let profileId = link?.profile_id || authUserId;
-
-  let [{ data: profile }, { data: donorProfile }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", profileId).maybeSingle(),
-    supabase.from("donor_profiles").select("*").eq("profile_id", profileId).maybeSingle(),
+  const [profileSnap, donorSnap] = await Promise.all([
+    db.collection("profiles").doc(profileId).get(),
+    db.collection("donor_profiles").doc(profileId).get(),
   ]);
 
+  let profile: LinkedProfile | null = profileSnap.exists
+    ? { id: profileSnap.id, ...profileSnap.data() } as LinkedProfile
+    : null;
+
+  let donorProfile: LinkedDonorProfile | null = donorSnap.exists
+    ? { profile_id: donorSnap.id, ...donorSnap.data() } as LinkedDonorProfile
+    : null;
+
+  // Fallback: if no profile found by ID, try looking up the Firebase auth user by email.
   if (!profile) {
     try {
-      const { data: authUserData } = await supabase.auth.admin.getUserById(authUserId);
-      if (authUserData?.user?.email) {
-        const { data: profByEmail } = await supabase.from("profiles").select("*").eq("email", authUserData.user.email.toLowerCase().trim()).maybeSingle();
-        if (profByEmail) {
-          profile = profByEmail;
-          const { data: dProf } = await supabase.from("donor_profiles").select("*").eq("profile_id", profByEmail.id).maybeSingle();
-          donorProfile = dProf;
+      const firebaseUser = await auth.getUser(authUserId);
+      if (firebaseUser.email) {
+        const emailLower = firebaseUser.email.toLowerCase().trim();
+        const profilesQuery = await db.collection("profiles").where("email", "==", emailLower).limit(1).get();
+        if (!profilesQuery.empty) {
+          const profDoc = profilesQuery.docs[0];
+          profile = { id: profDoc.id, ...profDoc.data() } as LinkedProfile;
+          const dpSnap = await db.collection("donor_profiles").doc(profDoc.id).get();
+          if (dpSnap.exists) {
+            donorProfile = { profile_id: dpSnap.id, ...dpSnap.data() } as LinkedDonorProfile;
+          }
         }
       }
     } catch { /* ignore fallback error */ }
   }
 
   if (!profile) return null;
-  return { profile: profile as LinkedProfile, donorProfile: donorProfile as LinkedDonorProfile | null };
+  return { profile, donorProfile };
 }
 
 export type OnboardingStep = "basic" | "intent" | "complete" | "contact" | "otp" | "donor-profile";
@@ -109,39 +126,55 @@ export function nextOnboardingStep(linked: Awaited<ReturnType<typeof getLinkedPr
 /**
  * Create (or reuse) an auth user + linked profile for email-based sign in.
  * Shared by /auth/email-complete and /auth/complete-verification (Google).
- * Supabase requires an internal credential — a random 32-char password generated
- * server-side, never returned/displayed/entered and not resettable.
+ * Firebase Auth creates users without passwords (passwordless / email-link / Google).
  * Returns the auth user id and the linked profile (existing or created).
  */
 export async function createAuthUserAndProfile(email: string, fullName: string, provider: "email" | "google") {
-  const supabase = getServerSupabase();
   const normalizedEmail = String(email).toLowerCase().trim();
-  const internalPassword = randomUUID() + randomUUID().replace(/-/g, ""); // 64-char, never exposed
 
-  // Existing auth user by email? (e.g. OTP sign-in already created one)
+  // Try to create auth user; if email already exists, look it up instead.
   let authUserId: string;
-  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-    email: normalizedEmail,
-    password: internalPassword,
-    email_confirm: true,
-    user_metadata: { full_name: String(fullName).trim() },
-  });
-  if (authError?.message?.includes("already been registered")) {
-    const { data: { users: allUsers } } = await supabase.auth.admin.listUsers();
-    const existing = (allUsers as any[])?.find((u: any) => u.email === normalizedEmail);
-    if (!existing) throw new Error("auth-user-unavailable");
-    authUserId = existing.id;
-  } else if (authError) {
-    throw new Error("auth-user-create-failed");
-  } else {
-    authUserId = authData.user.id;
+  try {
+    const created = await auth.createUser({
+      email: normalizedEmail,
+      displayName: String(fullName).trim(),
+      emailVerified: true,
+    });
+    authUserId = created.uid;
+  } catch (err: any) {
+    // Firebase throws "auth/email-already-exists" if the email is taken.
+    if (err?.code === "auth/email-already-exists" || err?.message?.includes("already")) {
+      const listResult = await auth.listUsers(1000);
+      const existing = listResult.users.find((u) => u.email === normalizedEmail);
+      if (!existing) throw new Error("auth-user-unavailable");
+      authUserId = existing.uid;
+    } else {
+      throw new Error("auth-user-create-failed");
+    }
   }
 
-  // Existing profile by email? Link-or-create (duplicate prevention, email-first).
-  let { data: profile } = await supabase.from("profiles").select("*").eq("email", normalizedEmail).maybeSingle();
-  if (!profile) {
+  // Ensure the Firebase auth user has display name set (may have been pre-existing).
+  try {
+    const firebaseUser = await auth.getUser(authUserId);
+    if (!firebaseUser.displayName && fullName) {
+      await auth.updateUser(authUserId, { displayName: String(fullName).trim() });
+    }
+  } catch { /* best-effort */ }
+
+  // Check for existing profile by email (duplicate prevention).
+  let profileId: string | null = null;
+  let profileData: Record<string, any> | null = null;
+  const profilesQuery = await db.collection("profiles").where("email", "==", normalizedEmail).limit(1).get();
+  if (!profilesQuery.empty) {
+    const profDoc = profilesQuery.docs[0];
+    profileId = profDoc.id;
+    profileData = profDoc.data();
+  }
+
+  if (!profileId) {
     const now = nowISO();
-    const { data: created } = await supabase.from("profiles").insert({
+    profileId = authUserId; // Use auth user ID as profile ID
+    const newProfile = {
       full_name: String(fullName).trim(),
       email: normalizedEmail,
       auth_method: provider === "google" ? "google" : "email",
@@ -149,20 +182,20 @@ export async function createAuthUserAndProfile(email: string, fullName: string, 
       onboarding_step: "basic",
       consent_accepted_at: now,
       can_request: true,
-    }).select().single();
-    if (!created) throw new Error("profile-create-failed");
-    profile = created;
+    };
+    await db.collection("profiles").doc(profileId).set(newProfile);
+    profileData = newProfile;
   }
 
+  // Link auth user → profile (backward compat + useful for migrations).
   try {
-    await supabase.from("auth_profile_links").upsert({
-      auth_user_id: authUserId,
-      profile_id: profile.id,
+    await db.collection("auth_profile_links").doc(authUserId).set({
+      profile_id: profileId,
       provider,
-    }, { onConflict: "auth_user_id" });
+    });
   } catch { /* ignore duplicate link */ }
 
-  return { authUserId, profile };
+  return { authUserId, profile: { id: profileId, ...profileData } as LinkedProfile };
 }
 
 /** Constant-time string comparison — prevents timing attacks on token/secret validation. */
@@ -199,8 +232,4 @@ export async function consumeEmailOtpTicket(ticket: string, email: string): Prom
   return true;
 }
 
-export async function ticketPurpose(ticket: string): Promise<string | null> {
-  const stored = await cacheGet<string>(`wa_otp_ticket_${ticket}`);
-  if (!stored) return null;
-  return stored.split("|")[0] || null;
-}
+

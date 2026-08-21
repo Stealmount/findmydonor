@@ -217,12 +217,8 @@ function parseCampItem(item: any[]): DonationCamp | null {
 
 async function saveRecord(camp: DonationCamp) {
   try {
-    const { saveDoc, getServerSupabase } = await import('../src/lib/serverDb');
+    const { saveDoc } = await import('../src/lib/serverDb');
     await saveDoc('donation_camps', camp.id, camp);
-    try {
-      const supabase = getServerSupabase();
-      await supabase.from('donation_camps').upsert(camp, { onConflict: 'id' });
-    } catch { /* ignore if Supabase table not migrated */ }
   } catch {
     const dataDir = path.join(process.cwd(), 'data');
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });

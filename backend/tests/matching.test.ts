@@ -12,9 +12,7 @@
  * engine logic with a synthetic donor pool injected as a plain array.
  */
 
-// ── Stub Supabase env vars so the module chain loads without throwing ──────────
-// ESM hoists imports above inline assignments, so the stubs live in a module
-// imported before anything that touches supabase.ts.
+// ── Test env setup so the module chain loads without throwing ──────────────────
 import './setup-env.ts';
 
 import test, { describe } from 'node:test';

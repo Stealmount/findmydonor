@@ -70,4 +70,56 @@ router.get("/api/hospital/dashboard", wrap(async (req, res) => {
   });
 }));
 
+// ─── POST /api/hospital/register — submit institution for admin verification ──
+router.post("/register", wrap(async (req, res) => {
+  const authUser = await getAuthenticatedUser(req);
+  if (!authUser) {
+    return sendErrorResponse(res, new UnauthorizedError("Sign in is required to register an institution."));
+  }
+
+  const body = req.body;
+  const institutionName = String(body.institution_name || "").trim();
+  const institutionType = String(body.institution_type || "hospital");
+  const pincode = String(body.pincode || "").trim();
+  const city = String(body.city || "").trim();
+  const contactPerson = String(body.contact_person || "").trim();
+  const contactPhone = String(body.contact_phone || "").trim();
+  const email = String(body.email || "").toLowerCase().trim();
+
+  if (!institutionName || !pincode || !city || !contactPerson || !contactPhone || !email) {
+    return sendErrorResponse(res, new Error("All fields are required."));
+  }
+
+  const createData = {
+    institution_name: institutionName,
+    institution_type: institutionType,
+    pincode,
+    city,
+    contact_person: contactPerson,
+    phone: contactPhone,
+    email,
+    status: "pending_verification",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const createdRef = await getLocalOrFirestoreCollection<Record<string, unknown>>("institutions").then(() => {
+      return null;
+    }).catch(() => null);
+
+    // Use Firestore directly for create
+    const { db } = await import("../src/lib/firebase");
+    const docRef = await db.collection("institutions").add(createData);
+
+    return res.status(201).json({
+      success: true,
+      institution: { id: docRef.id, ...createData },
+      message: "Registration submitted. Your institution will be verified by our admin team.",
+    });
+  } catch (error) {
+    return sendErrorResponse(res, error as Error, "Failed to register institution.");
+  }
+}));
+
 export default router;
